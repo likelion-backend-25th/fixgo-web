@@ -1,0 +1,66 @@
+import type { SessionUser } from "@/types/staff";
+
+export const TEST_PASSWORD = "1234";
+
+export const DEMO_ACCOUNTS: SessionUser[] = [
+  {
+    loginId: "reception1",
+    password: TEST_PASSWORD,
+    name: "최미소",
+    role: "RECEPTIONIST",
+    email: "miso@fixgo.kr",
+    phone: "010-2000-0002",
+    address: "서울특별시 강남구 테헤란로 123 선경타워 5층",
+    workStatus: "근무 중",
+  },
+  {
+    loginId: "reception2",
+    password: TEST_PASSWORD,
+    name: "박지윤",
+    role: "RECEPTIONIST",
+    email: "jiyoon@fixgo.kr",
+    phone: "010-2000-0003",
+    address: "서울특별시 강남구 테헤란로 123 선경타워 5층",
+    workStatus: "근무 중",
+  },
+  {
+    loginId: "tech1",
+    password: TEST_PASSWORD,
+    name: "김철수",
+    role: "TECHNICIAN",
+    email: "as123@naver.com",
+    phone: "010-1234-4321",
+    address: "서울특별시 강남구 테헤란로 123\n선경타워 5층 501호",
+    workStatus: "담당 중",
+  },
+  {
+    loginId: "tech2",
+    password: TEST_PASSWORD,
+    name: "박철수",
+    role: "TECHNICIAN",
+    email: "park@fixgo.kr",
+    phone: "010-1234-5678",
+    address: "서울특별시 강남구 테헤란로 200 수리동 2층",
+    workStatus: "담당 중",
+  },
+  {
+    loginId: "admin1",
+    password: TEST_PASSWORD,
+    name: "한도윤",
+    role: "ADMIN",
+    email: "admin1@fixgo.kr",
+    phone: "010-1000-0001",
+    address: "서울특별시 강남구 테헤란로 123 선경타워 5층",
+    workStatus: "근무 중",
+  },
+  {
+    loginId: "admin2",
+    password: TEST_PASSWORD,
+    name: "서민재",
+    role: "ADMIN",
+    email: "admin2@fixgo.kr",
+    phone: "010-1000-0002",
+    address: "서울특별시 강남구 테헤란로 123 선경타워 5층",
+    workStatus: "근무 중",
+  },
+];

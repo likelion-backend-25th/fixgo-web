@@ -13,10 +13,31 @@ alwaysApply: false
 - 아이콘은 `lucide-react`.
 - Button, Modal, Input 등 공통 UI는 shadcn/ui처럼 접근성·조합 가능한 패턴을 따른다.
 
+## 색
+
+- 브랜드 색은 `blue-600`이다. hex 팔레트나 새 색 CSS 변수를 추가하지 않는다.
+- 본문 `text-neutral-900`, 보조 글자 `text-neutral-500`, 테두리 `border-neutral-300`. 바탕은 흰색.
+- 사이드바, 표 헤더, 입력 배경만 `bg-neutral-100`.
+- 상태 색은 완료·성공 `text-green-600`, 진행 `text-blue-600`, 실패·거부 `text-red-600`.
+
+## 앱 셸
+
+- 직원 화면은 `RootLayout`만 쓴다. 페이지가 사이드바나 상단 바를 다시 만들지 않는다.
+- 사이드바는 `w-56 border-r border-neutral-200 bg-neutral-100`. 활성 메뉴는 `border-blue-500 bg-white text-blue-600`, 비활성은 `border-transparent text-neutral-700`.
+- 본문 열 위는 `border-t-4 border-blue-600`. 제목은 `resolveHeading`만 쓰고 페이지 안에 같은 `h1`을 두지 않는다.
+- 고객 포탈 `/{token}`은 셸 없이 `max-w-sm` 카드다.
+
+## 화면 구성
+
+- 버튼은 `Button`(`primary` / `outline` / `ghost`), 입력은 `TextField`·`TextArea`·`SelectBox`, 안내는 `Notice`를 쓴다.
+- 목록은 `DataTable`과 `Pagination`, 구역은 `Panel`, 조회·서류는 `Modal`을 재사용한다.
+- 검색은 왼쪽, 주요 액션은 `ml-auto`. 빈 목록 문구는 `조회 결과가 없습니다.`
+
 ```tsx
 // ❌ BAD
-<div style={{ padding: "24px", color: "#333" }} />
+<button className="rounded bg-[#1d4ed8] px-4 py-2 text-white">저장</button>
 
 // ✅ GOOD
-<div className="p-6 text-neutral-800" />
+<Button>저장</Button>
+<Button variant="outline">취소</Button>
 ```

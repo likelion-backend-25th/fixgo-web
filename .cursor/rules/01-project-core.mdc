@@ -1,5 +1,5 @@
 ---
-description: SNS 프론트엔드 프로젝트 전역 표준 (스택, 아키텍처, AI 수정 규칙)
+description: FixGo 프론트엔드 전역 표준 (스택, 아키텍처, AI 수정 규칙)
 alwaysApply: true
 ---
 
@@ -18,10 +18,12 @@ alwaysApply: true
 ## 디렉터리
 
 - `src/types/` — 여러 파일에서 재사용하는 API DTO, 도메인 타입
-- `src/components/` — 재사용 UI
-- `src/pages/` — 페이지
-- `src/layouts/` — 레이아웃 (`RootLayout.tsx`)
+- `src/components/` — 재사용 UI. 버튼·표·모달 등 공통 컨트롤은 `src/components/ui/`
+- `src/pages/{도메인}/` — 페이지
+- `src/layouts/` — `RootLayout.tsx`, 사이드바, `navigation.ts`
 - `src/stores/` — Zustand 스토어
+- `src/hooks/`, `src/lib/` — 훅과 `cn` 등 유틸
+- `src/mocks/` — 화면 구성용 목업. API 연동 후 호출부로 교체한다
 - 경로 별칭: `@` → `/src`
 
 ## 호칭

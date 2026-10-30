@@ -9,7 +9,7 @@ alwaysApply: false
 ## 상태
 
 - 한 컴포넌트에만 속한 UI 상태: `useState` / `useReducer`.
-- 인증, 테마, 토스트 등 전역 클라이언트 상태: Zustand (`src/stores/useAuthStore.ts`).
+- 인증, 테마, 토스트 등 전역 클라이언트 상태: Zustand (`src/stores/useSessionStore.ts`).
 - 단순 비동기: `useEffect` + `fetch`, cleanup, 로딩, 에러 처리 필수.
 - 캐시, 포커스 refetch, optimistic update가 필요하면 TanStack Query.
 - 비동기 UI는 Loading / Error / Success 세 상태를 항상 다룬다.
@@ -22,5 +22,6 @@ alwaysApply: false
 ## 라우팅
 
 - SPA는 `react-router` v8.
-- 레이아웃으로 계층 구성 (`src/layouts/RootLayout.tsx`).
-- 인증 필요 라우트는 클라이언트에서 리다이렉트로 보호한다.
+- 직원 화면은 `RootLayout` 자식이다. 세션이 없으면 `/login`으로 보낸다.
+- 메뉴, 권한, 활성 메뉴, 상단 제목은 `src/layouts/navigation.ts`의 `NAV_GROUPS`, `isNavActive`, `resolveHeading`에만 추가한다.
+- 고객 포탈 `/:token`은 `RootLayout` 밖에 둔다. 정적 경로가 같은 한 세그먼트보다 우선한다.
