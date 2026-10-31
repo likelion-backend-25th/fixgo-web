@@ -33,9 +33,7 @@ export function PaymentListPage() {
       key: "detail",
       header: "",
       render: (row) => (
-        <Button variant={row.status === "결제 대기" ? "primary" : "outline"} onClick={() => navigate(`/payment/${row.orderId}`)}>
-          상세
-        </Button>
+        <Button onClick={() => navigate(`/payment/${row.orderId}`)}>상세</Button>
       ),
     },
   ];

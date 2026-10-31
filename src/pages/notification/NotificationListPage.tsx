@@ -36,7 +36,7 @@ export function NotificationListPage() {
       header: "발송 상태",
       render: (row) => <span className={cn(row.status === "성공" ? "text-green-600" : "text-red-600")}>{row.status}</span>,
     },
-    { key: "detail", header: "상세보기", render: (row) => <Button variant="outline" onClick={() => setSelected(row)}>상세</Button> },
+    { key: "detail", header: "", render: (row) => <Button onClick={() => setSelected(row)}>상세</Button> },
   ];
 
   return (

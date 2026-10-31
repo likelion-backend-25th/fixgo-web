@@ -45,7 +45,7 @@ export function PaymentDetailPage() {
           <Panel title="가상 계좌">
             <p className="text-sm">계좌번호 {payment.virtualAccount ?? "발급 전"}</p>
             <p className="mt-1 text-sm">입금 기한 {payment.dueAt ?? "-"}</p>
-            <Button className="mt-4" variant="ghost" onClick={() => setNotice("가상계좌를 취소했습니다.")}>가상계좌 취소</Button>
+            <Button className="mt-4 border border-black" variant="ghost" onClick={() => setNotice("가상계좌를 취소했습니다.")}>가상계좌 취소</Button>
           </Panel>
           <Panel title="현장 결제">
             <div className="mb-3 flex gap-4 text-sm">

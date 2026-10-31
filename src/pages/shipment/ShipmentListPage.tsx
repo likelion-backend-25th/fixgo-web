@@ -45,7 +45,7 @@ export function ShipmentListPage() {
     {
       key: "detail",
       header: "",
-      render: (row) => <Button onClick={() => setSelected(row)}>상세보기</Button>,
+      render: (row) => <Button onClick={() => setSelected(row)}>상세</Button>,
     },
   ];
 
@@ -59,7 +59,6 @@ export function ShipmentListPage() {
       </div>
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <TextField value={query} onChange={setQuery} placeholder="접수번호, 수령인, 운송장번호 검색" className="w-72" />
-        <span className="text-sm text-neutral-500">전체 {rows.length}건</span>
         <SelectBox value={status} onChange={setStatus} options={["전체", "배송대기", "배송중", "배송완료", "수령완료"].map((value) => ({ value, label: value === "전체" ? "상태 전체" : value }))} />
         <SelectBox value={method} onChange={setMethod} options={[{ value: "전체", label: "수령 방법 전체" }, { value: "택배", label: "택배" }, { value: "방문 수령", label: "방문 수령" }]} />
         <Button className="ml-auto" onClick={() => setCreating(true)}>등록</Button>
