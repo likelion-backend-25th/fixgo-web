@@ -3,13 +3,14 @@ import type {
   CustomerRecord,
   HistoryRow,
   MemberRecord,
+  CostRecord,
   PartRecord,
   PaymentRecord,
   PresetRecord,
   ProductRecord,
   RepairLine,
   ShipmentRecord,
-  SmsRecord,
+  EmailRecord,
 } from "@/types/screen";
 
 export const asRecords: AsRecord[] = [
@@ -209,24 +210,67 @@ export const shipments: ShipmentRecord[] = [
   { no: 15, asId: "AS-2026-1062", method: "택배", receiver: "정하늘", phone: "010-4444-2020", carrier: "사자택배", trackingNo: "5100-2219", status: "배송대기", startedAt: "-" },
 ];
 
-export const smsRecords: SmsRecord[] = [
-  { id: "SMS-1042", sentAt: "2026-10-28 09:12", customerName: "한소희", phone: "010-5555-1212", email: "user@gmail.com", asId: "AS-2026-1112", body: "[사자전자] AS-2026-1112 접수가 완료되었습니다. 진행 상황은 안내 링크에서 확인할 수 있습니다.", status: "성공", channel: "알림톡", failReason: "-" },
-  { id: "SMS-1041", sentAt: "2026-10-27 16:40", customerName: "김민수", phone: "010-2222-1818", email: "minsu@example.com", asId: "AS-2026-1108", body: "[사자전자] 견적서가 발급되었습니다. 고객 포탈에서 승인해 주세요.", status: "성공", channel: "SMS", failReason: "-" },
-  { id: "SMS-1033", sentAt: "2026-10-26 11:05", customerName: "오세훈", phone: "010-6666-1010", email: "sehun@example.com", asId: "AS-2026-1044", body: "[사자전자] 수리 완료 및 결제 안내입니다.", status: "실패", channel: "SMS", failReason: "수신자 번호 형식 오류" },
+export const emailRecords: EmailRecord[] = [
+  {
+    id: "124",
+    sentAt: "2024-10-24 10:24",
+    customerName: "김수민",
+    email: "user1@example.com",
+    asId: "AS-2024-124",
+    subject: "[FixGo] A/S 접수 완료 안내",
+    summary: "접수 완료 안내",
+    body: "고객님의 A/S 접수가 정상적으로 완료되었습니다.\n진행 상황은 안내 링크에서 확인하실 수 있습니다.",
+    status: "성공",
+    channel: "이메일",
+    failReason: "-",
+  },
+  {
+    id: "123",
+    sentAt: "2024-10-24 09:18",
+    customerName: "장우진",
+    email: "user2@example.com",
+    asId: "AS-2024-123",
+    subject: "[FixGo] 수리 완료 안내",
+    summary: "수리 완료 안내",
+    body: "[FixGo] 고객님의 수리가 완료되었습니다.\n담당 기사: 김기사\n연락처: 010-1234-1234\n결제 확인 후 제품을 수령해 주세요.",
+    status: "성공",
+    channel: "이메일",
+    failReason: "-",
+  },
+  {
+    id: "122",
+    sentAt: "2024-10-23 16:40",
+    customerName: "한소희",
+    email: "user3@example.com",
+    asId: "AS-2024-128",
+    subject: "[FixGo] 수리 완료 안내",
+    summary: "입금 요청 안내",
+    body: "[FixGo] 고객님의 수리가 완료되었습니다.\n담당 기사: 김기사\n연락처: 010-1234-1234\n결제 확인 후 제품을 수령해 주세요.",
+    status: "실패",
+    channel: "SMS",
+    failReason: "SMTP 서버 연결 실패",
+  },
 ];
 
 export const products: ProductRecord[] = [
-  { id: "SZ-P24", modelName: "SZ-P24", productName: "사자폰 SZ-P24", group: "스마트폰", warrantyMonths: 12, supported: true },
-  { id: "SZ-P23", modelName: "SZ-P23", productName: "사자폰 SZ-P23", group: "스마트폰", warrantyMonths: 12, supported: true },
-  { id: "SZ-N16", modelName: "SZ-N16", productName: "사자북 SZ-N16", group: "노트북", warrantyMonths: 24, supported: true },
-  { id: "SZ-N14", modelName: "SZ-N14", productName: "사자북 SZ-N14", group: "노트북", warrantyMonths: 12, supported: false },
+  { id: "SZ-P24", modelName: "SZ-P24", productName: "사자폰24", group: "스마트폰", warrantyMonths: 12, status: "사용" },
+  { id: "SZ-P23", modelName: "SZ-P23", productName: "사자폰23", group: "스마트폰", warrantyMonths: 12, status: "사용" },
+  { id: "SZ-N16", modelName: "SZ-N16", productName: "사자북(16인치)", group: "노트북", warrantyMonths: 12, status: "사용" },
+  { id: "SZ-N14", modelName: "SZ-N14", productName: "사자북(14인치)", group: "노트북", warrantyMonths: 24, status: "단종" },
 ];
 
 export const parts: PartRecord[] = [
-  { id: "p-usb", name: "USB 포트", code: "P-USB", price: 15000, stock: 12, status: "사용" },
-  { id: "p-board", name: "충전 보드", code: "P-CHG", price: 25000, stock: 4, status: "사용" },
-  { id: "p-lcd", name: "액정 패널", code: "P-LCD", price: 80000, stock: 0, status: "품절" },
-  { id: "p-key", name: "키보드 모듈", code: "P-KEY", price: 45000, stock: 6, status: "사용" },
+  { id: "p-usb", name: "USB 포트", code: "P-USB-001", price: 15000, stock: 20, status: "사용" },
+  { id: "p-board", name: "충전 보드", code: "P-CHG-002", price: 25000, stock: 4, status: "재고 부족" },
+  { id: "p-lcd", name: "액정 패널", code: "P-LCD-003", price: 180000, stock: 3, status: "사용" },
+  { id: "p-main", name: "메인보드", code: "P-MB-004", price: null, stock: 0, status: "단종" },
+];
+
+export const costRecords: CostRecord[] = [
+  { id: "1", product: "스마트폰", category: "공임비", amountLabel: "6,000원/10분" },
+  { id: "2", product: "노트북", category: "공임비", amountLabel: "8,000원/10분" },
+  { id: "3", product: "스마트폰", category: "점검비", amountLabel: "15,000원" },
+  { id: "4", product: "노트북", category: "점검비", amountLabel: "20,000원" },
 ];
 
 export const presets: PresetRecord[] = [

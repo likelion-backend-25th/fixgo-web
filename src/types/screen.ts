@@ -79,13 +79,14 @@ export interface ShipmentRecord {
   startedAt: string;
 }
 
-export interface SmsRecord {
+export interface EmailRecord {
   id: string;
   sentAt: string;
   customerName: string;
-  phone: string;
   email: string;
   asId: string;
+  subject: string;
+  summary: string;
   body: string;
   status: "성공" | "실패";
   channel: string;
@@ -97,17 +98,24 @@ export interface ProductRecord {
   modelName: string;
   productName: string;
   group: "스마트폰" | "노트북";
-  warrantyMonths: number;
-  supported: boolean;
+  warrantyMonths: 12 | 24;
+  status: "사용" | "단종";
 }
 
 export interface PartRecord {
   id: string;
   name: string;
   code: string;
-  price: number;
+  price: number | null;
   stock: number;
-  status: "사용" | "품절" | "중지";
+  status: "사용" | "재고 부족" | "단종";
+}
+
+export interface CostRecord {
+  id: string;
+  product: "스마트폰" | "노트북";
+  category: "공임비" | "점검비";
+  amountLabel: string;
 }
 
 export interface PresetRecord {

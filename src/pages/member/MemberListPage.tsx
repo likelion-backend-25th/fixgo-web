@@ -110,20 +110,21 @@ function textOf(row: MemberRecord, key: string): string {
   return row.name;
 }
 
-function IssueAccountModal({ onClose, onIssued }: { onClose: () => void; onIssued: () => void }) {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+const issueRoles = [
+  { value: "관리자", label: "관리자" },
+  { value: "접수담당자", label: "접수담당자" },
+  { value: "수리기사", label: "A/S 기사" },
+  { value: "매니저", label: "매니저" },
+];
 
-  function submit() {
-    if (name.trim() === "" || email.trim() === "" || password.trim() === "") {
-      setError("이름, 이메일, 초기 비밀번호를 입력해 주세요.");
-      return;
-    }
-    onIssued();
-  }
+function IssueAccountModal({ onClose, onIssued }: { onClose: () => void; onIssued: () => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [role, setRole] = useState("접수담당자");
+  const [photo, setPhoto] = useState("");
+  const [error, setError] = useState("");
 
   return (
     <Modal title="계정 발급" onClose={onClose}>
@@ -131,22 +132,55 @@ function IssueAccountModal({ onClose, onIssued }: { onClose: () => void; onIssue
         className="space-y-3"
         onSubmit={(event) => {
           event.preventDefault();
-          submit();
+          if (email.trim() === "" || password.trim() === "" || name.trim() === "" || phone.trim() === "") {
+            setError("이메일, 초기 비밀번호, 이름, 연락처를 입력해 주세요.");
+            return;
+          }
+          onIssued();
         }}
       >
-        <TextField label="이름" value={name} onChange={setName} />
         <TextField label="이메일" value={email} onChange={setEmail} />
-        <TextField label="연락처" value={phone} onChange={setPhone} />
         <TextField label="초기 비밀번호" type="password" value={password} onChange={setPassword} />
-        <label className="block text-sm">
-          <span className="mb-1 block">프로필 사진</span>
-          <input type="file" accept="image/*" className="text-sm" />
-        </label>
+        <TextField label="이름" value={name} onChange={setName} />
+        <TextField label="연락처" value={phone} onChange={setPhone} />
+        <fieldset>
+          <legend className="sr-only">역할</legend>
+          <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+            {issueRoles.map((option) => (
+              <label key={option.value} className="flex items-center gap-1.5">
+                <input type="radio" name="issue-role" checked={role === option.value} onChange={() => setRole(option.value)} />
+                {option.label}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <div>
+          <p className="mb-2 text-sm">프로필 사진</p>
+          <div className="flex items-center gap-4">
+            <label className="flex w-28 cursor-pointer flex-col items-center rounded border border-dashed border-neutral-300 px-2 py-3 text-center">
+              {photo !== "" ? (
+                <img src={photo} alt="" className="size-14 rounded-full object-cover" />
+              ) : (
+                <span className="grid size-14 place-items-center rounded-full border border-neutral-300 text-2xl text-neutral-400">+</span>
+              )}
+              <span className="mt-2 text-xs">사진 등록</span>
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file !== undefined) {
+                    setPhoto(URL.createObjectURL(file));
+                  }
+                }}
+              />
+            </label>
+            <p className="text-sm text-neutral-500">직원의 프로필 사진을 등록합니다.</p>
+          </div>
+        </div>
         {error !== "" && <Notice tone="error">{error}</Notice>}
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>
-            취소
-          </Button>
+        <div className="flex justify-end">
           <Button type="submit">계정 발급</Button>
         </div>
       </form>
