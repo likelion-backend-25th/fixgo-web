@@ -38,7 +38,7 @@ export function InspectionPage() {
       <ProgressTabs repairId={record.id} current="inspection" />
       <section>
         <p className="mb-2 text-sm font-medium">점검 사진</p>
-        <label className="grid h-28 w-full max-w-sm cursor-pointer place-items-center rounded border border-neutral-300 text-sm text-neutral-500">
+        <label className="grid h-28 w-full max-w-sm cursor-pointer place-items-center rounded-xl border border-dashed border-neutral-300 bg-white text-sm text-neutral-500">
           사진 추가
           <input
             type="file"
@@ -54,7 +54,7 @@ export function InspectionPage() {
         {photos.length > 0 && (
           <div className="mt-2 flex gap-2">
             {photos.map((src) => (
-              <img key={src} src={src} alt="점검 사진" className="size-20 rounded border border-neutral-300 object-cover" />
+              <img key={src} src={src} alt="점검 사진" className="size-20 rounded-lg border border-neutral-200 object-cover" />
             ))}
           </div>
         )}
@@ -71,7 +71,7 @@ export function InspectionPage() {
         <p className="mt-2 text-right text-sm">견적 합계 <span className="ml-6 font-semibold text-blue-700">{won(laborTotal)}</span></p>
       </section>
       <TextArea label="점검 내용" value={note} onChange={setNote} />
-      <section className="rounded border border-neutral-300 p-4 text-sm">
+      <section className="rounded-xl border border-neutral-200 bg-white p-4 text-sm shadow-sm">
         <p className="mb-3 font-medium">보증 판정</p>
         <div className="grid gap-3 sm:grid-cols-3">
           <p>구매일 {record.purchasedAt}</p>
@@ -91,13 +91,13 @@ export function InspectionPage() {
         </div>
         <TextArea className="mt-3" label="판정 사유" value={reason} onChange={setReason} />
       </section>
-      <section className="grid gap-2 rounded border border-neutral-300 p-4 md:grid-cols-[1fr_2fr_auto]">
-        <select value={rejectCategory} onChange={(event) => setRejectCategory(event.target.value)} className="rounded border border-neutral-300 bg-neutral-100 px-3 py-2 text-sm">
+      <section className="grid gap-2 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm md:grid-cols-[1fr_2fr_auto]">
+        <select value={rejectCategory} onChange={(event) => setRejectCategory(event.target.value)} className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm">
           <option value="">--카테고리 선택--</option>
           <option value="repair-impossible">수리 불가</option>
           <option value="customer-cancel">고객 취소</option>
         </select>
-        <input value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} placeholder="사유 입력" className="rounded border border-neutral-300 px-3 py-2 text-sm" />
+        <input value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} placeholder="사유 입력" className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm" />
         <Button
           onClick={() => {
             if (rejectCategory === "" || rejectReason.trim() === "") {
@@ -110,7 +110,7 @@ export function InspectionPage() {
           제출
         </Button>
       </section>
-      <div className="rounded border border-blue-200 bg-blue-50 px-4 py-3 text-sm">
+      <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm">
         <div className="flex justify-between"><span>항목 합계</span><span>{won(laborTotal)}</span></div>
         <div className="flex justify-between text-blue-700"><span>보증 무상</span><span>-{won(warranty)}</span></div>
         <div className="mt-2 flex justify-between border-t border-blue-200 pt-2 font-semibold"><span>청구 금액</span><span>{won(charge)}</span></div>
@@ -143,9 +143,9 @@ export function InspectionPage() {
 
 function LineTable({ lines, onRemove }: { lines: RepairLine[]; onRemove: (id: string) => void }) {
   return (
-    <div className="overflow-x-auto rounded border border-neutral-300">
+    <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
       <table className="w-full min-w-[640px] text-sm">
-        <thead className="bg-neutral-100 text-left">
+        <thead className="bg-neutral-50 text-left text-xs text-neutral-500">
           <tr>
             {["구분", "항목", "시간/수량", "단가", "금액", ""].map((header) => (
               <th key={header} className="px-3 py-2 font-medium">{header}</th>

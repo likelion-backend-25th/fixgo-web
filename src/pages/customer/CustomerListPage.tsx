@@ -76,7 +76,7 @@ function ExcelModal({ onClose }: { onClose: () => void }) {
         </label>
       </div>
       {fileName !== "" && <p className="mb-2 text-sm">파일명 {fileName}</p>}
-      <ul className="divide-y divide-neutral-200 rounded border border-neutral-300 text-sm">
+      <ul className="divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-200 bg-white text-sm shadow-sm">
         {preview.map((row) => (
           <li key={row.phone} className="flex justify-between px-3 py-2">
             <span>{row.name || "(이름 없음)"} · {row.phone}</span>

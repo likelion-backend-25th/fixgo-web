@@ -60,23 +60,23 @@ function EmailDetailModal({ record, onClose }: { record: EmailRecord; onClose: (
   const failed = record.status === "실패";
   return (
     <Modal title="이메일 발송 상세" wide onClose={onClose}>
-      <div className="grid gap-4 rounded border border-neutral-300 p-4 sm:grid-cols-3">
+      <div className="grid gap-4 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm sm:grid-cols-3">
         <Field label="발송번호" value={record.id} />
         <Field label="발송일시" value={displaySentAt(record.sentAt)} />
         <Field label="발송 상태" value={<span className={failed ? "text-red-600" : "text-green-600"}>{failed ? "발송실패" : "발송성공"}</span>} />
       </div>
       <h3 className="mt-5 mb-2 text-sm font-medium">수신자 정보</h3>
-      <div className="grid gap-4 rounded border border-neutral-300 p-4 sm:grid-cols-3">
+      <div className="grid gap-4 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm sm:grid-cols-3">
         <Field label="고객명" value={record.customerName} />
         <Field label="이메일" value={record.email} />
         <Field label="접수번호" value={record.asId} />
       </div>
       <h3 className="mt-5 mb-2 text-sm font-medium">이메일 제목</h3>
-      <p className="rounded border border-neutral-300 bg-neutral-100 px-3 py-2 text-sm">{record.subject}</p>
+      <p className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm">{record.subject}</p>
       <h3 className="mt-5 mb-2 text-sm font-medium">이메일 본문</h3>
-      <p className="whitespace-pre-line rounded border border-neutral-300 bg-neutral-100 px-3 py-3 text-sm">{record.body}</p>
+      <p className="whitespace-pre-line rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-3 text-sm">{record.body}</p>
       <h3 className="mt-5 mb-2 text-sm font-medium">발송 결과</h3>
-      <div className="overflow-x-auto rounded border border-neutral-300">
+      <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
         <table className="w-full border-collapse text-sm">
           <thead className="bg-neutral-100 text-left">
             <tr>

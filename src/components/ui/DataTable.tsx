@@ -33,16 +33,16 @@ export function DataTable<T>({
   onSort,
 }: DataTableProps<T>) {
   return (
-    <div className="overflow-x-auto rounded border border-neutral-300">
+    <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
       <table className="w-full min-w-[720px] border-collapse text-sm">
-        <thead className="bg-neutral-100 text-left text-neutral-700">
+        <thead className="bg-neutral-50 text-left text-xs font-medium text-neutral-500">
           <tr>
             {columns.map((column) => (
-              <th key={column.key} className={cn("px-3 py-2 font-medium", column.className)}>
+              <th key={column.key} className={cn("px-4 py-2.5 font-medium", column.className)}>
                 {column.sortable === true && onSort !== undefined ? (
                   <button type="button" className="inline-flex items-center gap-1" onClick={() => onSort(column.key)}>
                     {column.header}
-                    <span className="text-xs text-neutral-400">
+                    <span className="text-[10px] text-neutral-400">
                       {sortKey === column.key ? (sortDir === "asc" ? "▲" : "▼") : "▾"}
                     </span>
                   </button>
@@ -56,7 +56,7 @@ export function DataTable<T>({
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} className="px-3 py-10 text-center text-neutral-500">
+              <td colSpan={columns.length} className="px-4 py-12 text-center text-neutral-500">
                 {emptyText}
               </td>
             </tr>
@@ -68,13 +68,13 @@ export function DataTable<T>({
                   key={key}
                   onClick={onRowClick === undefined ? undefined : () => onRowClick(row)}
                   className={cn(
-                    "border-t border-neutral-200",
+                    "border-t border-neutral-100",
                     onRowClick !== undefined && "cursor-pointer hover:bg-neutral-50",
                     selectedKey === key && "bg-blue-50",
                   )}
                 >
                   {columns.map((column) => (
-                    <td key={column.key} className={cn("px-3 py-3 align-middle", column.className)}>
+                    <td key={column.key} className={cn("px-4 py-3 align-middle text-neutral-800", column.className)}>
                       {column.render(row)}
                     </td>
                   ))}

@@ -121,7 +121,7 @@ function ModelModal({
   const [error, setError] = useState("");
 
   return (
-    <Modal title={initial === null ? "모델 등록" : "모델 수정"} wide onClose={onClose}>
+    <Modal title={initial === null ? "모델 등록" : "모델 수정"} onClose={onClose}>
       <form
         className="space-y-4"
         onSubmit={(event) => {
@@ -141,7 +141,7 @@ function ModelModal({
         }}
       >
         <p className="text-sm text-neutral-500">지원 품목 목록에 모델을 추가합니다.</p>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-4">
           <TextField label="모델명" value={modelName} onChange={setModelName} />
           <TextField label="제품명" value={productName} onChange={setProductName} />
           <Radios label="제품군" value={group} options={["스마트폰", "노트북"]} onChange={(value) => setGroup(value as ProductRecord["group"])} />

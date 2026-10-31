@@ -33,7 +33,7 @@ export function RepairPage() {
       {agreed && (
         <section>
           {done && <Notice>수리가 완료되었습니다.</Notice>}
-          <div className="overflow-x-auto rounded border border-neutral-300">
+          <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
             <table className="w-full min-w-[640px] text-sm">
               <thead className="bg-neutral-100 text-left">
                 <tr>

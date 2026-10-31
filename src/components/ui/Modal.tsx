@@ -22,7 +22,7 @@ export function Modal({ title, onClose, children, wide = false }: ModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-neutral-900/40 p-4"
       role="presentation"
       onClick={onClose}
     >
@@ -31,14 +31,19 @@ export function Modal({ title, onClose, children, wide = false }: ModalProps) {
         aria-modal="true"
         aria-label={title}
         className={cn(
-          "my-8 w-full rounded-md bg-white p-5 shadow-xl",
+          "my-8 w-full rounded-2xl bg-white p-6 shadow-xl",
           wide ? "max-w-5xl" : "max-w-lg",
         )}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold">{title}</h2>
-          <button type="button" aria-label="닫기" onClick={onClose} className="text-neutral-500">
+        <div className="mb-5 flex items-center justify-between gap-3 border-b border-neutral-100 pb-4">
+          <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+          <button
+            type="button"
+            aria-label="닫기"
+            onClick={onClose}
+            className="rounded-lg p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
+          >
             <X className="size-5" />
           </button>
         </div>

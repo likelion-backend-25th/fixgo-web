@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/Button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { TextArea, TextField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
-import { Notice, Panel } from "@/components/ui/Panel";
+import { Notice } from "@/components/ui/Panel";
 import { Pagination } from "@/components/ui/Pagination";
 import { cn } from "@/lib/cn";
 import { includesText } from "@/lib/format";
@@ -31,13 +31,6 @@ export function PresetListPage() {
   return (
     <div>
       {notice !== "" && <Notice>{notice}</Notice>}
-      <Panel className="mb-4">
-        <p className="text-sm text-blue-700">10분 당 공임</p>
-        <div className="mt-3 flex gap-16 text-sm">
-          <p>스마트폰 6000원</p>
-          <p>노트북 10000원</p>
-        </div>
-      </Panel>
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <button type="button" className={cn("rounded border px-3 py-2 text-sm", kind === "증상" ? "border-blue-600 bg-blue-600 text-white" : "border-neutral-300")} onClick={() => setKind("증상")}>고장 증상 프리셋</button>
         <button type="button" className={cn("rounded border px-3 py-2 text-sm", kind === "수리" ? "border-blue-600 bg-blue-600 text-white" : "border-neutral-300")} onClick={() => setKind("수리")}>수리 프리셋</button>
@@ -45,7 +38,6 @@ export function PresetListPage() {
         <Button className="ml-auto" onClick={() => setOpen(true)}>프리셋 등록</Button>
       </div>
       <DataTable columns={columns} rows={table.slice} rowKey={(row) => row.id} />
-      <p className="mt-2 text-xs text-neutral-500">표준 시간에 제품군 공임을 곱하고 부품비를 더해 수리비를 계산합니다.</p>
       <Pagination page={table.page} pageCount={table.pageCount} onPageChange={table.setPage} />
       {open && (
         <PresetFormModal

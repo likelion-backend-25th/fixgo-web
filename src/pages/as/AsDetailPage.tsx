@@ -77,17 +77,17 @@ export function AsDetailPage() {
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <div>
             <p className="mb-1 text-xs text-neutral-500">고장 증상 상세</p>
-            <div className="min-h-20 rounded border border-neutral-300 p-3 text-sm">{record.symptomDetail}</div>
+            <div className="min-h-20 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm">{record.symptomDetail}</div>
           </div>
           <div>
             <p className="mb-1 text-xs text-neutral-500">고객 요청 사항 / 메모</p>
-            <div className="min-h-20 rounded border border-neutral-300 p-3 text-sm">{record.memo}</div>
+            <div className="min-h-20 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm">{record.memo}</div>
           </div>
         </div>
       </Panel>
       <Panel title="담당 기사 배정" action={<Button onClick={() => setNotice(`${technician} 기사로 배정을 저장했습니다.`)}>배정 저장</Button>}>
         <div className="flex items-center gap-2">
-          <div className="min-w-40 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm">{technician}</div>
+          <div className="min-w-40 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm">{technician}</div>
           <Button variant="outline" onClick={() => setTechOpen(true)}>A/S 기사 목록 조회</Button>
         </div>
       </Panel>
@@ -147,7 +147,7 @@ function Field({ label, value }: { label: string; value: string }) {
 function TechPick({ onClose, onPick }: { onClose: () => void; onPick: (name: string) => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded bg-white p-4" onClick={(event) => event.stopPropagation()}>
+      <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" onClick={(event) => event.stopPropagation()}>
         <h2 className="mb-3 font-semibold">A/S 기사 목록</h2>
         <ul className="divide-y divide-neutral-200 border border-neutral-300">
           {technicians.map((row) => (

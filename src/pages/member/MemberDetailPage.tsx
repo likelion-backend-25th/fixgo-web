@@ -37,7 +37,7 @@ export function MemberDetailPage() {
     <div className="space-y-4">
       {notice !== "" && <Notice>{notice}</Notice>}
       {status === "삭제" && <Notice tone="error">이 직원은 삭제 상태입니다. 기존 A/S 이력은 유지됩니다.</Notice>}
-      <section className="rounded border border-neutral-300 p-5">
+      <section className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-center gap-4">
             <span className="grid size-16 place-items-center rounded-full bg-blue-600 text-xl font-semibold text-white">

@@ -154,7 +154,7 @@ function RepairCostChart() {
   const points = repairCostSeries.map((point, index) => `${xAt(index)},${yAt(point.amount)}`).join(" ");
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-72 w-full rounded border border-neutral-300 bg-white" role="img" aria-label="2026년 10월 수리비 수납 추이">
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-72 w-full rounded-xl border border-neutral-200 bg-white shadow-sm" role="img" aria-label="2026년 10월 수리비 수납 추이">
       {yTicks.map((tick) => (
         <g key={tick}>
           <line x1={padLeft} y1={yAt(tick)} x2={width - padRight} y2={yAt(tick)} stroke="#e5e5e5" />

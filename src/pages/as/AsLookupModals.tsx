@@ -157,7 +157,7 @@ function PostLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
   return (
     <Modal title="우편번호 찾기" wide onClose={onClose}>
       <TextField value={query} onChange={setQuery} placeholder="도로명, 지번, 건물명, 우편번호" className="mb-3" />
-      <ul className="divide-y divide-neutral-200 rounded border border-neutral-300">
+      <ul className="divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-200">
         {rows.map((row) => (
           <li key={row.postalCode}>
             <button

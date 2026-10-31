@@ -26,8 +26,8 @@ export function Pagination({ page, pageCount, onPageChange }: PaginationProps) {
           onClick={() => go(item)}
           className={
             item === page
-              ? "grid size-8 place-items-center rounded bg-blue-600 font-medium text-white"
-              : "grid size-8 place-items-center rounded text-neutral-700 hover:bg-neutral-100"
+              ? "grid size-8 place-items-center rounded-lg bg-blue-600 font-medium text-white"
+              : "grid size-8 place-items-center rounded-lg text-neutral-600 hover:bg-white"
           }
           aria-current={item === page ? "page" : undefined}
         >
@@ -54,7 +54,7 @@ function PageButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="grid size-8 place-items-center rounded text-neutral-600 disabled:opacity-40"
+      className="grid size-8 place-items-center rounded-lg text-neutral-500 hover:bg-white disabled:opacity-40 disabled:hover:bg-transparent"
     >
       {label}
     </button>

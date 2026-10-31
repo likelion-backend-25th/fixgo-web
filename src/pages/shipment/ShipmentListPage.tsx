@@ -74,7 +74,7 @@ export function ShipmentListPage() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded border border-neutral-300 p-4">
+    <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
       <p className="text-sm text-neutral-500">{label}</p>
       <p className="mt-1 text-2xl font-semibold text-blue-600">{value}</p>
     </div>

@@ -45,10 +45,11 @@ export function LoginPage() {
   }
 
   return (
-    <div className="grid min-h-screen place-items-center bg-neutral-50 px-4">
+    <div className="grid min-h-screen place-items-center bg-neutral-50 px-4 py-10">
       <div className="w-full max-w-md">
-      <div className="rounded border border-neutral-300 bg-white px-8 py-10">
-        <h1 className="text-center text-3xl font-semibold text-blue-600">FixGo</h1>
+      <div className="rounded-2xl border border-neutral-200 bg-white px-8 py-10 shadow-sm">
+        <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-blue-600 text-lg font-bold text-white">F</div>
+        <h1 className="mt-4 text-center text-3xl font-semibold tracking-tight text-blue-600">FixGo</h1>
         <p className="mt-3 text-center text-xl">로그인</p>
         <p className="mt-3 text-center text-sm leading-6 text-neutral-500">
           본 시스템은 FixGo A/S 관리 직원 전용 서비스입니다.
@@ -70,7 +71,7 @@ export function LoginPage() {
           </Button>
         </form>
       </div>
-      <div className="mt-4 rounded border border-neutral-200 bg-white px-4 py-3 text-xs text-neutral-600">
+      <div className="mt-4 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-xs text-neutral-600 shadow-sm">
         <p className="text-center">테스트 비밀번호는 모두 {TEST_PASSWORD} 입니다.</p>
         <ul className="mt-2 space-y-1">
           {DEMO_ACCOUNTS.map((account) => (
@@ -80,7 +81,7 @@ export function LoginPage() {
               </span>
               <button
                 type="button"
-                className="rounded border border-neutral-300 bg-white px-2 py-1 font-medium text-neutral-800"
+                className="rounded-md bg-neutral-50 px-2 py-1 font-medium text-neutral-800 hover:bg-neutral-100"
                 onClick={() => {
                   login(account);
                   navigate("/as/list");

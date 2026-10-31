@@ -18,7 +18,7 @@ export function DocumentModal({ kind, record, onClose }: { kind: DocumentKind; r
   const total = lines.reduce((sum, line) => sum + line.amount, 0);
   return (
     <Modal title={titleOf[kind]} onClose={onClose}>
-      <article className="rounded border border-neutral-300 p-4 text-sm">
+      <article className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm">
         <p className="mb-4 text-center text-2xl font-semibold text-blue-600">FixGo</p>
         <p className="mb-3 text-center text-lg">{titleOf[kind]}</p>
         <dl className="grid grid-cols-[90px_1fr] gap-y-1">

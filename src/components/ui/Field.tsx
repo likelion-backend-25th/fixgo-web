@@ -2,7 +2,7 @@ import type { ReactNode, SelectHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 
 const controlClass =
-  "w-full rounded border border-neutral-300 bg-neutral-100 px-3 py-2 text-sm outline-none focus:border-blue-500";
+  "w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15";
 
 interface TextFieldProps {
   label?: string;
@@ -27,14 +27,18 @@ export function TextField({
 }: TextFieldProps) {
   return (
     <label className={cn("block text-sm", className)}>
-      {label !== undefined && <span className="mb-1 block text-neutral-700">{label}</span>}
+      {label !== undefined && <span className="mb-1.5 block text-xs font-medium text-neutral-600">{label}</span>}
       <input
         type={type}
         value={value}
         readOnly={readOnly}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
-        className={cn(controlClass, invalid && "border-red-300 bg-red-50", readOnly && "text-neutral-700")}
+        className={cn(
+          controlClass,
+          invalid && "border-red-300 bg-red-50",
+          readOnly && "bg-neutral-50 text-neutral-700",
+        )}
       />
     </label>
   );
@@ -61,14 +65,14 @@ export function TextArea({
 }: TextAreaProps) {
   return (
     <label className={cn("block text-sm", className)}>
-      {label !== undefined && <span className="mb-1 block text-neutral-700">{label}</span>}
+      {label !== undefined && <span className="mb-1.5 block text-xs font-medium text-neutral-600">{label}</span>}
       <textarea
         value={value}
         readOnly={readOnly}
         rows={rows}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
-        className={cn(controlClass, "resize-y", readOnly && "text-neutral-700")}
+        className={cn(controlClass, "resize-y", readOnly && "bg-neutral-50 text-neutral-700")}
       />
     </label>
   );
@@ -91,7 +95,7 @@ export function SelectBox({ value, onChange, options, className, ...props }: Sel
     <select
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      className={cn(controlClass, "w-auto bg-white", className)}
+      className={cn(controlClass, "h-9 w-auto", className)}
       {...props}
     >
       {options.map((option) => (
@@ -104,5 +108,5 @@ export function SelectBox({ value, onChange, options, className, ...props }: Sel
 }
 
 export function FieldLabel({ children }: { children: ReactNode }) {
-  return <span className="mb-1 block text-sm text-neutral-700">{children}</span>;
+  return <span className="mb-1.5 block text-xs font-medium text-neutral-600">{children}</span>;
 }

@@ -17,11 +17,11 @@ export function AsSummary({ record }: { record: AsRecord }) {
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <div>
           <p className="mb-1 text-xs text-neutral-500">고장 증상 상세</p>
-          <div className="min-h-24 rounded border border-neutral-300 p-3 text-sm">{record.symptomDetail}</div>
+          <div className="min-h-24 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm">{record.symptomDetail}</div>
         </div>
         <div>
           <p className="mb-1 text-xs text-neutral-500">고객 요청사항</p>
-          <div className="min-h-24 rounded border border-neutral-300 p-3 text-sm">{record.memo}</div>
+          <div className="min-h-24 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm">{record.memo}</div>
         </div>
       </div>
     </Panel>
