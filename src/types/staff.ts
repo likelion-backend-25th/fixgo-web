@@ -14,6 +14,6 @@ export interface SessionUser {
 export const ROLE_LABEL: Record<StaffRole, string> = {
   ADMIN: "전체 권한",
   RECEPTIONIST: "접수담당자",
-  TECHNICIAN: "A/S기사",
+  TECHNICIAN: "수리기사",
   MANAGER: "매니저",
 };

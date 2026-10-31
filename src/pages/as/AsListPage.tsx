@@ -69,7 +69,7 @@ export function AsListPage() {
             setQuery(value);
             table.setPage(1);
           }}
-          placeholder="접수번호, 고객명, 증상 검색"
+          placeholder={isTechnician ? "접수번호, 고객명 검색" : "접수번호, 고객명, 증상 검색"}
           className="w-64"
         />
         <SelectBox
@@ -167,10 +167,10 @@ const deskColumns: Column<AsRecord>[] = [
 
 const technicianColumns: Column<AsRecord>[] = [
   { key: "id", header: "접수번호", sortable: true, render: (row) => row.id },
-  { key: "customerName", header: "고객명", sortable: true, render: (row) => row.customerName },
+  { key: "customerName", header: "고객", sortable: true, render: (row) => row.customerName },
   { key: "technician", header: "담당 기사", sortable: true, render: (row) => row.technician },
   { key: "modelName", header: "모델명", sortable: true, render: (row) => row.modelName },
-  { key: "symptom", header: "고장 증상", sortable: true, render: (row) => row.symptom },
-  { key: "status", header: "진행 상태", sortable: true, render: (row) => row.status },
+  { key: "symptom", header: "증상", sortable: true, render: (row) => row.symptom },
+  { key: "status", header: "상태", sortable: true, render: (row) => row.status },
   { key: "assignedAt", header: "배정일", sortable: true, render: (row) => row.assignedAt },
 ];

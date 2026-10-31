@@ -47,13 +47,13 @@ export function PresetPickerModal({
     setPresetId(next?.id ?? "");
     if (name === "충전 안됨") {
       setPicked([
-        { name: "USB 포트", code: "P-USB", qty: 1, price: 15000 },
-        { name: "충전 보드", code: "P-CHG", qty: 1, price: 25000 },
+        { name: "USB 포트", code: "P-USB-001", qty: 1, price: 15000 },
+        { name: "충전 보드", code: "P-CHG-002", qty: 1, price: 25000 },
       ]);
       return;
     }
     const linked = parts.find((part) => next?.parts.includes(part.name));
-    setPicked(linked === undefined ? [] : [{ name: linked.name, code: linked.code, qty: 1, price: linked.price }]);
+    setPicked(linked === undefined ? [] : [{ name: linked.name, code: linked.code, qty: 1, price: linked.price ?? 0 }]);
   }
 
   return (

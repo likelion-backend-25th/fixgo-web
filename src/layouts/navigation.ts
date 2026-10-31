@@ -30,8 +30,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "결제 관리", to: "/payment/list", roles: desk },
       { label: "배송 관리", to: "/shipment/list", roles: desk },
       { label: "고객 관리", to: "/customer", roles: desk },
-      { label: "알림/SMS", to: "/notification_service", roles: desk },
-      { label: "SMS 발송 내역", to: "/notification/list", roles: desk },
+      { label: "이메일 발송", to: "/notification_service", roles: desk },
+      { label: "이메일 발송 내역", to: "/notification/list", roles: desk },
     ],
   },
   {
@@ -46,6 +46,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "통계/리포트", to: "/admin/statistics", roles: ["ADMIN"] },
       { label: "부품 관리", to: "/admin/parts/list", roles: ["ADMIN"] },
+      { label: "비용 관리", to: "/admin/costs", roles: ["ADMIN"] },
       { label: "프리셋 관리", to: "/preset/list", roles: floor },
       { label: "기사 배정 이력", to: "/admin/allocation_history", roles: ["ADMIN"] },
       { label: "A/S 상태 변경 이력", to: "/admin/status_change_history", roles: ["ADMIN"] },
@@ -100,10 +101,11 @@ export function resolveHeading(pathname: string, role: StaffRole): { title: stri
   if (pathname === "/payment/list") return { title: "결제 관리" };
   if (pathname.startsWith("/payment/")) return { title: "결제 상세" };
   if (pathname === "/shipment/list") return { title: "배송 관리" };
-  if (pathname === "/notification_service") return { title: "알림 발송" };
-  if (pathname === "/notification/list") return { title: "SMS 발송 내역" };
-  if (pathname.startsWith("/admin/products")) return { title: "A/S 지원 품목" };
+  if (pathname === "/notification_service") return { title: "이메일 발송" };
+  if (pathname === "/notification/list") return { title: "이메일 발송 내역" };
+  if (pathname.startsWith("/admin/products")) return { title: "지원 품목" };
   if (pathname.startsWith("/admin/parts")) return { title: "부품 관리" };
+  if (pathname === "/admin/costs") return { title: "비용 관리" };
   if (pathname === "/admin/statistics") return { title: "통계/리포트" };
   if (pathname === "/admin/statistics/deposits/waiting") return { title: "입금 대기 내역" };
   if (pathname === "/admin/statistics/technicians") return { title: "기사별 수리 현황" };

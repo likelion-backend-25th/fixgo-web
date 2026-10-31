@@ -1,6 +1,7 @@
 import { createBrowserRouter } from "react-router";
 import { RootLayout } from "@/layouts/RootLayout";
 import { AllocationHistoryPage, StatusHistoryPage } from "@/pages/admin/HistoryPages";
+import { CostListPage } from "@/pages/admin/CostListPage";
 import { PartListPage } from "@/pages/admin/PartListPage";
 import { ProductListPage } from "@/pages/admin/ProductListPage";
 import { StatisticsPage } from "@/pages/admin/StatisticsPage";
@@ -56,6 +57,7 @@ export const router = createBrowserRouter([
       { path: "/notification/list", element: <NotificationListPage /> },
       { path: "/admin/products/list", element: <ProductListPage /> },
       { path: "/admin/parts/list", element: <PartListPage /> },
+      { path: "/admin/costs", element: <CostListPage /> },
       { path: "/admin/statistics", element: <StatisticsPage /> },
       { path: "/admin/statistics/deposits/waiting", element: <DepositWaitingPage /> },
       { path: "/admin/statistics/technicians", element: <TechnicianStatsPage /> },
