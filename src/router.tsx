@@ -20,7 +20,6 @@ import { InspectionPage } from "@/pages/as/InspectionPage";
 import { RepairPage } from "@/pages/as/RepairPage";
 import { CustomerDetailPage } from "@/pages/customer/CustomerDetailPage";
 import { CustomerListPage } from "@/pages/customer/CustomerListPage";
-import { CustomerPortalPage } from "@/pages/customer/CustomerPortalPage";
 import { HomeRedirect } from "@/pages/HomeRedirect";
 import { LoginPage } from "@/pages/login/LoginPage";
 import { MemberDetailPage } from "@/pages/member/MemberDetailPage";
@@ -30,6 +29,9 @@ import { NotificationListPage } from "@/pages/notification/NotificationListPage"
 import { NotificationServicePage } from "@/pages/notification/NotificationServicePage";
 import { PaymentDetailPage } from "@/pages/payment/PaymentDetailPage";
 import { PaymentListPage } from "@/pages/payment/PaymentListPage";
+import { CustomerPortalPage } from "@/pages/portal/CustomerPortalPage";
+import { PortalPaymentFailPage } from "@/pages/portal/PortalPaymentFailPage";
+import { PortalPaymentSuccessPage } from "@/pages/portal/PortalPaymentSuccessPage";
 import { PresetListPage } from "@/pages/preset/PresetListPage";
 import { ShipmentListPage } from "@/pages/shipment/ShipmentListPage";
 
@@ -69,6 +71,7 @@ export const router = createBrowserRouter([
       { path: "/admin/status_change_history", element: <StatusHistoryPage /> },
     ],
   },
-  // 고객 포탈은 /{token} 이다. 정적 경로가 같은 세그먼트의 동적 경로보다 우선한다.
-  { path: "/:token", element: <CustomerPortalPage /> },
+  { path: "/portal/:token", element: <CustomerPortalPage /> },
+  { path: "/portal/:token/success", element: <PortalPaymentSuccessPage /> },
+  { path: "/portal/:token/fail", element: <PortalPaymentFailPage /> },
 ]);

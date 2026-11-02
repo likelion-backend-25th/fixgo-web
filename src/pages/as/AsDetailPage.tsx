@@ -50,7 +50,7 @@ export function AsDetailPage() {
       },
     },
   ];
-  const portalUrl = `${window.location.origin}/${record.portalToken}`;
+  const portalUrl = `${window.location.origin}/portal/${encodeURIComponent(record.portalToken)}`;
 
   return (
     <div className="space-y-4">
