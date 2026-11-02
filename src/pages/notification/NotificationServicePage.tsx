@@ -4,6 +4,7 @@ import { TextArea, TextField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Panel";
 import { cn } from "@/lib/cn";
+import { sendNotificationEmail, type NotificationType } from "@/lib/notificationApi";
 import { emailRecords } from "@/mocks/screenData";
 
 interface EmailTemplate {
@@ -40,6 +41,24 @@ function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
+// 발송 API는 알림 유형이 필수다. 화면에는 유형 칸이 없어 선택한 프리셋과 제목으로 맞춘다.
+function notificationTypeOf(title: string, subject: string): NotificationType {
+  const text = `${title} ${subject}`;
+  if (text.includes("배송")) {
+    return "SHIPPING";
+  }
+  if (text.includes("견적")) {
+    return "ESTIMATE";
+  }
+  if (text.includes("수리")) {
+    return "REPAIR";
+  }
+  if (text.includes("결제")) {
+    return "PAYMENT";
+  }
+  return "RECEIVED";
+}
+
 function countEmails() {
   const success = emailRecords.filter((row) => row.status === "성공").length;
   const failed = emailRecords.filter((row) => row.status === "실패").length;
@@ -55,15 +74,37 @@ export function NotificationServicePage() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [presetOpen, setPresetOpen] = useState(false);
+  const [sending, setSending] = useState(false);
 
-  function send() {
+  async function send() {
+    if (sending) {
+      return;
+    }
     if (!isEmail(email) || subject.trim() === "" || body.trim() === "") {
       setError("수신 이메일, 제목, 본문을 확인해 주세요.");
       setNotice("");
       return;
     }
+    setSending(true);
     setError("");
-    setNotice("이메일을 발송했습니다.");
+    setNotice("");
+    try {
+      const result = await sendNotificationEmail({
+        recipientEmail: email.trim(),
+        messageTitle: subject.trim(),
+        message: body,
+        notificationType: notificationTypeOf(selected, subject),
+      });
+      if (result.status === "FAILED") {
+        setError("이메일 발송에 실패했습니다.");
+        return;
+      }
+      setNotice("이메일을 발송했습니다.");
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : "이메일 발송에 실패했습니다.");
+    } finally {
+      setSending(false);
+    }
   }
 
   function savePreset(preset: EmailTemplate) {
@@ -107,7 +148,7 @@ export function NotificationServicePage() {
             <TextArea label="본문" value={body} onChange={setBody} rows={8} />
           </div>
           <div className="mt-4 flex justify-end border-t border-neutral-100 pt-4">
-            <Button onClick={send}>발송</Button>
+            <Button disabled={sending} onClick={() => void send()}>발송</Button>
           </div>
         </section>
         <section className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm">
