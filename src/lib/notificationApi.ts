@@ -43,6 +43,23 @@ export interface EmailHistoryPage {
   totalPages: number;
 }
 
+export interface EmailStatistics {
+  total: number;
+  success: number;
+  failed: number;
+}
+
+export interface EmailDetail {
+  id: number;
+  customerName: string | null;
+  recipientEmail: string;
+  messageTitle: string;
+  message: string;
+  notificationStatus: NotificationStatus;
+  sentAt: string | null;
+  errorMessage: string | null;
+}
+
 const notificationTypes: readonly NotificationType[] = ["RECEIVED", "ESTIMATE", "REPAIR", "PAYMENT", "SHIPPING"];
 const notificationStatuses: readonly NotificationStatus[] = ["PENDING", "SENDING", "SENT", "FAILED"];
 
@@ -80,6 +97,40 @@ export async function sendNotificationEmail(request: SendEmailRequest): Promise<
     throw new Error("이메일 발송 응답이 올바르지 않습니다.");
   }
   return body;
+}
+
+export async function retryNotificationEmail(id: number): Promise<SendEmailResponse> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/v1/notifications/emails/${id}/retry`, {
+      method: "POST",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new Error("이메일 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+  }
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "이메일 재발송에 실패했습니다."));
+  }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new Error("이메일 재발송 응답이 올바르지 않습니다.");
+  }
+  if (!isSendEmailResponse(body)) {
+    throw new Error("이메일 재발송 응답이 올바르지 않습니다.");
+  }
+  return {
+    id: body.id,
+    recipientEmail: body.recipientEmail,
+    notificationType: body.notificationType,
+    messageTitle: body.messageTitle,
+    status: body.status,
+    sentAt: typeof body.sentAt === "string" ? body.sentAt : null,
+  };
 }
 
 export async function fetchEmailHistory(query: EmailHistoryQuery, signal: AbortSignal): Promise<EmailHistoryPage> {
@@ -128,6 +179,83 @@ export async function fetchEmailHistory(query: EmailHistoryQuery, signal: AbortS
     items: body.content.map(parseEmailHistoryItem),
     totalElements: body.totalElements,
     totalPages: body.totalPages,
+  };
+}
+
+export async function fetchEmailStatistics(signal: AbortSignal): Promise<EmailStatistics> {
+  let response: Response;
+  try {
+    response = await fetch("/api/v1/notifications/statistics", {
+      headers: { Accept: "application/json" },
+      signal,
+    });
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
+    throw new Error("이메일 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+  }
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "이메일 발송 통계를 불러오지 못했습니다."));
+  }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new Error("이메일 발송 통계 응답이 올바르지 않습니다.");
+  }
+  if (!isRecord(body) || typeof body.total !== "number" || typeof body.success !== "number" || typeof body.failed !== "number") {
+    throw new Error("이메일 발송 통계 응답이 올바르지 않습니다.");
+  }
+  return { total: body.total, success: body.success, failed: body.failed };
+}
+
+export async function fetchEmailDetail(id: number, signal: AbortSignal): Promise<EmailDetail> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/v1/notifications/emails/${id}`, {
+      headers: { Accept: "application/json" },
+      signal,
+    });
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
+    throw new Error("이메일 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+  }
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "이메일 상세를 불러오지 못했습니다."));
+  }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new Error("이메일 상세 응답이 올바르지 않습니다.");
+  }
+  if (!isRecord(body)
+    || typeof body.id !== "number"
+    || !isNullableString(body.customerName)
+    || typeof body.recipientEmail !== "string"
+    || typeof body.messageTitle !== "string"
+    || typeof body.message !== "string"
+    || !isNotificationStatus(body.notificationStatus)
+    || !isNullableString(body.sentAt)
+    || !isNullableString(body.errorMessage)) {
+    throw new Error("이메일 상세 응답이 올바르지 않습니다.");
+  }
+  return {
+    id: body.id,
+    customerName: body.customerName ?? null,
+    recipientEmail: body.recipientEmail,
+    messageTitle: body.messageTitle,
+    message: body.message,
+    notificationStatus: body.notificationStatus,
+    sentAt: body.sentAt ?? null,
+    errorMessage: body.errorMessage ?? null,
   };
 }
 

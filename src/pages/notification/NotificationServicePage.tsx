@@ -1,11 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { TextArea, TextField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Panel";
 import { cn } from "@/lib/cn";
-import { sendNotificationEmail, type NotificationType } from "@/lib/notificationApi";
-import { emailRecords } from "@/mocks/screenData";
+import { fetchEmailStatistics, sendNotificationEmail, type NotificationType } from "@/lib/notificationApi";
 
 interface EmailTemplate {
   title: string;
@@ -59,12 +58,6 @@ function notificationTypeOf(title: string, subject: string): NotificationType {
   return "RECEIVED";
 }
 
-function countEmails() {
-  const success = emailRecords.filter((row) => row.status === "성공").length;
-  const failed = emailRecords.filter((row) => row.status === "실패").length;
-  return { today: success + failed, success, failed };
-}
-
 export function NotificationServicePage() {
   const [templates, setTemplates] = useState(initialTemplates);
   const [email, setEmail] = useState("user1@exampler.com");
@@ -75,6 +68,25 @@ export function NotificationServicePage() {
   const [error, setError] = useState("");
   const [presetOpen, setPresetOpen] = useState(false);
   const [sending, setSending] = useState(false);
+  const [counts, setCounts] = useState({ total: 0, success: 0, failed: 0 });
+  const [statsVersion, setStatsVersion] = useState(0);
+  const [statsError, setStatsError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchEmailStatistics(controller.signal)
+      .then((stats) => {
+        setCounts(stats);
+        setStatsError("");
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === "AbortError") {
+          return;
+        }
+        setStatsError(cause instanceof Error ? cause.message : "이메일 발송 통계를 불러오지 못했습니다.");
+      });
+    return () => controller.abort();
+  }, [statsVersion]);
 
   async function send() {
     if (sending) {
@@ -104,6 +116,7 @@ export function NotificationServicePage() {
       setError(cause instanceof Error ? cause.message : "이메일 발송에 실패했습니다.");
     } finally {
       setSending(false);
+      setStatsVersion((current) => current + 1);
     }
   }
 
@@ -128,15 +141,14 @@ export function NotificationServicePage() {
     setNotice("이메일 템플릿을 삭제했습니다.");
   }
 
-  const counts = countEmails();
-
   return (
     <div className="space-y-5">
       <div className="grid gap-3 sm:grid-cols-3">
-        <Kpi label="오늘 발송" value={`${counts.today}건`} />
+        <Kpi label="오늘 발송" value={`${counts.total}건`} />
         <Kpi label="발송 성공" value={`${counts.success}건`} />
         <Kpi label="발송 실패" value={`${counts.failed}건`} />
       </div>
+      {statsError !== "" && <Notice tone="error">{statsError}</Notice>}
       {notice !== "" && <Notice>{notice}</Notice>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_28rem]">
