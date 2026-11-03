@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
-import { SelectBox, TextField } from "@/components/ui/Field";
+import { FieldLabel, SelectBox, TextField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Panel";
 import { Pagination } from "@/components/ui/Pagination";
@@ -89,34 +89,72 @@ function StatusLabel({ value }: { value: string }) {
 }
 
 function CreateShipmentModal({ onClose }: { onClose: () => void }) {
+  const [asId, setAsId] = useState("");
+  const [method, setMethod] = useState("택배");
+  const [receiver, setReceiver] = useState("");
+  const [phone, setPhone] = useState("");
+  const [carrier, setCarrier] = useState("");
   const [trackingNo, setTrackingNo] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-  const valid = /^\d{4}-\d{4}$/.test(trackingNo);
+  const trackingValid = method !== "택배" || /^\d{4}-\d{4}$/.test(trackingNo);
+  const filled = asId.trim() !== "" && receiver.trim() !== "" && phone.trim() !== "" && carrier.trim() !== "";
+
+  function validate(): boolean {
+    if (!filled) {
+      setError("접수번호, 수령방법, 고객이름, 연락처, 택배사를 입력해 주세요.");
+      setNotice("");
+      return false;
+    }
+    if (!trackingValid) {
+      setError("택배사 운송장 형식(0000-0000)이 아닙니다.");
+      setNotice("");
+      return false;
+    }
+    setError("");
+    return true;
+  }
 
   return (
     <Modal title="배송 등록" onClose={onClose}>
-      <p className="mb-3 text-sm text-neutral-600">AS-2026-1112 · 수령인 한소희 · 택배</p>
-      <TextField label="운송장번호" value={trackingNo} onChange={setTrackingNo} placeholder="0000-0000" />
+      <div className="space-y-4">
+        <TextField label="접수번호" value={asId} onChange={setAsId} placeholder="AS-2026-0000" />
+        <label className="block text-sm">
+          <FieldLabel>수령방법</FieldLabel>
+          <SelectBox
+            className="w-full"
+            value={method}
+            onChange={setMethod}
+            options={[{ value: "택배", label: "택배" }, { value: "방문 수령", label: "방문 수령" }]}
+          />
+        </label>
+        <TextField label="고객이름" value={receiver} onChange={setReceiver} />
+        <TextField label="연락처" value={phone} onChange={setPhone} placeholder="010-0000-0000" />
+        <TextField label="택배사" value={carrier} onChange={setCarrier} />
+        <TextField label="운송장번호" value={trackingNo} onChange={setTrackingNo} placeholder="0000-0000" />
+      </div>
       {error !== "" && <div className="mt-3"><Notice tone="error">{error}</Notice></div>}
       {notice !== "" && <div className="mt-3"><Notice>{notice}</Notice></div>}
       <div className="mt-4 flex justify-end gap-2">
         <Button
           variant="outline"
           onClick={() => {
-            if (!valid) {
-              setError("택배사 운송장 형식(0000-0000)이 아닙니다.");
+            if (!validate()) {
               return;
             }
-            setError("");
             setNotice("운송장번호를 등록했습니다.");
           }}
         >
           운송장 등록
         </Button>
         <Button
-          disabled={!valid}
-          onClick={() => setNotice("배송 시작 알림을 발송했습니다.")}
+          disabled={!filled || !trackingValid}
+          onClick={() => {
+            if (!validate()) {
+              return;
+            }
+            setNotice("배송 시작 알림을 발송했습니다.");
+          }}
         >
           배송 시작 알림
         </Button>

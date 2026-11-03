@@ -18,6 +18,31 @@ export interface SendEmailResponse {
   sentAt: string | null;
 }
 
+export interface EmailHistoryItem {
+  id: number;
+  customerName: string | null;
+  recipientEmail: string;
+  notificationType: NotificationType;
+  messageTitle: string;
+  status: NotificationStatus;
+  sentAt: string | null;
+  createdAt: string;
+}
+
+export interface EmailHistoryQuery {
+  keyword: string;
+  startDate: string;
+  endDate: string;
+  page: number;
+  size: number;
+}
+
+export interface EmailHistoryPage {
+  items: EmailHistoryItem[];
+  totalElements: number;
+  totalPages: number;
+}
+
 const notificationTypes: readonly NotificationType[] = ["RECEIVED", "ESTIMATE", "REPAIR", "PAYMENT", "SHIPPING"];
 const notificationStatuses: readonly NotificationStatus[] = ["PENDING", "SENDING", "SENT", "FAILED"];
 
@@ -57,6 +82,83 @@ export async function sendNotificationEmail(request: SendEmailRequest): Promise<
   return body;
 }
 
+export async function fetchEmailHistory(query: EmailHistoryQuery, signal: AbortSignal): Promise<EmailHistoryPage> {
+  const params = new URLSearchParams();
+  if (query.keyword !== "") {
+    params.set("keyword", query.keyword);
+  }
+  if (query.startDate !== "") {
+    params.set("startDate", query.startDate);
+  }
+  if (query.endDate !== "") {
+    params.set("endDate", query.endDate);
+  }
+  // Spring Pageable은 0부터 센다.
+  params.set("page", String(query.page - 1));
+  params.set("size", String(query.size));
+
+  let response: Response;
+  try {
+    response = await fetch(`/api/v1/notifications/emails?${params.toString()}`, {
+      headers: { Accept: "application/json" },
+      signal,
+    });
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
+    throw new Error("이메일 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+  }
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "이메일 발송 내역을 불러오지 못했습니다."));
+  }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new Error("이메일 발송 내역 응답이 올바르지 않습니다.");
+  }
+  if (!isRecord(body) || !Array.isArray(body.content) || typeof body.totalElements !== "number" || typeof body.totalPages !== "number") {
+    throw new Error("이메일 발송 내역 응답이 올바르지 않습니다.");
+  }
+
+  return {
+    items: body.content.map(parseEmailHistoryItem),
+    totalElements: body.totalElements,
+    totalPages: body.totalPages,
+  };
+}
+
+function parseEmailHistoryItem(value: unknown): EmailHistoryItem {
+  if (!isRecord(value)
+    || typeof value.id !== "number"
+    || !isNullableString(value.customerName)
+    || typeof value.recipientEmail !== "string"
+    || !isNotificationType(value.notificationType)
+    || typeof value.messageTitle !== "string"
+    || !isNotificationStatus(value.status)
+    || !isNullableString(value.sentAt)
+    || typeof value.createdAt !== "string") {
+    throw new Error("이메일 발송 내역 응답이 올바르지 않습니다.");
+  }
+  return {
+    id: value.id,
+    customerName: value.customerName ?? null,
+    recipientEmail: value.recipientEmail,
+    notificationType: value.notificationType,
+    messageTitle: value.messageTitle,
+    status: value.status,
+    sentAt: value.sentAt ?? null,
+    createdAt: value.createdAt,
+  };
+}
+
+function isNullableString(value: unknown): value is string | null | undefined {
+  return value === undefined || value === null || typeof value === "string";
+}
+
 async function readErrorMessage(response: Response, fallback: string): Promise<string> {
   try {
     const body: unknown = await response.json();
@@ -90,4 +192,8 @@ function isNotificationStatus(value: unknown): value is NotificationStatus {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
 }
