@@ -217,6 +217,7 @@ function EmailDetailModal({ id, onClose }: { id: number; onClose: () => void }) 
   }, [id]);
 
   const failed = detail?.notificationStatus === "FAILED";
+  const receptionNumber = detail?.receptionNumber?.trim() ?? "";
 
   return (
     <Modal title="이메일 발송 상세" wide onClose={onClose}>
@@ -230,8 +231,9 @@ function EmailDetailModal({ id, onClose }: { id: number; onClose: () => void }) 
             <Field label="발송 상태" value={<span className={statusClass(detail.notificationStatus)}>{statusLabel(detail.notificationStatus)}</span>} />
           </div>
           <h3 className="mt-5 mb-2 text-sm font-medium">수신자 정보</h3>
-          <div className="grid gap-4 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm sm:grid-cols-2">
+          <div className={cn("grid gap-4 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm", receptionNumber === "" ? "sm:grid-cols-2" : "sm:grid-cols-3")}>
             <Field label="고객명" value={detail.customerName ?? "-"} />
+            {receptionNumber !== "" && <Field label="접수번호" value={receptionNumber} />}
             <Field label="이메일" value={detail.recipientEmail} />
           </div>
           <h3 className="mt-5 mb-2 text-sm font-medium">이메일 제목</h3>

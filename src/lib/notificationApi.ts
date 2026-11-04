@@ -52,6 +52,7 @@ export interface EmailStatistics {
 export interface EmailDetail {
   id: number;
   customerName: string | null;
+  receptionNumber: string | null;
   recipientEmail: string;
   messageTitle: string;
   message: string;
@@ -239,6 +240,7 @@ export async function fetchEmailDetail(id: number, signal: AbortSignal): Promise
   if (!isRecord(body)
     || typeof body.id !== "number"
     || !isNullableString(body.customerName)
+    || !isNullableString(body.receptionNumber)
     || typeof body.recipientEmail !== "string"
     || typeof body.messageTitle !== "string"
     || typeof body.message !== "string"
@@ -250,6 +252,7 @@ export async function fetchEmailDetail(id: number, signal: AbortSignal): Promise
   return {
     id: body.id,
     customerName: body.customerName ?? null,
+    receptionNumber: body.receptionNumber ?? null,
     recipientEmail: body.recipientEmail,
     messageTitle: body.messageTitle,
     message: body.message,
