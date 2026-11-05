@@ -73,6 +73,8 @@ export interface ShipmentRecord {
   method: "택배" | "방문 수령";
   receiver: string;
   phone: string;
+  address: string;
+  addressDetail: string;
   carrier: string;
   trackingNo: string;
   status: string;
