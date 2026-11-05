@@ -1,56 +1,137 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { SelectBox, TextField } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Panel";
 import { Pagination } from "@/components/ui/Pagination";
-import { compareText, readNotice } from "@/lib/guards";
-import { includesText } from "@/lib/format";
-import { usePageSlice } from "@/lib/usePageSlice";
-import { asRecords } from "@/mocks/screenData";
+import { readNotice } from "@/lib/guards";
+import { formatDateTime } from "@/lib/format";
+import { isAbortError } from "@/lib/apiClient";
+import {
+  fetchReceptions,
+  isReceptionStatus,
+  receptionStatusLabel,
+  searchTechnicians,
+} from "@/lib/asReceptionApi";
 import { useSessionStore } from "@/stores/useSessionStore";
-import type { AsRecord } from "@/types/screen";
+import { AS_RECEPTION_STATUSES, type AsReceptionListItem, type AsReceptionStatus, type TechnicianSummary } from "@/types/asReception";
 
-const statusOptions = ["전체", "접수", "점검 중", "견적 승인 대기", "수리 중", "완료", "수리 거부"].map(
-  (value) => ({ value, label: value === "전체" ? "상태 전체" : value }),
-);
+const PAGE_SIZE = 20;
+
+type StatusFilter = "ALL" | AsReceptionStatus;
+type SortKey = "receptionNumber" | "createdAt" | "status" | "customerName";
+
+const statusOptions: { value: StatusFilter; label: string }[] = [
+  { value: "ALL", label: "상태 전체" },
+  ...AS_RECEPTION_STATUSES.map((status) => ({ value: status, label: receptionStatusLabel(status) })),
+];
 
 export function AsListPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const user = useSessionStore((state) => state.user);
+  const memberId = useSessionStore((state) => state.memberId);
   const isTechnician = user?.role === "TECHNICIAN";
   const canCreate = user?.role === "ADMIN" || user?.role === "RECEPTIONIST" || user?.role === "MANAGER";
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("전체");
-  const [assignee, setAssignee] = useState("전체");
-  const [group, setGroup] = useState("전체");
-  const [mineOnly, setMineOnly] = useState(false);
-  const [sortKey, setSortKey] = useState("id");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const notice = readNotice(location.state);
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<StatusFilter>("ALL");
+  const [assignee, setAssignee] = useState("ALL");
+  const [technicians, setTechnicians] = useState<TechnicianSummary[]>([]);
+  const [mineOnly, setMineOnly] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>("createdAt");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [page, setPage] = useState(1);
+  const [applied, setApplied] = useState({ keyword: "", status: "ALL" as StatusFilter });
+  const technicianId = mineOnly ? memberId : assignee === "ALL" ? null : Number(assignee);
+  const filterKey = `${applied.keyword}:${applied.status}:${technicianId ?? ""}:${sortKey}:${sortDir}`;
+  const [seenFilter, setSeenFilter] = useState(filterKey);
+  const [rows, setRows] = useState<AsReceptionListItem[]>([]);
+  const [pageCount, setPageCount] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const filtered = useMemo(() => {
-    const rows = asRecords.filter((row) => {
-      const matchedQuery =
-        includesText(row.id, query) || includesText(row.customerName, query) || includesText(row.symptom, query);
-      const matchedStatus = status === "전체" || row.status === status;
-      const matchedAssignee = assignee === "전체" || row.technician === assignee;
-      const matchedGroup = group === "전체" || row.productGroup === group;
-      const matchedMine = !mineOnly || row.technician === user?.name;
-      return matchedQuery && matchedStatus && matchedAssignee && matchedGroup && matchedMine;
-    });
-    return [...rows].sort((left, right) => {
-      const result = compareText(valueOf(left, sortKey), valueOf(right, sortKey));
-      return sortDir === "asc" ? result : -result;
-    });
-  }, [assignee, group, mineOnly, query, sortDir, sortKey, status, user?.name]);
+  if (seenFilter !== filterKey) {
+    setSeenFilter(filterKey);
+    setPage(1);
+  }
 
-  const table = usePageSlice(filtered);
-  const columns: Column<AsRecord>[] = isTechnician ? technicianColumns : deskColumns;
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const next = { keyword: query.trim(), status };
+      setApplied((current) => {
+        if (current.keyword === next.keyword && current.status === next.status) {
+          return current;
+        }
+        return next;
+      });
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [query, status]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    searchTechnicians("", controller.signal)
+      .then((items) => {
+        if (!controller.signal.aborted) {
+          setTechnicians(items);
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setTechnicians([]);
+        }
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError("");
+    setRows([]);
+
+    // 화면 페이지는 1부터, Spring Pageable은 0부터 센다.
+    fetchReceptions(
+      {
+        keyword: applied.keyword,
+        status: applied.status === "ALL" ? null : applied.status,
+        technicianId: typeof technicianId === "number" && Number.isInteger(technicianId) ? technicianId : null,
+        page,
+        size: PAGE_SIZE,
+        sort: `${sortField(sortKey)},${sortDir}`,
+      },
+      controller.signal,
+    )
+      .then((result) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setRows(result.items);
+        setPageCount(Math.max(1, result.totalPages));
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || isAbortError(cause)) {
+          return;
+        }
+        setRows([]);
+        setPageCount(1);
+        setError(cause instanceof Error ? cause.message : "A/S 목록을 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [applied, page, sortDir, sortKey, technicianId]);
 
   function onSort(key: string) {
+    if (!isSortKey(key)) {
+      return;
+    }
     if (sortKey === key) {
       setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
       return;
@@ -59,51 +140,35 @@ export function AsListPage() {
     setSortDir("asc");
   }
 
+  const columns: Column<AsReceptionListItem>[] = isTechnician ? technicianColumns : deskColumns;
+
   return (
     <div>
       {notice !== null && <Notice>{notice}</Notice>}
+      {error !== "" && <Notice tone="error">{error}</Notice>}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <TextField
           value={query}
-          onChange={(value) => {
-            setQuery(value);
-            table.setPage(1);
-          }}
+          onChange={setQuery}
           placeholder={isTechnician ? "접수번호, 고객명 검색" : "접수번호, 고객명, 증상 검색"}
           className="w-64"
         />
         <SelectBox
           value={status}
           onChange={(value) => {
-            setStatus(value);
-            table.setPage(1);
+            if (isStatusFilter(value)) {
+              setStatus(value);
+            }
           }}
           options={statusOptions}
         />
-        {isTechnician ? (
-          <SelectBox
-            value={group}
-            onChange={(value) => {
-              setGroup(value);
-              table.setPage(1);
-            }}
-            options={[
-              { value: "전체", label: "제품군 전체" },
-              { value: "스마트폰", label: "스마트폰" },
-              { value: "노트북", label: "노트북" },
-            ]}
-          />
-        ) : (
+        {!isTechnician && (
           <SelectBox
             value={assignee}
-            onChange={(value) => {
-              setAssignee(value);
-              table.setPage(1);
-            }}
+            onChange={setAssignee}
             options={[
-              { value: "전체", label: "담당 전체" },
-              { value: "김철수", label: "김철수" },
-              { value: "박철수", label: "박철수" },
+              { value: "ALL", label: "담당 전체" },
+              ...technicians.map((item) => ({ value: String(item.id), label: item.name })),
             ]}
           />
         )}
@@ -125,52 +190,75 @@ export function AsListPage() {
       </div>
       <DataTable
         columns={columns}
-        rows={table.slice}
-        rowKey={(row) => row.id}
+        rows={rows}
+        rowKey={(row) => String(row.id)}
         sortKey={sortKey}
         sortDir={sortDir}
         onSort={onSort}
+        emptyText={tableMessage(loading, error)}
         onRowClick={(row) => {
           if (isTechnician) {
-            const repair = row.status === "수리 중" || row.status === "완료" || row.status === "수리 거부";
-            navigate(repair ? `/as/${row.id}/repair` : `/as/${row.id}/inspection`);
+            const repair = row.receptionStatus === "REPAIR_IN_PROGRESS"
+              || row.receptionStatus === "COMPLETED"
+              || row.repairStatus === "REJECTED";
+            navigate(repair ? `/as/${row.receptionNumber}/repair` : `/as/${row.receptionNumber}/inspection`);
             return;
           }
           navigate(`/as/details/${row.id}`);
         }}
       />
-      <Pagination page={table.page} pageCount={table.pageCount} onPageChange={table.setPage} />
+      <Pagination page={page} pageCount={pageCount} onPageChange={setPage} />
     </div>
   );
 }
 
-function valueOf(row: AsRecord, key: string): string {
-  if (key === "id") return row.id;
-  if (key === "customerName") return row.customerName;
-  if (key === "phone") return row.phone;
-  if (key === "modelName") return row.modelName;
-  if (key === "status") return row.status;
-  if (key === "technician") return row.technician;
-  if (key === "symptom") return row.symptom;
-  if (key === "receivedAt") return row.receivedAt;
-  return row.assignedAt;
+function sortField(key: SortKey): string {
+  if (key === "customerName") {
+    return "customer.name";
+  }
+  return key;
 }
 
-const deskColumns: Column<AsRecord>[] = [
-  { key: "id", header: "접수번호", sortable: true, render: (row) => row.id },
+function tableMessage(loading: boolean, error: string): string {
+  if (loading) {
+    return "A/S 목록을 불러오는 중입니다.";
+  }
+  if (error !== "") {
+    return "A/S 목록을 불러오지 못했습니다.";
+  }
+  return "조회 결과가 없습니다.";
+}
+
+function isStatusFilter(value: string): value is StatusFilter {
+  return value === "ALL" || isReceptionStatus(value);
+}
+
+function isSortKey(value: string): value is SortKey {
+  return value === "receptionNumber" || value === "createdAt" || value === "status" || value === "customerName";
+}
+
+function statusText(row: AsReceptionListItem): string {
+  if (row.repairStatus === "REJECTED") {
+    return "수리 거부";
+  }
+  return receptionStatusLabel(row.receptionStatus);
+}
+
+const deskColumns: Column<AsReceptionListItem>[] = [
+  { key: "receptionNumber", header: "접수번호", sortable: true, render: (row) => row.receptionNumber },
   { key: "customerName", header: "고객", sortable: true, render: (row) => row.customerName },
-  { key: "phone", header: "연락처", sortable: true, render: (row) => row.phone },
-  { key: "modelName", header: "모델", sortable: true, render: (row) => row.modelName },
-  { key: "status", header: "상태", sortable: true, render: (row) => row.status },
-  { key: "technician", header: "담당", sortable: true, render: (row) => row.technician },
+  { key: "phone", header: "연락처", render: (row) => row.customerPhone },
+  { key: "modelName", header: "모델", render: (row) => row.modelName ?? "-" },
+  { key: "status", header: "상태", sortable: true, render: (row) => statusText(row) },
+  { key: "technician", header: "담당", render: (row) => row.technicianName ?? "-" },
+  { key: "createdAt", header: "접수일", sortable: true, render: (row) => formatDateTime(row.createdAt) },
 ];
 
-const technicianColumns: Column<AsRecord>[] = [
-  { key: "id", header: "접수번호", sortable: true, render: (row) => row.id },
+const technicianColumns: Column<AsReceptionListItem>[] = [
+  { key: "receptionNumber", header: "접수번호", sortable: true, render: (row) => row.receptionNumber },
   { key: "customerName", header: "고객", sortable: true, render: (row) => row.customerName },
-  { key: "technician", header: "담당 기사", sortable: true, render: (row) => row.technician },
-  { key: "modelName", header: "모델명", sortable: true, render: (row) => row.modelName },
-  { key: "symptom", header: "증상", sortable: true, render: (row) => row.symptom },
-  { key: "status", header: "상태", sortable: true, render: (row) => row.status },
-  { key: "assignedAt", header: "배정일", sortable: true, render: (row) => row.assignedAt },
+  { key: "technician", header: "담당 기사", render: (row) => row.technicianName ?? "-" },
+  { key: "modelName", header: "모델명", render: (row) => row.modelName ?? "-" },
+  { key: "status", header: "상태", sortable: true, render: (row) => statusText(row) },
+  { key: "createdAt", header: "접수일", sortable: true, render: (row) => formatDateTime(row.createdAt) },
 ];

@@ -1,138 +1,245 @@
-import { useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router";
+import { useEffect, useState } from "react";
+import { useLocation, useParams } from "react-router";
 import { Button } from "@/components/ui/Button";
-import { DataTable, type Column } from "@/components/ui/DataTable";
+import { SelectBox, TextField } from "@/components/ui/Field";
 import { Notice, Panel } from "@/components/ui/Panel";
+import { isAbortError } from "@/lib/apiClient";
+import {
+  categoryLabel,
+  changeReceptionStatus,
+  fetchProduct,
+  fetchReception,
+  fetchReceptionHistory,
+  historyStatusLabel,
+  isReceptionStatus,
+  receptionStatusLabel,
+  returnMethodLabel,
+} from "@/lib/asReceptionApi";
+import { formatDate, formatDateTime } from "@/lib/format";
 import { readNotice } from "@/lib/guards";
-import { won } from "@/lib/format";
-import { findAs, pastRepairs, payments, technicians } from "@/mocks/screenData";
 import { DocumentModal, type DocumentKind } from "@/pages/as/DocumentModal";
+import { AS_RECEPTION_STATUSES, type AsReceptionDetail, type AsReceptionStatus, type AsStatusHistory, type ProductSummary } from "@/types/asReception";
 import type { AsRecord } from "@/types/screen";
 
 export function AsDetailPage() {
   const { asRequestId = "" } = useParams();
   const location = useLocation();
-  const navigate = useNavigate();
-  const draft = readAsDraft(location.state);
-  const base = findAs(asRequestId);
-  const record = base ?? (draft === null ? undefined : draftToRecord(asRequestId, draft));
-  const [technician, setTechnician] = useState(record?.technician ?? "");
-  const [techOpen, setTechOpen] = useState(false);
-  const [documentKind, setDocumentKind] = useState<DocumentKind | null>(null);
+  const receptionId = Number(asRequestId);
+  const validId = Number.isInteger(receptionId) && receptionId > 0;
+  const [detail, setDetail] = useState<AsReceptionDetail | null>(null);
+  const [product, setProduct] = useState<ProductSummary | null>(null);
+  const [history, setHistory] = useState<AsStatusHistory[]>([]);
+  const [loading, setLoading] = useState(validId);
+  const [error, setError] = useState(validId ? "" : "접수 정보를 찾을 수 없습니다.");
   const [notice, setNotice] = useState(readNotice(location.state) ?? "");
+  const [version, setVersion] = useState(0);
 
-  if (record === undefined) {
-    return <Notice tone="error">접수 정보를 찾을 수 없습니다.</Notice>;
-  }
+  useEffect(() => {
+    if (!validId) {
+      return;
+    }
+    const controller = new AbortController();
+    setLoading(true);
+    setError("");
 
-  const history = pastRepairs(record.customerName).filter((row) => row.id !== record.id);
-  const columns: Column<(typeof history)[number]>[] = [
-    { key: "id", header: "접수번호", render: (row) => row.id },
-    { key: "date", header: "접수일", render: (row) => row.receivedAt },
-    { key: "model", header: "모델명", render: (row) => row.modelName },
-    { key: "symptom", header: "고장증상", render: (row) => row.symptom },
-    { key: "tech", header: "담당기사", render: (row) => row.technician },
-    { key: "amount", header: "수리금액", render: (row) => (row.amount === 0 ? "-" : won(row.amount)) },
-    { key: "status", header: "상태", render: (row) => row.status },
-    {
-      key: "link",
-      header: "",
-      render: (row) => {
-        const payment = payments.find((item) => item.asId === row.id);
-        if (payment === undefined) {
-          return "-";
+    // 상세와 이력을 같이 읽고, 모델명은 제품 API로 보완한다.
+    Promise.all([fetchReception(receptionId, controller.signal), fetchReceptionHistory(receptionId, controller.signal)])
+      .then(async ([nextDetail, nextHistory]) => {
+        if (controller.signal.aborted) {
+          return;
         }
-        return (
-          <Link className="text-blue-600" to={`/payment/${payment.orderId}`}>
-            결제 상세
-          </Link>
-        );
-      },
-    },
-  ];
-  const portalUrl = `${window.location.origin}/portal/${encodeURIComponent(record.portalToken)}`;
+        setDetail(nextDetail);
+        setHistory(nextHistory);
+        try {
+          const nextProduct = await fetchProduct(nextDetail.product.id, controller.signal);
+          if (!controller.signal.aborted) {
+            setProduct(nextProduct);
+          }
+        } catch (cause: unknown) {
+          if (!controller.signal.aborted && !isAbortError(cause)) {
+            setProduct(null);
+          }
+        }
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || isAbortError(cause)) {
+          return;
+        }
+        setDetail(null);
+        setHistory([]);
+        setError(cause instanceof Error ? cause.message : "접수 정보를 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [receptionId, validId, version]);
+
+  if (loading && detail === null) {
+    return <Notice>접수 정보를 불러오는 중입니다.</Notice>;
+  }
+  if (detail === null) {
+    return <Notice tone="error">{error === "" ? "접수 정보를 찾을 수 없습니다." : error}</Notice>;
+  }
 
   return (
     <div className="space-y-4">
       {notice !== "" && <Notice>{notice}</Notice>}
-      <div className="flex justify-end">
-        <Button onClick={() => navigate("/as/new")}>접수 수정</Button>
-      </div>
+      {error !== "" && <Notice tone="error">{error}</Notice>}
       <Panel>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="고객명" value={record.customerName} />
-          <Field label="연락처" value={record.phone} />
-          <Field label="이메일" value={record.email} />
-          <Field label="우편번호" value={record.postalCode} />
-          <Field label="주소" value={`${record.address} ${record.addressDetail}`} />
-          <Field label="제품군" value={record.productGroup} />
-          <Field label="모델명" value={record.modelName} />
-          <Field label="시리얼번호" value={record.serial} />
-          <Field label="구매일" value={record.purchasedAt} />
-          <Field label="수령 방식" value={record.receiveMethod} />
-          <Field label="증상 요약" value={record.symptom} />
-          <Field label="접수 직원" value={record.receptionist} />
-          <Field label="접수 날짜" value={record.receivedAt} />
+          <Field label="접수번호" value={detail.receptionNumber} />
+          <Field label="고객명" value={detail.customer.name} />
+          <Field label="연락처" value={detail.customer.phone} />
+          <Field label="이메일" value={detail.customer.email} />
+          <Field label="우편번호" value={detail.customer.zipcode ?? "-"} />
+          <Field label="주소" value={`${detail.customer.basicAddress ?? ""} ${detail.customer.detailAddress ?? ""}`.trim() || "-"} />
+          <Field label="제품군" value={product === null ? "-" : categoryLabel(product.category)} />
+          <Field label="모델명" value={product?.modelName ?? "-"} />
+          <Field label="시리얼번호" value={detail.product.serialNumber} />
+          <Field label="구매일" value={formatDate(product?.purchasedAt ?? detail.product.purchasedAt)} />
+          <Field label="수령 방식" value={returnMethodLabel(detail.returnMethod)} />
+          <Field label="상태" value={receptionStatusLabel(detail.status)} />
+          <Field label="증상 요약" value={detail.symptom} />
+          <Field label="접수 직원" value={detail.receptionist?.name ?? "-"} />
+          <Field label="담당 기사" value={detail.technician?.name ?? "-"} />
+          <Field label="접수 날짜" value={formatDateTime(detail.createdAt)} />
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <div>
             <p className="mb-1 text-xs text-neutral-500">고장 증상 상세</p>
-            <div className="min-h-20 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm">{record.symptomDetail}</div>
+            <div className="min-h-20 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm">{detail.symptomDetail}</div>
           </div>
           <div>
             <p className="mb-1 text-xs text-neutral-500">고객 요청 사항 / 메모</p>
-            <div className="min-h-20 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm">{record.memo}</div>
+            <div className="min-h-20 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm">{detail.memo ?? "-"}</div>
           </div>
         </div>
       </Panel>
-      <Panel title="담당 기사 배정" action={<Button onClick={() => setNotice(`${technician} 기사로 배정을 저장했습니다.`)}>배정 저장</Button>}>
-        <div className="flex items-center gap-2">
-          <div className="min-w-40 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm">{technician}</div>
-          <Button variant="outline" onClick={() => setTechOpen(true)}>A/S 기사 목록 조회</Button>
-        </div>
+      <StatusPanel
+        detail={detail}
+        onChanged={(message) => {
+          setNotice(message);
+          setError("");
+          setVersion((current) => current + 1);
+        }}
+        onError={setError}
+      />
+      <Panel title="상태 변경 이력">
+        {history.length === 0 ? (
+          <p className="text-sm text-neutral-500">상태 변경 이력이 없습니다.</p>
+        ) : (
+          <ul className="space-y-3">
+            {history.map((item) => (
+              <li key={item.id} className="text-sm">
+                <p className="font-medium">
+                  {historyStatusLabel(item.fromStatus)} → {historyStatusLabel(item.toStatus)}
+                </p>
+                <p className="mt-1 text-neutral-500">
+                  {formatDateTime(item.createdAt)} · {item.changedBy ?? "-"} · {item.reason ?? "-"}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
       </Panel>
-      <Panel title="환불">
-        <p className="text-sm">보증기간 내 동일 증상이 3회 이상 발생되었기에 운영 정책에 의하여 환불 진행합니다.</p>
-        <p className="mt-4 mb-2 text-sm font-medium">과거 동일증상 접수 내역</p>
-        <DataTable columns={columns} rows={history} rowKey={(row) => row.id} emptyText="과거 동일 증상 이력이 없습니다." />
-      </Panel>
-      <Panel title="고객 안내 링크">
-        <p className="text-sm break-all">{portalUrl}</p>
-        <p className="mt-1 text-xs text-neutral-500">발급됨 · 만료 2026-11-06</p>
-        <div className="mt-3 flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => {
-              void navigator.clipboard.writeText(portalUrl);
-              setNotice("고객 안내 링크를 복사했습니다.");
-            }}
-          >
-            링크 복사
-          </Button>
-          <Button variant="outline" onClick={() => setNotice("고객 안내 링크를 발송했습니다.")}>알림 보내기</Button>
-        </div>
-      </Panel>
-      <Panel title="서류 발급">
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={() => setDocumentKind("receipt")}>접수증 출력</Button>
-          <Button variant="outline" onClick={() => setDocumentKind("estimate")}>견적서</Button>
-          <Button variant="outline" onClick={() => setDocumentKind("repair")}>수리 내역서</Button>
-          <Button variant="outline" onClick={() => setDocumentKind("payment")}>결제 내역서</Button>
-        </div>
-        <p className="mt-3 text-xs text-neutral-500">견적, 수리, 결제 전에는 해당 서류가 비어 있습니다.</p>
-      </Panel>
-      {techOpen && (
-        <TechPick
-          onClose={() => setTechOpen(false)}
-          onPick={(name) => {
-            setTechnician(name);
-            setTechOpen(false);
-          }}
-        />
-      )}
-      {documentKind !== null && <DocumentModal kind={documentKind} record={record} onClose={() => setDocumentKind(null)} />}
+      <DocumentSection detail={detail} product={product} />
     </div>
   );
+}
+
+function StatusPanel({
+  detail,
+  onChanged,
+  onError,
+}: {
+  detail: AsReceptionDetail;
+  onChanged: (message: string) => void;
+  onError: (message: string) => void;
+}) {
+  const [nextStatus, setNextStatus] = useState<AsReceptionStatus>(detail.status);
+  const [reason, setReason] = useState("");
+  const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    setNextStatus(detail.status);
+  }, [detail.status]);
+
+  async function save() {
+    setPending(true);
+    try {
+      await changeReceptionStatus(detail.id, nextStatus, reason);
+      setReason("");
+      onChanged(`${receptionStatusLabel(nextStatus)} 상태로 변경했습니다.`);
+    } catch (cause: unknown) {
+      onError(cause instanceof Error ? cause.message : "접수 상태를 변경하지 못했습니다.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <Panel title="접수 상태" action={<Button onClick={() => void save()} disabled={pending}>상태 변경</Button>}>
+      <div className="flex flex-wrap items-end gap-2">
+        <SelectBox
+          value={nextStatus}
+          onChange={(value) => {
+            if (isReceptionStatus(value)) {
+              setNextStatus(value);
+            }
+          }}
+          options={AS_RECEPTION_STATUSES.map((status) => ({ value: status, label: receptionStatusLabel(status) }))}
+        />
+        <TextField className="w-72" value={reason} onChange={setReason} placeholder="변경 사유" />
+      </div>
+    </Panel>
+  );
+}
+
+function DocumentSection({ detail, product }: { detail: AsReceptionDetail; product: ProductSummary | null }) {
+  const [documentKind, setDocumentKind] = useState<DocumentKind | null>(null);
+  const record = toDocumentRecord(detail, product);
+  return (
+    <Panel title="서류 발급">
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => setDocumentKind("receipt")}>접수증 출력</Button>
+        <Button variant="outline" onClick={() => setDocumentKind("estimate")}>견적서</Button>
+        <Button variant="outline" onClick={() => setDocumentKind("repair")}>수리 내역서</Button>
+        <Button variant="outline" onClick={() => setDocumentKind("payment")}>결제 내역서</Button>
+      </div>
+      <p className="mt-3 text-xs text-neutral-500">견적, 수리, 결제 전에는 해당 서류가 비어 있습니다.</p>
+      {documentKind !== null && <DocumentModal kind={documentKind} record={record} onClose={() => setDocumentKind(null)} />}
+    </Panel>
+  );
+}
+
+function toDocumentRecord(detail: AsReceptionDetail, product: ProductSummary | null): AsRecord {
+  return {
+    id: detail.receptionNumber,
+    customerName: detail.customer.name,
+    phone: detail.customer.phone,
+    email: detail.customer.email,
+    postalCode: detail.customer.zipcode ?? "",
+    address: detail.customer.basicAddress ?? "",
+    addressDetail: detail.customer.detailAddress ?? "",
+    productGroup: product?.category === "LAPTOP" ? "노트북" : "스마트폰",
+    modelName: product?.modelName ?? "",
+    serial: detail.product.serialNumber,
+    purchasedAt: formatDate(product?.purchasedAt ?? detail.product.purchasedAt),
+    symptom: detail.symptom,
+    symptomDetail: detail.symptomDetail,
+    memo: detail.memo ?? "",
+    receiveMethod: detail.returnMethod === "PICKUP" ? "방문" : "택배",
+    receptionist: detail.receptionist?.name ?? "",
+    technician: detail.technician?.name ?? "",
+    status: receptionStatusLabel(detail.status),
+    receivedAt: formatDateTime(detail.createdAt),
+    assignedAt: formatDateTime(detail.createdAt),
+    portalToken: "",
+  };
 }
 
 function Field({ label, value }: { label: string; value: string }) {
@@ -142,60 +249,4 @@ function Field({ label, value }: { label: string; value: string }) {
       <p className="mt-1 text-sm">{value || "-"}</p>
     </div>
   );
-}
-
-function TechPick({ onClose, onPick }: { onClose: () => void; onPick: (name: string) => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" onClick={(event) => event.stopPropagation()}>
-        <h2 className="mb-3 font-semibold">A/S 기사 목록</h2>
-        <ul className="divide-y divide-neutral-200 border border-neutral-300">
-          {technicians.map((row) => (
-            <li key={row.email}>
-              <button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-neutral-50" onClick={() => onPick(row.name)}>
-                {row.name} · 점검 {row.waiting} · 수리 {row.repairing} · {row.status}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
-}
-
-function readAsDraft(value: unknown): Partial<AsRecord> | null {
-  if (typeof value !== "object" || value === null || !("draft" in value)) {
-    return null;
-  }
-  const draft = value.draft;
-  if (typeof draft !== "object" || draft === null || !("customerName" in draft)) {
-    return null;
-  }
-  return draft as Partial<AsRecord>;
-}
-
-function draftToRecord(id: string, draft: Partial<AsRecord>): AsRecord {
-  return {
-    id,
-    customerName: draft.customerName ?? "",
-    phone: draft.phone ?? "",
-    email: draft.email ?? "",
-    postalCode: draft.postalCode ?? "",
-    address: draft.address ?? "",
-    addressDetail: draft.addressDetail ?? "",
-    productGroup: draft.productGroup === "노트북" ? "노트북" : "스마트폰",
-    modelName: draft.modelName ?? "",
-    serial: draft.serial ?? "",
-    purchasedAt: draft.purchasedAt ?? "",
-    symptom: draft.symptom ?? "",
-    symptomDetail: draft.symptomDetail ?? "",
-    memo: draft.memo ?? "",
-    receiveMethod: draft.receiveMethod === "택배" ? "택배" : "방문",
-    receptionist: "최미소",
-    technician: draft.technician ?? "",
-    status: "접수",
-    receivedAt: "2026-10-30",
-    assignedAt: "2026-10-30",
-    portalToken: "sahd123dh128ds23w4a1",
-  };
 }

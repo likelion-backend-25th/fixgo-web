@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { TextField } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Panel";
 import { useHydratedSession } from "@/hooks/useHydratedSession";
+import { loginWithPassword } from "@/lib/authApi";
 import { DEMO_ACCOUNTS, TEST_PASSWORD } from "@/mocks/accounts";
 import { useSessionStore } from "@/stores/useSessionStore";
 import { ROLE_LABEL, type StaffRole } from "@/types/staff";
@@ -16,10 +17,12 @@ const LOGIN_ROLE_LABEL: Record<StaffRole, string> = {
 export function LoginPage() {
   const { user, ready } = useHydratedSession();
   const login = useSessionStore((state) => state.login);
+  const loginWithApi = useSessionStore((state) => state.loginWithApi);
   const navigate = useNavigate();
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
 
   if (!ready) {
     return null;
@@ -28,14 +31,28 @@ export function LoginPage() {
     return <Navigate to="/as/list" replace />;
   }
 
-  function submit() {
-    if (loginId.trim() === "" || password.trim() === "") {
+  async function submit() {
+    const id = loginId.trim();
+    if (id === "" || password.trim() === "") {
       setError("아이디와 비밀번호를 입력해 주세요.");
       return;
     }
-    const account = DEMO_ACCOUNTS.find(
-      (item) => item.loginId === loginId.trim() && item.password === password,
-    );
+    // 이메일은 백엔드 직원 로그인이다. 데모 아이디는 화면 확인용 세션으로 남긴다.
+    if (id.includes("@")) {
+      setPending(true);
+      setError("");
+      try {
+        const session = await loginWithPassword(id, password);
+        loginWithApi(session.user, session.accessToken, session.memberId);
+        navigate("/as/list");
+      } catch (cause: unknown) {
+        setError(cause instanceof Error ? cause.message : "로그인에 실패했습니다.");
+      } finally {
+        setPending(false);
+      }
+      return;
+    }
+    const account = DEMO_ACCOUNTS.find((item) => item.loginId === id && item.password === password);
     if (account === undefined) {
       setError("아이디 또는 비밀번호가 올바르지 않습니다.");
       return;
@@ -60,14 +77,14 @@ export function LoginPage() {
           className="mt-8 space-y-4"
           onSubmit={(event) => {
             event.preventDefault();
-            submit();
+            void submit();
           }}
         >
-          <TextField label="아이디" value={loginId} onChange={setLoginId} />
+          <TextField label="아이디" value={loginId} onChange={setLoginId} placeholder="이메일 또는 데모 아이디" />
           <TextField label="비밀번호" type="password" value={password} onChange={setPassword} />
           {error !== "" && <Notice tone="error">{error}</Notice>}
-          <Button type="submit" className="w-full py-2.5">
-            로그인
+          <Button type="submit" className="w-full py-2.5" disabled={pending}>
+            {pending ? "로그인 중" : "로그인"}
           </Button>
         </form>
       </div>

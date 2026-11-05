@@ -1,24 +1,31 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { TextField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Panel";
-import { includesText } from "@/lib/format";
-import { addresses, customers, serials, technicians } from "@/mocks/screenData";
+import { isAbortError } from "@/lib/apiClient";
+import { categoryLabel, searchCustomers, searchProductBySerial, searchTechnicians } from "@/lib/asReceptionApi";
+import { formatDate, includesText } from "@/lib/format";
+import { addresses } from "@/mocks/screenData";
+import type { CustomerSummary, ProductSummary, TechnicianSummary } from "@/types/asReception";
 
 export type LookupKind = "customer" | "serial" | "tech" | "post" | "ai" | null;
 
 interface ApplyPatch {
+  customerId?: number | null;
   customerName?: string;
   phone?: string;
   email?: string;
   postalCode?: string;
   address?: string;
+  addressDetail?: string;
+  productId?: number | null;
   serial?: string;
   productGroup?: string;
   modelName?: string;
   purchasedAt?: string;
+  technicianId?: number | null;
   technician?: string;
 }
 
@@ -49,30 +56,80 @@ export function AsLookupModals({ kind, onClose, onApply }: AsLookupModalsProps) 
 
 function CustomerLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState("");
-  const rows = customers.filter((row) => includesText(`${row.name} ${row.phone} ${row.email}`, query));
-  const columns: Column<(typeof customers)[number]>[] = [
+  const [selected, setSelected] = useState<number | null>(null);
+  const [rows, setRows] = useState<CustomerSummary[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const columns: Column<CustomerSummary>[] = [
     { key: "name", header: "고객명", render: (row) => row.name },
     { key: "phone", header: "연락처", render: (row) => row.phone },
     { key: "email", header: "이메일", render: (row) => row.email },
-    { key: "address", header: "주소", render: (row) => row.address },
+    { key: "address", header: "주소", render: (row) => row.basicAddress ?? "-" },
   ];
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (trimmed === "") {
+      setRows([]);
+      setError("");
+      setLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      setError("");
+      searchCustomers(trimmed, controller.signal)
+        .then((items) => {
+          if (!controller.signal.aborted) {
+            setRows(items);
+          }
+        })
+        .catch((cause: unknown) => {
+          if (controller.signal.aborted || isAbortError(cause)) {
+            return;
+          }
+          setRows([]);
+          setError(cause instanceof Error ? cause.message : "고객을 조회하지 못했습니다.");
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) {
+            setLoading(false);
+          }
+        });
+    }, 300);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query]);
+
   return (
     <Modal title="고객정보 조회" wide onClose={onClose}>
-      <TextField value={query} onChange={setQuery} placeholder="고객명, 연락처 검색" className="mb-3 w-64" />
-      <DataTable columns={columns} rows={rows} rowKey={(row) => row.id} selectedKey={selected} onRowClick={(row) => setSelected(row.id)} />
+      <TextField value={query} onChange={setQuery} placeholder="고객명, 연락처, 이메일 검색" className="mb-3 w-64" />
+      {error !== "" && <div className="mb-3"><Notice tone="error">{error}</Notice></div>}
+      <DataTable
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => String(row.id)}
+        selectedKey={selected === null ? undefined : String(selected)}
+        onRowClick={(row) => setSelected(row.id)}
+        emptyText={query.trim() === "" ? "고객명, 연락처, 이메일을 입력해 주세요." : loading ? "고객을 조회하는 중입니다." : "조회 결과가 없습니다."}
+      />
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>취소</Button>
         <Button
           onClick={() => {
-            const row = customers.find((item) => item.id === selected);
+            const row = rows.find((item) => item.id === selected);
             if (row === undefined) return;
             onApply({
+              customerId: row.id,
               customerName: row.name,
               phone: row.phone,
               email: row.email,
-              postalCode: row.postalCode,
-              address: row.address,
+              postalCode: row.zipcode ?? "",
+              address: row.basicAddress ?? "",
+              addressDetail: row.detailAddress ?? "",
             });
             onClose();
           }}
@@ -86,25 +143,79 @@ function CustomerLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">)
 
 function SerialLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState("");
-  const rows = serials.filter((row) => includesText(row.serial, query));
-  const columns: Column<(typeof serials)[number]>[] = [
-    { key: "serial", header: "시리얼번호", render: (row) => row.serial },
-    { key: "group", header: "제품군", render: (row) => row.group },
+  const [selected, setSelected] = useState<number | null>(null);
+  const [rows, setRows] = useState<ProductSummary[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const columns: Column<ProductSummary>[] = [
+    { key: "serial", header: "시리얼번호", render: (row) => row.serialNumber },
+    { key: "group", header: "제품군", render: (row) => categoryLabel(row.category) },
     { key: "model", header: "모델명", render: (row) => row.modelName },
-    { key: "date", header: "생산일", render: (row) => row.producedAt },
+    { key: "date", header: "구매일", render: (row) => formatDate(row.purchasedAt) },
   ];
+
+  useEffect(() => {
+    const serial = query.trim();
+    if (serial === "") {
+      setRows([]);
+      setError("");
+      setLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      setError("");
+      searchProductBySerial(serial, controller.signal)
+        .then((item) => {
+          if (!controller.signal.aborted) {
+            setRows(item === null ? [] : [item]);
+          }
+        })
+        .catch((cause: unknown) => {
+          if (controller.signal.aborted || isAbortError(cause)) {
+            return;
+          }
+          setRows([]);
+          setError(cause instanceof Error ? cause.message : "제품을 조회하지 못했습니다.");
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) {
+            setLoading(false);
+          }
+        });
+    }, 300);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query]);
+
   return (
     <Modal title="시리얼번호 조회" wide onClose={onClose}>
-      <TextField value={query} onChange={setQuery} placeholder="시리얼번호 검색" className="mb-3 w-64" />
-      <DataTable columns={columns} rows={rows} rowKey={(row) => row.serial} selectedKey={selected} onRowClick={(row) => setSelected(row.serial)} />
+      <TextField value={query} onChange={setQuery} placeholder="시리얼번호 전체 입력" className="mb-3 w-64" />
+      {error !== "" && <div className="mb-3"><Notice tone="error">{error}</Notice></div>}
+      <DataTable
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => String(row.id)}
+        selectedKey={selected === null ? undefined : String(selected)}
+        onRowClick={(row) => setSelected(row.id)}
+        emptyText={query.trim() === "" ? "시리얼번호를 입력해 주세요." : loading ? "제품을 조회하는 중입니다." : "조회 결과가 없습니다."}
+      />
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>취소</Button>
         <Button
           onClick={() => {
-            const row = serials.find((item) => item.serial === selected);
+            const row = rows.find((item) => item.id === selected);
             if (row === undefined) return;
-            onApply({ serial: row.serial, productGroup: row.group, modelName: row.modelName });
+            onApply({
+              productId: row.id,
+              serial: row.serialNumber,
+              productGroup: categoryLabel(row.category),
+              modelName: row.modelName,
+              purchasedAt: row.purchasedAt === null ? "" : row.purchasedAt.slice(0, 10),
+            });
             onClose();
           }}
         >
@@ -117,27 +228,65 @@ function SerialLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
 
 function TechnicianLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState("");
-  const rows = technicians.filter((row) => includesText(row.name, query));
-  const columns: Column<(typeof technicians)[number]>[] = [
+  const [selected, setSelected] = useState<number | null>(null);
+  const [rows, setRows] = useState<TechnicianSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const columns: Column<TechnicianSummary>[] = [
     { key: "name", header: "이름", render: (row) => row.name },
     { key: "email", header: "이메일", render: (row) => row.email },
-    { key: "waiting", header: "점검 대기", render: (row) => `${row.waiting}건` },
-    { key: "repairing", header: "수리 진행", render: (row) => `${row.repairing}건` },
-    { key: "hours", header: "예상 소요", render: (row) => `${row.hours}시간` },
-    { key: "status", header: "상태", render: (row) => row.status },
+    { key: "status", header: "상태", render: (row) => (row.status === "ACTIVE" ? "근무" : "비활성") },
   ];
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      setError("");
+      searchTechnicians(query, controller.signal)
+        .then((items) => {
+          if (!controller.signal.aborted) {
+            setRows(items);
+          }
+        })
+        .catch((cause: unknown) => {
+          if (controller.signal.aborted || isAbortError(cause)) {
+            return;
+          }
+          setRows([]);
+          setError(cause instanceof Error ? cause.message : "기사 목록을 불러오지 못했습니다.");
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) {
+            setLoading(false);
+          }
+        });
+    }, 300);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query]);
+
   return (
     <Modal title="A/S 기사 목록" wide onClose={onClose}>
       <TextField value={query} onChange={setQuery} placeholder="기사 이름 검색" className="mb-3 w-64" />
-      <DataTable columns={columns} rows={rows} rowKey={(row) => row.email} selectedKey={selected} onRowClick={(row) => setSelected(row.email)} />
+      {error !== "" && <div className="mb-3"><Notice tone="error">{error}</Notice></div>}
+      <DataTable
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => String(row.id)}
+        selectedKey={selected === null ? undefined : String(selected)}
+        onRowClick={(row) => setSelected(row.id)}
+        emptyText={loading ? "기사 목록을 불러오는 중입니다." : "조회 결과가 없습니다."}
+      />
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>취소</Button>
         <Button
           onClick={() => {
-            const row = technicians.find((item) => item.email === selected);
+            const row = rows.find((item) => item.id === selected);
             if (row === undefined) return;
-            onApply({ technician: row.name });
+            onApply({ technicianId: row.id, technician: row.name });
             onClose();
           }}
         >
@@ -181,8 +330,6 @@ function PostLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
 
 function AiLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
   const [preview, setPreview] = useState("");
-  const [group, setGroup] = useState("");
-  const [modelName, setModelName] = useState("");
   const [purchasedAt, setPurchasedAt] = useState("");
   const [message, setMessage] = useState("");
 
@@ -203,17 +350,13 @@ function AiLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
                 const file = event.target.files?.[0];
                 if (file === undefined) return;
                 setPreview(URL.createObjectURL(file));
-                setGroup("스마트폰");
-                setModelName("SZ-P24");
                 setPurchasedAt("2025-05-14");
-                setMessage("영수증에서 제품군, 모델명, 구매일을 인식했습니다. 틀린 값은 수정할 수 있습니다.");
+                setMessage("영수증에서 구매일을 인식했습니다. 틀린 값은 수정할 수 있습니다.");
               }}
             />
           </label>
         </div>
         <div className="space-y-3">
-          <TextField label="제품군" value={group} onChange={setGroup} />
-          <TextField label="모델명" value={modelName} onChange={setModelName} />
           <TextField label="구매일" value={purchasedAt} onChange={setPurchasedAt} />
         </div>
       </div>
@@ -222,7 +365,7 @@ function AiLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
         <Button variant="ghost" onClick={onClose}>취소</Button>
         <Button
           onClick={() => {
-            onApply({ productGroup: group, modelName, purchasedAt });
+            onApply({ purchasedAt });
             onClose();
           }}
         >
