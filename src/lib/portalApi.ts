@@ -107,6 +107,25 @@ export async function startPortalPayment(token: string): Promise<StartPaymentRes
   return body;
 }
 
+export async function cancelPortalPayment(token: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/v1/portal/${encodeURIComponent(token)}/payments/cancel`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new Error("가상계좌를 취소하지 못했습니다. 다시 시도해 주세요.");
+  }
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "가상계좌를 취소하지 못했습니다. 다시 시도해 주세요."));
+  }
+
+  // 성공 응답은 204 No Content라 본문이 없다.
+}
+
 const confirmInflight = new Map<string, Promise<void>>();
 
 export function confirmPaymentOnce(request: ConfirmPaymentRequest): Promise<void> {
@@ -158,15 +177,7 @@ async function postConfirm(request: ConfirmPaymentRequest): Promise<void> {
     throw new Error(await readErrorMessage(response, "결제 승인에 실패했습니다. 다시 시도해 주세요."));
   }
 
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
-    throw new Error("결제 승인에 실패했습니다. 다시 시도해 주세요.");
-  }
-  if (!isRecord(body)) {
-    throw new Error("결제 승인에 실패했습니다. 다시 시도해 주세요.");
-  }
+  // 성공 응답은 204 No Content라 본문이 없다.
 }
 
 function isPortalResponse(value: unknown): value is PortalResponse {

@@ -53,7 +53,7 @@ export const router = createBrowserRouter([
       { path: "/customer", element: <CustomerListPage /> },
       { path: "/customer/:customerId", element: <CustomerDetailPage /> },
       { path: "/payment/list", element: <PaymentListPage /> },
-      { path: "/payment/:orderId", element: <PaymentDetailPage /> },
+      { path: "/payment/:billId", element: <PaymentDetailPage /> },
       { path: "/shipment/list", element: <ShipmentListPage /> },
       { path: "/notification_service", element: <NotificationServicePage /> },
       { path: "/notification/list", element: <NotificationListPage /> },
