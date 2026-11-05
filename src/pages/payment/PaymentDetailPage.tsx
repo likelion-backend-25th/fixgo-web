@@ -1,162 +1,148 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
-import { Button } from "@/components/ui/Button";
-import { TextArea, TextField } from "@/components/ui/Field";
 import { Notice, Panel } from "@/components/ui/Panel";
 import { won } from "@/lib/format";
-import { payments } from "@/mocks/screenData";
+import {
+  fetchPaymentDetail,
+  paymentAttemptStatusLabel,
+  paymentBillStatusLabel,
+  paymentMethodLabel,
+  type PaymentDetail,
+  type PaymentRefundStatus,
+} from "@/lib/paymentApi";
+
+type LoadState =
+  | { kind: "loading" }
+  | { kind: "invalid" }
+  | { kind: "error"; message: string }
+  | { kind: "ready"; detail: PaymentDetail };
 
 export function PaymentDetailPage() {
-  const { orderId } = useParams();
-  const payment = payments.find((row) => row.orderId === orderId);
-  const [status, setStatus] = useState(payment?.status ?? "결제 대기");
-  const [method, setMethod] = useState<"카드" | "현금">("카드");
-  const [paidAmount, setPaidAmount] = useState(String(payment?.amount ?? 0));
-  const [refunded, setRefunded] = useState(0);
-  const [refundAmount, setRefundAmount] = useState("");
-  const [reason, setReason] = useState("");
-  const [notice, setNotice] = useState("");
-  const [error, setError] = useState("");
+  const { billId = "" } = useParams();
+  const [load, setLoad] = useState<LoadState>({ kind: "loading" });
 
-  if (payment === undefined) {
+  useEffect(() => {
+    if (!/^\d+$/.test(billId)) {
+      setLoad({ kind: "invalid" });
+      return;
+    }
+
+    const controller = new AbortController();
+    setLoad({ kind: "loading" });
+    fetchPaymentDetail(Number(billId), controller.signal)
+      .then((detail) => {
+        if (!controller.signal.aborted) {
+          setLoad({ kind: "ready", detail });
+        }
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || (cause instanceof DOMException && cause.name === "AbortError")) {
+          return;
+        }
+        const message = cause instanceof Error ? cause.message : "결제 정보를 불러오지 못했습니다.";
+        if (message === "결제 정보를 찾을 수 없습니다.") {
+          setLoad({ kind: "invalid" });
+          return;
+        }
+        setLoad({ kind: "error", message });
+      });
+
+    return () => controller.abort();
+  }, [billId]);
+
+  if (load.kind === "loading") {
+    return <p className="text-sm text-neutral-600">결제 정보를 불러오는 중입니다.</p>;
+  }
+  if (load.kind === "invalid") {
     return <Notice tone="error">결제 정보를 찾을 수 없습니다.</Notice>;
   }
+  if (load.kind === "error") {
+    return <Notice tone="error">{load.message}</Notice>;
+  }
 
-  const remaining = payment.amount - refunded;
+  const detail = load.detail;
+  const reception = detail.reception;
+  const account = detail.virtualAccount;
+  const history = detail.paymentHistory;
+  const refund = detail.refundHistory;
 
   return (
     <div className="space-y-4">
-      {notice !== "" && <Notice>{notice}</Notice>}
-      {error !== "" && <Notice tone="error">{error}</Notice>}
       <Panel title="결제 기본 정보">
         <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-          <p>청구번호 {payment.orderId}</p>
-          <p>접수번호 <Link className="text-blue-600" to={`/as/details/${payment.asId}`}>{payment.asId}</Link></p>
-          <p>고객명 {payment.customerName}</p>
-          <p>제품명 {payment.productName}</p>
-          <p>고장 증상 {payment.symptom}</p>
-          <p>청구 금액 {won(payment.amount)}</p>
-          <p>상태 {status}</p>
-          <p>결제 수단 {status === "결제 완료" ? method : payment.method}</p>
+          <p>청구번호 {detail.billId}</p>
+          <p>
+            접수번호{" "}
+            <Link className="text-blue-600" to={`/as/details/${reception.asReceptionNumber}`}>
+              {reception.asReceptionNumber}
+            </Link>
+          </p>
+          <p>고객명 {text(reception.customerName)}</p>
+          <p>제품명 {text(reception.productName)}</p>
+          <p>고장 증상 {text(reception.symptom)}</p>
+          <p>증상 상세 {text(reception.symptomDetail)}</p>
+          <p>청구 금액 {won(detail.amount)}</p>
+          <p>상태 {paymentBillStatusLabel(detail.status)}</p>
+          <p>결제 진행 {paymentAttemptStatusLabel(detail.paymentStatus)}</p>
+          <p>결제 수단 {paymentMethodLabel(detail.paymentMethod)}</p>
         </div>
       </Panel>
-      {status === "결제 대기" ? (
+      {(account !== null || history !== null || refund !== null) && (
         <div className="grid gap-4 lg:grid-cols-2">
-          <Panel title="가상 계좌">
-            <p className="text-sm">계좌번호 {payment.virtualAccount ?? "발급 전"}</p>
-            <p className="mt-1 text-sm">입금 기한 {payment.dueAt ?? "-"}</p>
-            <Button className="mt-4 border border-black" variant="ghost" onClick={() => setNotice("가상계좌를 취소했습니다.")}>가상계좌 취소</Button>
-          </Panel>
-          <Panel title="현장 결제">
-            <div className="mb-3 flex gap-4 text-sm">
-              {(["카드", "현금"] as const).map((item) => (
-                <label key={item} className="flex items-center gap-2">
-                  <input type="radio" checked={method === item} onChange={() => setMethod(item)} />
-                  {item}
-                </label>
-              ))}
-            </div>
-            <TextField label="결제 금액" value={paidAmount} onChange={setPaidAmount} />
-            <Button
-              className="mt-4"
-              onClick={() => {
-                if (Number(paidAmount) !== payment.amount) {
-                  setError("결제 금액이 청구 금액과 다릅니다.");
-                  return;
-                }
-                setError("");
-                setStatus("결제 완료");
-                setNotice("현장 결제를 등록하고 결제 완료로 변경했습니다.");
-              }}
-            >
-              현장 결제 등록
-            </Button>
-          </Panel>
+          {account !== null && (
+            <Panel title="가상 계좌">
+              <p className="text-sm">은행 {text(account.bankCode)}</p>
+              <p className="mt-1 text-sm">계좌번호 {text(account.accountNumber)}</p>
+              <p className="mt-1 text-sm">입금 기한 {formatDateTime(account.dueAt)}</p>
+            </Panel>
+          )}
+          {history !== null && (
+            <Panel title="결제 이력">
+              <p className="text-sm">주문번호 {history.orderId}</p>
+              <p className="text-sm">결제 금액 {won(history.amount)}</p>
+              <p className="text-sm">결제 수단 {paymentMethodLabel(history.paymentMethod)}</p>
+              <p className="text-sm">승인 시각 {formatDateTime(history.approvedAt)}</p>
+              <p className="mt-2 text-sm">{detail.refundable ? "환불 가능" : "환불 불가"}</p>
+            </Panel>
+          )}
+          {refund !== null && (
+            <Panel title="환불 이력">
+              <p className="text-sm">환불 금액 {refund.amount === null ? "-" : won(refund.amount)}</p>
+              <p className="text-sm">환불 사유 {text(refund.cancelReason)}</p>
+              <p className="text-sm">환불 상태 {refundStatusLabel(refund.status)}</p>
+              <p className="text-sm">환불 시각 {formatDateTime(refund.canceledAt)}</p>
+            </Panel>
+          )}
         </div>
-      ) : (
-        <PaidPanel
-          remaining={remaining}
-          refunded={refunded}
-          refundAmount={refundAmount}
-          reason={reason}
-          paidAt={payment.paidAt ?? "2026-10-30"}
-          method={status === "결제 완료" ? method : payment.method}
-          cardNumber={payment.cardNumber ?? "-"}
-          onRefundAmount={setRefundAmount}
-          onReason={setReason}
-          onFull={() => {
-            if (reason.trim() === "") {
-              setError("환불 사유를 입력해 주세요.");
-              return;
-            }
-            setRefunded(payment.amount);
-            setError("");
-            setNotice("전액 환불을 요청했습니다.");
-          }}
-          onPartial={() => {
-            const amount = Number(refundAmount);
-            if (reason.trim() === "" || Number.isNaN(amount) || amount <= 0) {
-              setError("환불 금액과 사유를 입력해 주세요.");
-              return;
-            }
-            if (amount > remaining) {
-              setError("부분 환불 금액은 잔여 환불 가능 금액을 초과할 수 없습니다.");
-              return;
-            }
-            setRefunded((current) => current + amount);
-            setRefundAmount("");
-            setError("");
-            setNotice("부분 환불을 요청했습니다.");
-          }}
-        />
       )}
     </div>
   );
 }
 
-function PaidPanel({
-  remaining,
-  refunded,
-  refundAmount,
-  reason,
-  paidAt,
-  method,
-  cardNumber,
-  onRefundAmount,
-  onReason,
-  onFull,
-  onPartial,
-}: {
-  remaining: number;
-  refunded: number;
-  refundAmount: string;
-  reason: string;
-  paidAt: string;
-  method: string;
-  cardNumber: string;
-  onRefundAmount: (value: string) => void;
-  onReason: (value: string) => void;
-  onFull: () => void;
-  onPartial: () => void;
-}) {
-  return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <Panel title="결제 이력">
-        <p className="text-sm">결제일 {paidAt}</p>
-        <p className="text-sm">결제 수단 {method}</p>
-        <p className="text-sm">카드번호 {cardNumber}</p>
-        <p className="mt-2 text-sm">환불 완료 {won(refunded)} · 환불 가능 {won(remaining)}</p>
-      </Panel>
-      <Panel title="환불">
-        <TextArea label="환불 사유" value={reason} onChange={onReason} rows={3} />
-        <div className="mt-3 flex justify-end">
-          <Button variant="outline" onClick={onFull} disabled={remaining === 0}>전액 환불</Button>
-        </div>
-        <div className="mt-4 flex items-end gap-2">
-          <TextField className="flex-1" label="부분 환불 금액" value={refundAmount} onChange={onRefundAmount} />
-          <Button onClick={onPartial} disabled={remaining === 0}>부분 환불</Button>
-        </div>
-      </Panel>
-    </div>
-  );
+function refundStatusLabel(status: PaymentRefundStatus): string {
+  if (status === "IN_PROGRESS") {
+    return "환불 진행";
+  }
+  if (status === "DONE") {
+    return "환불 완료";
+  }
+  return "환불 실패";
+}
+
+function text(value: string | null): string {
+  if (value === null || value.trim() === "") {
+    return "-";
+  }
+  return value;
+}
+
+function formatDateTime(value: string | null): string {
+  if (value === null || value.trim() === "") {
+    return "-";
+  }
+  const matched = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/.exec(value);
+  if (matched === null) {
+    return value;
+  }
+  return `${matched[1]} ${matched[2]}`;
 }

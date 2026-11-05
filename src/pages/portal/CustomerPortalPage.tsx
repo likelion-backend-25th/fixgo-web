@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { won } from "@/lib/format";
 import {
+  cancelPortalPayment,
   fetchPortal,
   InvalidPortalLinkError,
   startPortalPayment,
@@ -117,25 +118,30 @@ export function CustomerPortalPage() {
         <p className="text-sm font-semibold text-neutral-900">{payment.status === "WAITING_FOR_DEPOSIT" ? "입금 안내" : "결제"}</p>
         <span className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">{statusLabel[payment.status]}</span>
       </div>
-      <PaymentBody token={token} payment={payment} />
+      <PaymentBody
+        token={token}
+        payment={payment}
+        onRefresh={() => setReloadKey((current) => current + 1)}
+      />
     </PortalFrame>
   );
 }
 
-function PaymentBody({ token, payment }: { token: string; payment: PaymentSummary }) {
+function PaymentBody({
+  token,
+  payment,
+  onRefresh,
+}: {
+  token: string;
+  payment: PaymentSummary;
+  onRefresh: () => void;
+}) {
   if (payment.status === "UNPAID") {
     return <UnpaidPayment token={token} payment={payment} />;
   }
 
   if (payment.status === "WAITING_FOR_DEPOSIT") {
-    const account = payment.virtualAccount ?? null;
-    return (
-      <dl>
-        <InfoRow label="은행명" value={text(account?.bankName)} />
-        <InfoRow label="계좌번호" value={text(account?.accountNumber)} />
-        <InfoRow label="입금 기한" value={formatDateTime(account?.dueAt)} />
-      </dl>
-    );
+    return <WaitingDeposit token={token} payment={payment} onRefresh={onRefresh} />;
   }
 
   if (payment.status !== "PAID") {
@@ -150,6 +156,55 @@ function PaymentBody({ token, payment }: { token: string; payment: PaymentSummar
         <InfoRow label="결제 수단" value={methodLabel(payment.paymentMethod)} />
         <InfoRow label="결제 시각" value={formatDateTime(payment.paidAt)} />
       </dl>
+    </section>
+  );
+}
+
+function WaitingDeposit({
+  token,
+  payment,
+  onRefresh,
+}: {
+  token: string;
+  payment: PaymentSummary;
+  onRefresh: () => void;
+}) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const pendingRef = useRef(false);
+  const account = payment.virtualAccount ?? null;
+
+  async function cancelAccount() {
+    if (pendingRef.current) {
+      return;
+    }
+    if (!window.confirm("발급된 가상계좌를 취소하시겠습니까?")) {
+      return;
+    }
+    pendingRef.current = true;
+    setError("");
+    setPending(true);
+    try {
+      await cancelPortalPayment(token);
+      onRefresh();
+    } catch (caught) {
+      pendingRef.current = false;
+      setPending(false);
+      setError(caught instanceof Error ? caught.message : "가상계좌를 취소하지 못했습니다. 다시 시도해 주세요.");
+    }
+  }
+
+  return (
+    <section>
+      <dl>
+        <InfoRow label="은행명" value={text(account?.bankName)} />
+        <InfoRow label="계좌번호" value={text(account?.accountNumber)} />
+        <InfoRow label="입금 기한" value={formatDateTime(account?.dueAt)} />
+      </dl>
+      <Button className="mt-4 w-full" variant="outline" disabled={pending} onClick={() => void cancelAccount()}>
+        가상계좌 취소
+      </Button>
+      {error !== "" && <p className="mt-3 text-sm text-red-600">{error}</p>}
     </section>
   );
 }
