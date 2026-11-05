@@ -8,8 +8,8 @@ import { Pagination } from "@/components/ui/Pagination";
 import { cn } from "@/lib/cn";
 import { includesText } from "@/lib/format";
 import { usePageSlice } from "@/lib/usePageSlice";
-import { shipments } from "@/mocks/screenData";
-import type { ShipmentRecord } from "@/types/screen";
+import { asRecords, shipments } from "@/mocks/screenData";
+import type { AsRecord, ShipmentRecord } from "@/types/screen";
 
 export function ShipmentListPage() {
   const [query, setQuery] = useState("");
@@ -90,19 +90,20 @@ function StatusLabel({ value }: { value: string }) {
 
 function CreateShipmentModal({ onClose }: { onClose: () => void }) {
   const [asId, setAsId] = useState("");
-  const [method, setMethod] = useState("택배");
+  const [lookupQuery, setLookupQuery] = useState("");
+  const [picking, setPicking] = useState(false);
   const [receiver, setReceiver] = useState("");
   const [phone, setPhone] = useState("");
   const [carrier, setCarrier] = useState("");
   const [trackingNo, setTrackingNo] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-  const trackingValid = method !== "택배" || /^\d{4}-\d{4}$/.test(trackingNo);
+  const trackingValid = /^\d{4}-\d{4}$/.test(trackingNo);
   const filled = asId.trim() !== "" && receiver.trim() !== "" && phone.trim() !== "" && carrier.trim() !== "";
 
   function validate(): boolean {
     if (!filled) {
-      setError("접수번호, 수령방법, 고객이름, 연락처, 택배사를 입력해 주세요.");
+      setError("접수번호, 고객이름, 연락처, 택배사를 입력해 주세요.");
       setNotice("");
       return false;
     }
@@ -116,18 +117,25 @@ function CreateShipmentModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Modal title="배송 등록" onClose={onClose}>
+    <>
+    <Modal
+      title="배송 등록"
+      onClose={() => {
+        if (picking) {
+          return;
+        }
+        onClose();
+      }}
+    >
       <div className="space-y-4">
-        <TextField label="접수번호" value={asId} onChange={setAsId} placeholder="AS-2026-0000" />
-        <label className="block text-sm">
-          <FieldLabel>수령방법</FieldLabel>
-          <SelectBox
-            className="w-full"
-            value={method}
-            onChange={setMethod}
-            options={[{ value: "택배", label: "택배" }, { value: "방문 수령", label: "방문 수령" }]}
-          />
-        </label>
+        <div>
+          <FieldLabel>접수번호</FieldLabel>
+          <div className="flex items-center gap-2">
+            <TextField value={asId} onChange={setAsId} placeholder="AS-2026-0000" className="min-w-0 flex-1" />
+            <TextField value={lookupQuery} onChange={setLookupQuery} placeholder="접수번호, 고객명" className="w-36" />
+            <Button variant="outline" className="shrink-0" onClick={() => setPicking(true)}>검색</Button>
+          </div>
+        </div>
         <TextField label="고객이름" value={receiver} onChange={setReceiver} />
         <TextField label="연락처" value={phone} onChange={setPhone} placeholder="010-0000-0000" />
         <TextField label="택배사" value={carrier} onChange={setCarrier} />
@@ -160,6 +168,78 @@ function CreateShipmentModal({ onClose }: { onClose: () => void }) {
         </Button>
       </div>
     </Modal>
+    {picking && (
+      <CompletedReceptionModal
+        query={lookupQuery}
+        onQueryChange={setLookupQuery}
+        onClose={() => setPicking(false)}
+        onApply={(row) => {
+          setAsId(row.id);
+          setReceiver(row.customerName);
+          setPhone(row.phone);
+          setError("");
+          setPicking(false);
+        }}
+      />
+    )}
+    </>
+  );
+}
+
+function CompletedReceptionModal({
+  query,
+  onQueryChange,
+  onClose,
+  onApply,
+}: {
+  query: string;
+  onQueryChange: (value: string) => void;
+  onClose: () => void;
+  onApply: (row: AsRecord) => void;
+}) {
+  const [selected, setSelected] = useState("");
+  const rows = useMemo(
+    () =>
+      asRecords.filter(
+        (row) => row.status === "완료" && includesText(`${row.id} ${row.customerName} ${row.phone}`, query),
+      ),
+    [query],
+  );
+  const columns: Column<AsRecord>[] = [
+    { key: "id", header: "접수번호", render: (row) => row.id },
+    { key: "customer", header: "고객명", render: (row) => row.customerName },
+    { key: "phone", header: "연락처", render: (row) => row.phone },
+    { key: "model", header: "모델명", render: (row) => row.modelName },
+    { key: "symptom", header: "증상", render: (row) => row.symptom },
+    { key: "technician", header: "담당 기사", render: (row) => row.technician },
+  ];
+
+  return (
+    <Modal title="수리 완료 A/S 접수" wide onClose={onClose}>
+      <TextField value={query} onChange={onQueryChange} placeholder="접수번호, 고객명 검색" className="mb-3 w-64" />
+      <DataTable
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => row.id}
+        selectedKey={selected}
+        onRowClick={(row) => setSelected(row.id)}
+        emptyText="수리 완료된 접수가 없습니다."
+      />
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose}>취소</Button>
+        <Button
+          onClick={() => {
+            const row = rows.find((item) => item.id === selected);
+            if (row === undefined) {
+              return;
+            }
+            onApply(row);
+          }}
+        >
+          적용
+        </Button>
+      </div>
+    </Modal>
   );
 }
 
@@ -168,17 +248,25 @@ function ShipmentDetailModal({ shipment, onClose }: { shipment: ShipmentRecord; 
   const [notice, setNotice] = useState("");
   return (
     <Modal title="배송 상세" onClose={onClose}>
-      <div className="mb-3 grid gap-2 text-sm sm:grid-cols-2">
-        <p>접수번호 {shipment.asId}</p>
-        <p>수령인 {shipment.receiver}</p>
-        <p>택배사 {shipment.carrier}</p>
-        <p>상태 {shipment.status}</p>
+      <div className="space-y-4">
+        <TextField label="접수번호" value={shipment.asId} onChange={() => undefined} readOnly />
+        <TextField label="수령인" value={shipment.receiver} onChange={() => undefined} readOnly />
+        <TextField label="택배사" value={shipment.carrier} onChange={() => undefined} readOnly />
+        <label className="block text-sm">
+          <FieldLabel>상태</FieldLabel>
+          <div className="rounded-lg border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm">
+            <StatusLabel value={shipment.status} />
+          </div>
+        </label>
+        <TextField label="운송장번호" value={trackingNo} onChange={setTrackingNo} placeholder="0000-0000" />
+        <div>
+          <FieldLabel>배송 이력</FieldLabel>
+          <div className="space-y-2 rounded-lg border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm text-neutral-700">
+            <p>2026-10-25 14:10 · 운송장 등록 · 성공</p>
+            <p>2026-10-25 18:40 · 집화완료 · 성공</p>
+          </div>
+        </div>
       </div>
-      <TextField label="운송장번호" value={trackingNo} onChange={setTrackingNo} />
-      <ul className="mt-4 space-y-2 text-sm">
-        <li>2026-10-25 14:10 · 운송장 등록 · 성공</li>
-        <li>2026-10-25 18:40 · 집화완료 · 성공</li>
-      </ul>
       {notice !== "" && <div className="mt-3"><Notice>{notice}</Notice></div>}
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="outline" onClick={() => setNotice("운송장번호를 수정했습니다.")}>운송장 수정</Button>
