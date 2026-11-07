@@ -104,10 +104,31 @@ export interface AsStatusHistory {
   createdAt: string;
 }
 
+export interface AssignmentMember {
+  id: number;
+  name: string;
+}
+
+export interface TechnicianAssignmentHistory {
+  receptionId: number;
+  previousTechnician: AssignmentMember | null;
+  newTechnician: AssignmentMember | null;
+  reason: string | null;
+  createdAt: string;
+  changedBy: AssignmentMember | null;
+}
+
 export interface CreateReceptionInput {
   customerId: number;
   productId: number;
   technicianId: number;
+  symptom: string;
+  symptomDetail: string;
+  memo: string;
+  returnMethod: ReturnMethod;
+}
+
+export interface UpdateReceptionInput {
   symptom: string;
   symptomDetail: string;
   memo: string;

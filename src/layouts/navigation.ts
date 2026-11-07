@@ -20,7 +20,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "A/S",
     items: [
       { label: "A/S 목록", to: "/as/list", roles: all },
-      { label: "A/S 접수 등록", to: "/as/new", roles: ["RECEPTIONIST", "MANAGER"] },
+      { label: "A/S 접수 등록", to: "/as/new", roles: desk },
     ],
   },
   {

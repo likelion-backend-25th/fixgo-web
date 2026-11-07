@@ -18,6 +18,8 @@ import {
 import { formatDate, formatDateTime } from "@/lib/format";
 import { readNotice } from "@/lib/guards";
 import { DocumentModal, type DocumentKind } from "@/pages/as/DocumentModal";
+import { ReceptionEditPanel } from "@/pages/as/ReceptionEditPanel";
+import { TechnicianAssignPanel } from "@/pages/as/TechnicianAssignPanel";
 import { AS_RECEPTION_STATUSES, type AsReceptionDetail, type AsReceptionStatus, type AsStatusHistory, type ProductSummary } from "@/types/asReception";
 import type { AsRecord } from "@/types/screen";
 
@@ -119,6 +121,14 @@ export function AsDetailPage() {
           </div>
         </div>
       </Panel>
+      <ReceptionEditPanel
+        detail={detail}
+        onSaved={(message) => {
+          setNotice(message);
+          setError("");
+          setVersion((current) => current + 1);
+        }}
+      />
       <StatusPanel
         detail={detail}
         onChanged={(message) => {
@@ -127,6 +137,15 @@ export function AsDetailPage() {
           setVersion((current) => current + 1);
         }}
         onError={setError}
+      />
+      <TechnicianAssignPanel
+        detail={detail}
+        refreshKey={version}
+        onReassigned={(message) => {
+          setNotice(message);
+          setError("");
+          setVersion((current) => current + 1);
+        }}
       />
       <Panel title="상태 변경 이력">
         {history.length === 0 ? (

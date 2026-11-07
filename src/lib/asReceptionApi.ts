@@ -8,6 +8,7 @@ import {
   type AsReceptionListResult,
   type AsReceptionStatus,
   type AsStatusHistory,
+  type AssignmentMember,
   type CreateCustomerInput,
   type CreateReceptionInput,
   type CreateReceptionResult,
@@ -19,7 +20,9 @@ import {
   type ReceptionProduct,
   type RepairStatus,
   type ReturnMethod,
+  type TechnicianAssignmentHistory,
   type TechnicianSummary,
+  type UpdateReceptionInput,
 } from "@/types/asReception";
 
 const returnMethods: readonly ReturnMethod[] = ["DELIVERY", "PICKUP"];
@@ -143,6 +146,45 @@ export async function createReception(input: CreateReceptionInput): Promise<Crea
     status: body.status,
     createdAt: body.createdAt,
   };
+}
+
+export async function fetchTechnicianHistory(id: number, signal: AbortSignal): Promise<TechnicianAssignmentHistory[]> {
+  const response = await apiFetch(`/api/v1/as-receptions/${id}/technician-history`, { signal });
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "기사 배정 이력을 불러오지 못했습니다."));
+  }
+  const body = await readJson(response, "기사 배정 이력 응답이 올바르지 않습니다.");
+  if (!Array.isArray(body)) {
+    throw new Error("기사 배정 이력 응답이 올바르지 않습니다.");
+  }
+  return body.map(parseTechnicianHistory);
+}
+
+export async function updateReception(id: number, input: UpdateReceptionInput): Promise<void> {
+  const response = await apiFetch(`/api/v1/as-receptions/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      symptom: input.symptom.trim(),
+      symptomDetail: input.symptomDetail.trim(),
+      memo: input.memo.trim(),
+      returnMethod: input.returnMethod,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "접수 정보를 수정하지 못했습니다."));
+  }
+}
+
+export async function reassignTechnician(id: number, technicianId: number, reason: string): Promise<void> {
+  const response = await apiFetch(`/api/v1/as-receptions/${id}/technician`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ technicianId, reason: reason.trim() }),
+  });
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "기사를 다시 배정하지 못했습니다."));
+  }
 }
 
 export async function changeReceptionStatus(id: number, newStatus: AsReceptionStatus, reason: string): Promise<void> {
@@ -384,6 +426,33 @@ function parseMember(value: unknown): ReceptionMember | null {
   }
   if (!isRecord(value) || !isId(value.id) || typeof value.name !== "string") {
     throw new Error("접수 상세 응답이 올바르지 않습니다.");
+  }
+  return { id: value.id, name: value.name };
+}
+
+function parseTechnicianHistory(value: unknown): TechnicianAssignmentHistory {
+  if (!isRecord(value)
+    || !isId(value.receptionId)
+    || !isNullableString(value.reason)
+    || typeof value.createdAt !== "string") {
+    throw new Error("기사 배정 이력 응답이 올바르지 않습니다.");
+  }
+  return {
+    receptionId: value.receptionId,
+    previousTechnician: parseAssignmentMember(value.previousTechnician),
+    newTechnician: parseAssignmentMember(value.newTechnician),
+    reason: value.reason,
+    createdAt: value.createdAt,
+    changedBy: parseAssignmentMember(value.changedBy),
+  };
+}
+
+function parseAssignmentMember(value: unknown): AssignmentMember | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (!isRecord(value) || !isId(value.id) || typeof value.name !== "string") {
+    throw new Error("기사 배정 이력 응답이 올바르지 않습니다.");
   }
   return { id: value.id, name: value.name };
 }
