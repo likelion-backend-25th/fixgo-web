@@ -5,14 +5,12 @@ import { CostListPage } from "@/pages/admin/CostListPage";
 import { PartListPage } from "@/pages/admin/PartListPage";
 import { ProductListPage } from "@/pages/admin/ProductListPage";
 import { StatisticsPage } from "@/pages/admin/StatisticsPage";
-import {
-  DepositWaitingPage,
-  IncompletePage,
-  ModelStatsPage,
-  RepairCostPage,
-  SymptomStatsPage,
-  TechnicianStatsPage,
-} from "@/pages/admin/StatisticsSubPages";
+import { IncompletePage } from "@/pages/admin/statistics/IncompletePage";
+import { ModelStatsPage } from "@/pages/admin/statistics/ModelStatsPage";
+import { DepositWaitingPage, RepairCostPage } from "@/pages/admin/statistics/PaymentStatsPages";
+import { ShipmentStatsPage } from "@/pages/admin/statistics/ShipmentStatsPage";
+import { SymptomStatsPage } from "@/pages/admin/statistics/SymptomStatsPage";
+import { TechnicianStatsPage } from "@/pages/admin/statistics/TechnicianStatsPage";
 import { AsDetailPage } from "@/pages/as/AsDetailPage";
 import { AsListPage } from "@/pages/as/AsListPage";
 import { AsNewPage } from "@/pages/as/AsNewPage";
@@ -66,6 +64,7 @@ export const router = createBrowserRouter([
       { path: "/admin/statistics/models", element: <ModelStatsPage /> },
       { path: "/admin/statistics/models/:modelId", element: <SymptomStatsPage /> },
       { path: "/admin/statistics/repair_cost", element: <RepairCostPage /> },
+      { path: "/admin/statistics/shipments", element: <ShipmentStatsPage /> },
       { path: "/admin/statistics/incomplete", element: <IncompletePage /> },
       { path: "/admin/allocation_history", element: <AllocationHistoryPage /> },
       { path: "/admin/status_change_history", element: <StatusHistoryPage /> },
