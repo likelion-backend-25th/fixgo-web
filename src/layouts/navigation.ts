@@ -109,7 +109,8 @@ export function resolveHeading(pathname: string, role: StaffRole): { title: stri
   if (pathname === "/admin/statistics") return { title: "통계/리포트" };
   if (pathname === "/admin/statistics/deposits/waiting") return { title: "입금 대기 내역" };
   if (pathname === "/admin/statistics/technicians") return { title: "기사별 수리 현황" };
-  if (pathname === "/admin/statistics/repair_cost") return { title: "수리비 추이" };
+  if (pathname === "/admin/statistics/repair_cost") return { title: "수리비 수납" };
+  if (pathname === "/admin/statistics/shipments") return { title: "배송 현황" };
   if (pathname === "/admin/statistics/incomplete") return { title: "장기 미처리" };
   if (pathname.startsWith("/admin/statistics/models/")) return { title: "고장 증상 분포" };
   if (pathname === "/admin/statistics/models") return { title: "제품 모델별 수리 건수" };
