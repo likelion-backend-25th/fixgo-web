@@ -1,3 +1,5 @@
+import { apiFetch, isRecord, readErrorMessage } from "@/lib/apiClient";
+
 export interface EmailPreset {
   id: number;
   name: string;
@@ -50,21 +52,7 @@ export async function deleteEmailPreset(id: number): Promise<void> {
 }
 
 async function request(url: string, init: RequestInit, fallback: string): Promise<unknown> {
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      ...init,
-      headers: {
-        Accept: "application/json",
-        ...init.headers,
-      },
-    });
-  } catch (error) {
-    if (isAbortError(error)) {
-      throw error;
-    }
-    throw new Error("이메일 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-  }
+  const response = await apiFetch(url, init);
 
   if (!response.ok) {
     throw new Error(await readErrorMessage(response, fallback));
@@ -99,22 +87,3 @@ function parseEmailPreset(value: unknown): EmailPreset {
   };
 }
 
-async function readErrorMessage(response: Response, fallback: string): Promise<string> {
-  try {
-    const body: unknown = await response.json();
-    if (isRecord(body) && typeof body.message === "string" && body.message.trim() !== "") {
-      return body.message;
-    }
-  } catch {
-    // 본문이 JSON이 아니면 기본 문구를 쓴다.
-  }
-  return fallback;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError";
-}
