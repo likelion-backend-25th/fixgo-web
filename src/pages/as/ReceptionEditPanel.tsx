@@ -78,29 +78,27 @@ export function ReceptionEditPanel({ detail, onSaved }: ReceptionEditPanelProps)
       {!statusOpen && <p className="text-sm text-neutral-500">수리 시작 전 접수만 수정할 수 있습니다.</p>}
       {statusOpen && !ownsReception && <p className="text-sm text-neutral-500">해당 건을 등록한 접수 담당자만 수정할 수 있습니다.</p>}
       {statusOpen && ownsReception && (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid items-end gap-3 md:grid-cols-2">
           <TextField label="고장 증상 요약" value={symptom} onChange={setSymptom} />
-          <TextArea label="고장 증상 상세" value={symptomDetail} onChange={setSymptomDetail} rows={5} />
-          <TextArea label="고객 요청 사항 / 메모" value={memo} onChange={setMemo} />
-          <div>
-            <p className="mb-1.5 text-xs font-medium text-neutral-600">수령 방식</p>
-            <div className="flex h-10 items-center gap-6 text-sm">
-              {(["방문", "택배"] as const).map((label) => {
-                const method: ReturnMethod = label === "방문" ? "PICKUP" : "DELIVERY";
-                return (
-                  <label key={method} className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="edit-return-method"
-                      checked={returnMethod === method}
-                      onChange={() => setReturnMethod(method)}
-                    />
-                    {label}
-                  </label>
-                );
-              })}
-            </div>
+          <div className="flex h-10 items-center justify-center gap-6 text-sm">
+            <span className="font-medium text-neutral-600">수령 방식</span>
+            {(["방문", "택배"] as const).map((label) => {
+              const method: ReturnMethod = label === "방문" ? "PICKUP" : "DELIVERY";
+              return (
+                <label key={method} className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="edit-return-method"
+                    checked={returnMethod === method}
+                    onChange={() => setReturnMethod(method)}
+                  />
+                  {label}
+                </label>
+              );
+            })}
           </div>
+          <TextArea label="고장 증상 상세" value={symptomDetail} onChange={setSymptomDetail} rows={4} />
+          <TextArea label="고객 요청 사항 / 메모" value={memo} onChange={setMemo} rows={4} />
         </div>
       )}
     </Panel>

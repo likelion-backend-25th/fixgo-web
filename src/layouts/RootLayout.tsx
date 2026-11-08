@@ -1,16 +1,30 @@
 import { Menu } from "lucide-react";
-import { useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { Link, Navigate, Outlet, useLocation } from "react-router";
 import { useHydratedSession } from "@/hooks/useHydratedSession";
 import { Sidebar } from "@/layouts/Sidebar";
 import { resolveHeading } from "@/layouts/navigation";
 import { ROLE_LABEL } from "@/types/staff";
 
+const HeadingMetaContext = createContext<(meta: string | undefined) => void>(() => {});
+
+export function useHeadingMeta(meta: string | undefined) {
+  const setMeta = useContext(HeadingMetaContext);
+  useEffect(() => {
+    setMeta(meta);
+    return () => setMeta(undefined);
+  }, [meta, setMeta]);
+}
+
 export function RootLayout() {
   const { user, ready } = useHydratedSession();
   const { pathname } = useLocation();
   const [menuState, setMenuState] = useState({ path: pathname, open: false });
+  const [pageMeta, setPageMeta] = useState<{ path: string; meta?: string }>({ path: pathname });
   const menuOpen = menuState.open && menuState.path === pathname;
+  const setHeadingMeta = useCallback((meta: string | undefined) => {
+    setPageMeta({ path: pathname, meta });
+  }, [pathname]);
 
   function setMenuOpen(open: boolean) {
     setMenuState({ path: pathname, open });
@@ -24,8 +38,10 @@ export function RootLayout() {
   }
 
   const heading = resolveHeading(pathname, user.role);
+  const meta = pageMeta.path === pathname && pageMeta.meta !== undefined ? pageMeta.meta : heading.meta;
 
   return (
+    <HeadingMetaContext.Provider value={setHeadingMeta}>
     <div className="flex min-h-screen bg-neutral-50 text-neutral-900">
       {menuOpen && (
         <button
@@ -47,10 +63,10 @@ export function RootLayout() {
             >
               <Menu className="size-4" />
             </button>
-            <div className="min-w-0">
-              <h1 className="truncate text-base font-semibold tracking-tight">{heading.title}</h1>
-              {heading.meta !== undefined && (
-                <p className="truncate text-xs text-neutral-500">{heading.meta}</p>
+            <div className="flex min-w-0 items-baseline gap-3">
+              <h1 className="shrink-0 text-base font-semibold tracking-tight">{heading.title}</h1>
+              {meta !== undefined && meta !== "" && (
+                <p className="truncate text-sm text-neutral-500">{meta}</p>
               )}
             </div>
           </div>
@@ -72,5 +88,6 @@ export function RootLayout() {
         </main>
       </div>
     </div>
+    </HeadingMetaContext.Provider>
   );
 }

@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { TextField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Panel";
 import { isAbortError } from "@/lib/apiClient";
-import { categoryLabel, searchCustomers, searchProductBySerial, searchTechnicians } from "@/lib/asReceptionApi";
-import { formatDate, includesText } from "@/lib/format";
-import { addresses } from "@/mocks/screenData";
+import { categoryLabel, searchCustomers, searchProductsBySerial, searchTechnicians } from "@/lib/asReceptionApi";
+import { loadDaumPostcode, selectedAddress } from "@/lib/daumPostcode";
 import type { CustomerSummary, ProductSummary, TechnicianSummary } from "@/types/asReception";
 
 export type LookupKind = "customer" | "serial" | "tech" | "post" | "ai" | null;
@@ -151,7 +150,6 @@ function SerialLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
     { key: "serial", header: "시리얼번호", render: (row) => row.serialNumber },
     { key: "group", header: "제품군", render: (row) => categoryLabel(row.category) },
     { key: "model", header: "모델명", render: (row) => row.modelName },
-    { key: "date", header: "구매일", render: (row) => formatDate(row.purchasedAt) },
   ];
 
   useEffect(() => {
@@ -166,10 +164,11 @@ function SerialLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
     const timer = window.setTimeout(() => {
       setLoading(true);
       setError("");
-      searchProductBySerial(serial, controller.signal)
-        .then((item) => {
+      // 시리얼번호 일부만 넘겨도 포함된 제품을 모두 보여 준다.
+      searchProductsBySerial(serial, controller.signal)
+        .then((items) => {
           if (!controller.signal.aborted) {
-            setRows(item === null ? [] : [item]);
+            setRows(items);
           }
         })
         .catch((cause: unknown) => {
@@ -193,7 +192,7 @@ function SerialLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
 
   return (
     <Modal title="시리얼번호 조회" wide onClose={onClose}>
-      <TextField value={query} onChange={setQuery} placeholder="시리얼번호 전체 입력" className="mb-3 w-64" />
+      <TextField value={query} onChange={setQuery} placeholder="시리얼번호 일부 입력" className="mb-3 w-64" />
       {error !== "" && <div className="mb-3"><Notice tone="error">{error}</Notice></div>}
       <DataTable
         columns={columns}
@@ -201,7 +200,7 @@ function SerialLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
         rowKey={(row) => String(row.id)}
         selectedKey={selected === null ? undefined : String(selected)}
         onRowClick={(row) => setSelected(row.id)}
-        emptyText={query.trim() === "" ? "시리얼번호를 입력해 주세요." : loading ? "제품을 조회하는 중입니다." : "조회 결과가 없습니다."}
+        emptyText={query.trim() === "" ? "시리얼번호 일부를 입력해 주세요." : loading ? "제품을 조회하는 중입니다." : "조회 결과가 없습니다."}
       />
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>취소</Button>
@@ -214,7 +213,6 @@ function SerialLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
               serial: row.serialNumber,
               productGroup: categoryLabel(row.category),
               modelName: row.modelName,
-              purchasedAt: row.purchasedAt === null ? "" : row.purchasedAt.slice(0, 10),
             });
             onClose();
           }}
@@ -298,32 +296,52 @@ function TechnicianLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind"
 }
 
 function PostLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
-  const [query, setQuery] = useState("");
-  const rows = useMemo(
-    () => addresses.filter((row) => includesText(`${row.postalCode} ${row.road} ${row.lot} ${row.building}`, query)),
-    [query],
-  );
+  const frameRef = useRef<HTMLDivElement>(null);
+  const onApplyRef = useRef(onApply);
+  const onCloseRef = useRef(onClose);
+  const [error, setError] = useState("");
+  onApplyRef.current = onApply;
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (frame === null) {
+      return;
+    }
+    let cancelled = false;
+    loadDaumPostcode()
+      .then((Postcode) => {
+        if (cancelled) {
+          return;
+        }
+        frame.replaceChildren();
+        new Postcode({
+          width: "100%",
+          height: "100%",
+          oncomplete: (data) => {
+            onApplyRef.current({
+              postalCode: data.zonecode,
+              address: selectedAddress(data),
+            });
+            onCloseRef.current();
+          },
+        }).embed(frame);
+      })
+      .catch((cause: unknown) => {
+        if (!cancelled) {
+          setError(cause instanceof Error ? cause.message : "카카오 우편번호 서비스를 불러오지 못했습니다.");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <Modal title="우편번호 찾기" wide onClose={onClose}>
-      <TextField value={query} onChange={setQuery} placeholder="도로명, 지번, 건물명, 우편번호" className="mb-3" />
-      <ul className="divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-200">
-        {rows.map((row) => (
-          <li key={row.postalCode}>
-            <button
-              type="button"
-              className="w-full px-3 py-3 text-left text-sm hover:bg-neutral-50"
-              onClick={() => {
-                onApply({ postalCode: row.postalCode, address: row.road });
-                onClose();
-              }}
-            >
-              <span className="mr-2 font-medium text-blue-600">{row.postalCode}</span>
-              {row.road}
-              <span className="mt-1 block text-neutral-500">{row.lot} · {row.building}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
+      {error !== "" && <Notice tone="error">{error}</Notice>}
+      <div ref={frameRef} className="h-[460px] overflow-hidden rounded-xl border border-neutral-200" />
+      <p className="mt-3 text-xs text-neutral-500">주소를 고르면 우편번호와 기본 주소가 입력됩니다. 상세 주소는 직접 입력합니다.</p>
     </Modal>
   );
 }

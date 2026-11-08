@@ -12,9 +12,16 @@ import {
   type CreateCustomerInput,
   type CreateReceptionInput,
   type CreateReceptionResult,
+  type CustomerPortalLink,
   type CustomerSummary,
+  type EstimateDocument,
+  type EstimateItem,
   type ProductCategory,
   type ProductSummary,
+  type ReceptionReceipt,
+  type RepairPartUsage,
+  type RepairStatement,
+  type RepairWorkLine,
   type ReceptionCustomer,
   type ReceptionMember,
   type ReceptionProduct,
@@ -105,6 +112,18 @@ export async function fetchReception(id: number, signal: AbortSignal): Promise<A
   }
   const body = await readJson(response, "접수 상세 응답이 올바르지 않습니다.");
   return parseDetail(body);
+}
+
+export function customerPortalUrl(token: string): string {
+  return `${window.location.origin}/portal/${encodeURIComponent(token)}`;
+}
+
+export async function fetchCustomerPortalLink(id: number, signal: AbortSignal): Promise<CustomerPortalLink> {
+  const response = await apiFetch(`/api/v1/as-receptions/${id}/portal-link`, { signal });
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "고객 안내 링크를 불러오지 못했습니다."));
+  }
+  return parseCustomerPortalLink(await readJson(response, "고객 안내 링크 응답이 올바르지 않습니다."));
 }
 
 export async function fetchReceptionHistory(id: number, signal: AbortSignal): Promise<AsStatusHistory[]> {
@@ -235,10 +254,10 @@ export async function createCustomer(input: CreateCustomerInput): Promise<Custom
   return parseCustomerSummary(body);
 }
 
-export async function searchProductBySerial(serialNumber: string, signal: AbortSignal): Promise<ProductSummary | null> {
+export async function searchProductsBySerial(serialNumber: string, signal: AbortSignal): Promise<ProductSummary[]> {
   const serial = serialNumber.trim();
   if (serial === "") {
-    return null;
+    return [];
   }
   const params = new URLSearchParams({ serialNumber: serial });
   const response = await apiFetch(`/api/v1/products?${params.toString()}`, { signal });
@@ -249,11 +268,12 @@ export async function searchProductBySerial(serialNumber: string, signal: AbortS
   if (!Array.isArray(body)) {
     throw new Error("제품 조회 응답이 올바르지 않습니다.");
   }
-  const first = body[0];
-  if (first === undefined) {
-    return null;
-  }
-  return parseProductSummary(first);
+  return body.map(parseProductSummary);
+}
+
+export async function searchProductBySerial(serialNumber: string, signal: AbortSignal): Promise<ProductSummary | null> {
+  const items = await searchProductsBySerial(serialNumber, signal);
+  return items[0] ?? null;
 }
 
 export async function fetchProduct(id: number, signal: AbortSignal): Promise<ProductSummary> {
@@ -263,6 +283,33 @@ export async function fetchProduct(id: number, signal: AbortSignal): Promise<Pro
   }
   const body = await readJson(response, "제품 정보 응답이 올바르지 않습니다.");
   return parseProductSummary(body);
+}
+
+export async function fetchReceptionReceipt(id: number, signal: AbortSignal): Promise<ReceptionReceipt> {
+  const response = await apiFetch(`/api/v1/as-receptions/${id}/documents/reception-receipt`, { signal });
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "접수증을 불러오지 못했습니다."));
+  }
+  const body = await readJson(response, "접수증 응답이 올바르지 않습니다.");
+  return parseReceptionReceipt(body);
+}
+
+export async function fetchEstimate(id: number, signal: AbortSignal): Promise<EstimateDocument> {
+  const response = await apiFetch(`/api/v1/as-receptions/${id}/documents/estimate`, { signal });
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "견적서를 불러오지 못했습니다."));
+  }
+  const body = await readJson(response, "견적서 응답이 올바르지 않습니다.");
+  return parseEstimate(body);
+}
+
+export async function fetchRepairStatement(id: number, signal: AbortSignal): Promise<RepairStatement> {
+  const response = await apiFetch(`/api/v1/as-receptions/${id}/documents/repair-statement`, { signal });
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "수리 내역서를 불러오지 못했습니다."));
+  }
+  const body = await readJson(response, "수리 내역서 응답이 올바르지 않습니다.");
+  return parseRepairStatement(body);
 }
 
 export async function searchTechnicians(keyword: string, signal: AbortSignal): Promise<TechnicianSummary[]> {
@@ -400,6 +447,13 @@ function parseProduct(value: unknown): ReceptionProduct {
   };
 }
 
+function parseCustomerPortalLink(value: unknown): CustomerPortalLink {
+  if (!isRecord(value) || typeof value.token !== "string" || value.token.trim() === "" || typeof value.expiresAt !== "string") {
+    throw new Error("고객 안내 링크 응답이 올바르지 않습니다.");
+  }
+  return { token: value.token, expiresAt: value.expiresAt };
+}
+
 function parseProductSummary(value: unknown): ProductSummary {
   if (!isRecord(value)
     || !isId(value.id)
@@ -457,6 +511,136 @@ function parseAssignmentMember(value: unknown): AssignmentMember | null {
   return { id: value.id, name: value.name };
 }
 
+function parseReceptionReceipt(value: unknown): ReceptionReceipt {
+  if (!isRecord(value)
+    || typeof value.receptionNumber !== "string"
+    || typeof value.createdAt !== "string"
+    || typeof value.customerName !== "string"
+    || typeof value.customerPhone !== "string"
+    || typeof value.customerEmail !== "string"
+    || !isNullableString(value.zipcode)
+    || !isNullableString(value.basicAddress)
+    || !isNullableString(value.detailAddress)
+    || typeof value.modelName !== "string"
+    || typeof value.serialNumber !== "string"
+    || typeof value.symptom !== "string"
+    || !isReturnMethod(value.returnMethod)
+    || typeof value.receptionistName !== "string"
+    || !isNullableString(value.technicianName)) {
+    throw new Error("접수증 응답이 올바르지 않습니다.");
+  }
+  return {
+    receptionNumber: value.receptionNumber,
+    createdAt: value.createdAt,
+    customerName: value.customerName,
+    customerPhone: value.customerPhone,
+    customerEmail: value.customerEmail,
+    zipcode: value.zipcode,
+    basicAddress: value.basicAddress,
+    detailAddress: value.detailAddress,
+    modelName: value.modelName,
+    serialNumber: value.serialNumber,
+    symptom: value.symptom,
+    returnMethod: value.returnMethod,
+    receptionistName: value.receptionistName,
+    technicianName: value.technicianName,
+  };
+}
+
+function parseEstimate(value: unknown): EstimateDocument {
+  if (!isRecord(value)
+    || !isId(value.receptionId)
+    || typeof value.receptionNumber !== "string"
+    || !isNullableString(value.confirmedAt)
+    || !isWholeNumber(value.laborRate)
+    || !isWholeNumber(value.inspectionCost)
+    || !isWholeNumber(value.totalAmount)
+    || !Array.isArray(value.items)) {
+    throw new Error("견적서 응답이 올바르지 않습니다.");
+  }
+  return {
+    receptionId: value.receptionId,
+    receptionNumber: value.receptionNumber,
+    confirmedAt: value.confirmedAt,
+    laborRate: value.laborRate,
+    inspectionCost: value.inspectionCost,
+    totalAmount: value.totalAmount,
+    items: value.items.map(parseEstimateItem),
+  };
+}
+
+function parseEstimateItem(value: unknown): EstimateItem {
+  if (!isRecord(value)
+    || typeof value.category !== "string"
+    || typeof value.name !== "string"
+    || !isNullableWholeNumber(value.quantity)
+    || !isNullableWholeNumber(value.amount)) {
+    throw new Error("견적서 응답이 올바르지 않습니다.");
+  }
+  return {
+    category: value.category,
+    name: value.name,
+    quantity: value.quantity,
+    amount: value.amount,
+  };
+}
+
+function parseRepairStatement(value: unknown): RepairStatement {
+  if (!isRecord(value)
+    || typeof value.receptionNumber !== "string"
+    || typeof value.customerName !== "string"
+    || typeof value.issuedAt !== "string"
+    || !isNullableString(value.technicianName)
+    || !isNullableString(value.workNote)
+    || !Array.isArray(value.repairWorks)
+    || !isWholeNumber(value.laborCost)
+    || !isWholeNumber(value.finalAmount)) {
+    throw new Error("수리 내역서 응답이 올바르지 않습니다.");
+  }
+  return {
+    receptionNumber: value.receptionNumber,
+    customerName: value.customerName,
+    issuedAt: value.issuedAt,
+    technicianName: value.technicianName,
+    workNote: value.workNote,
+    repairWorks: value.repairWorks.map(parseRepairWork),
+    laborCost: value.laborCost,
+    finalAmount: value.finalAmount,
+  };
+}
+
+function parseRepairWork(value: unknown): RepairWorkLine {
+  if (!isRecord(value)
+    || !isId(value.repairWorkId)
+    || !isNullableString(value.repairPresetName)
+    || typeof value.workName !== "string"
+    || !Array.isArray(value.usedParts)) {
+    throw new Error("수리 내역서 응답이 올바르지 않습니다.");
+  }
+  return {
+    repairWorkId: value.repairWorkId,
+    repairPresetName: value.repairPresetName,
+    workName: value.workName,
+    usedParts: value.usedParts.map(parseRepairPart),
+  };
+}
+
+function parseRepairPart(value: unknown): RepairPartUsage {
+  if (!isRecord(value)
+    || !isId(value.id)
+    || typeof value.partName !== "string"
+    || !isWholeNumber(value.quantity)
+    || !isWholeNumber(value.totalPrice)) {
+    throw new Error("수리 내역서 응답이 올바르지 않습니다.");
+  }
+  return {
+    id: value.id,
+    partName: value.partName,
+    quantity: value.quantity,
+    totalPrice: value.totalPrice,
+  };
+}
+
 function parseTechnician(value: unknown): TechnicianSummary {
   if (!isRecord(value) || !isId(value.id) || typeof value.name !== "string" || typeof value.email !== "string" || typeof value.status !== "string") {
     throw new Error("기사 목록 응답이 올바르지 않습니다.");
@@ -498,6 +682,14 @@ function isCategory(value: unknown): value is ProductCategory {
 
 function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
+}
+
+function isWholeNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value);
+}
+
+function isNullableWholeNumber(value: unknown): value is number | null {
+  return value === null || isWholeNumber(value);
 }
 
 async function readJson(response: Response, fallback: string): Promise<unknown> {

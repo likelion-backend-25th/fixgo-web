@@ -3,10 +3,11 @@ import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { TextArea, TextField } from "@/components/ui/Field";
 import { Notice, Panel } from "@/components/ui/Panel";
-import { createCustomer, createReception, searchCustomers, searchProductBySerial, searchTechnicians } from "@/lib/asReceptionApi";
+import { categoryLabel, createCustomer, createReception, searchCustomers, searchProductBySerial, searchTechnicians } from "@/lib/asReceptionApi";
 import { CustomerNameField } from "@/pages/as/CustomerNameField";
+import { SerialNumberField } from "@/pages/as/SerialNumberField";
 import { AsLookupModals, type LookupKind } from "@/pages/as/AsLookupModals";
-import type { CustomerSummary, ReturnMethod } from "@/types/asReception";
+import type { CustomerSummary, ProductSummary, ReturnMethod } from "@/types/asReception";
 
 interface AsForm {
   customerId: number | null;
@@ -61,6 +62,15 @@ export function AsNewPage() {
 
   function patch(partial: Partial<AsForm>) {
     setForm((current) => ({ ...current, ...partial }));
+  }
+
+  function applyProduct(product: ProductSummary) {
+    patch({
+      productId: product.id,
+      serial: product.serialNumber,
+      productGroup: categoryLabel(product.category),
+      modelName: product.modelName,
+    });
   }
 
   function applyCustomer(customer: CustomerSummary) {
@@ -184,7 +194,12 @@ export function AsNewPage() {
 
       <Panel title="제품/접수 정보">
         <div className="grid gap-3 md:grid-cols-4">
-          <TextField label="시리얼번호" value={form.serial} onChange={(serial) => patch({ serial, productId: null })} invalid={tried && form.productId === null} placeholder="시리얼번호 조회로 선택" />
+          <SerialNumberField
+            value={form.serial}
+            invalid={tried && form.productId === null}
+            onChange={(serial) => patch({ serial, productId: null, productGroup: "", modelName: "" })}
+            onPick={applyProduct}
+          />
           <div className="flex items-end">
             <Button variant="outline" onClick={() => setLookup("serial")}>
               시리얼번호 조회
@@ -218,8 +233,8 @@ export function AsNewPage() {
             </Button>
           </div>
         </Panel>
-        <Panel title="수령 방식">
-          <div className="flex h-full items-center justify-center gap-6 text-sm">
+        <Panel title="수령 방식" className="relative">
+          <div className="absolute inset-0 flex items-center justify-center gap-6 text-sm">
             {(["방문", "택배"] as const).map((method) => (
               <label key={method} className="flex items-center gap-2">
                 <input

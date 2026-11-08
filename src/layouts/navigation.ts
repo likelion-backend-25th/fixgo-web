@@ -89,7 +89,7 @@ export function resolveHeading(pathname: string, role: StaffRole): { title: stri
   if (pathname === "/as/list") return { title: "A/S 목록" };
   if (pathname === "/as/new") return { title: "A/S 접수 등록" };
   if (pathname.startsWith("/as/details/")) {
-    return { title: "접수 상세", meta: decodeURIComponent(pathname.split("/").at(-1) ?? "") };
+    return { title: "접수 상세" };
   }
   if (/^\/as\/[^/]+\/(inspection|repair)$/.test(pathname)) {
     const id = pathname.split("/")[2] ?? "";

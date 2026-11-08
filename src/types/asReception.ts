@@ -176,3 +176,67 @@ export interface TechnicianSummary {
   email: string;
   status: string;
 }
+
+export interface CustomerPortalLink {
+  token: string;
+  expiresAt: string;
+}
+
+export interface ReceptionReceipt {
+  receptionNumber: string;
+  createdAt: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string;
+  zipcode: string | null;
+  basicAddress: string | null;
+  detailAddress: string | null;
+  modelName: string;
+  serialNumber: string;
+  symptom: string;
+  returnMethod: ReturnMethod;
+  receptionistName: string;
+  technicianName: string | null;
+}
+
+export interface EstimateItem {
+  category: string;
+  name: string;
+  quantity: number | null;
+  amount: number | null;
+}
+
+export interface EstimateDocument {
+  receptionId: number;
+  receptionNumber: string;
+  confirmedAt: string | null;
+  laborRate: number;
+  inspectionCost: number;
+  totalAmount: number;
+  items: EstimateItem[];
+}
+
+export interface RepairPartUsage {
+  id: number;
+  partName: string;
+  quantity: number;
+  totalPrice: number;
+}
+
+export interface RepairWorkLine {
+  repairWorkId: number;
+  repairPresetName: string | null;
+  workName: string;
+  usedParts: RepairPartUsage[];
+}
+
+export interface RepairStatement {
+  receptionNumber: string;
+  customerName: string;
+  issuedAt: string;
+  technicianName: string | null;
+  workNote: string | null;
+  repairWorks: RepairWorkLine[];
+  laborCost: number;
+  finalAmount: number;
+}

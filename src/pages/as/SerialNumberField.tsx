@@ -62,7 +62,7 @@ export function SerialNumberField({ value, invalid = false, onChange, onPick }: 
         label="시리얼번호"
         value={value}
         invalid={invalid}
-        placeholder="일부를 입력하면 등록된 시리얼번호가 나옵니다"
+        placeholder="시리얼번호 조회 가능합니다"
         onChange={(serial) => {
           setOpen(true);
           onChange(serial);
