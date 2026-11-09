@@ -167,14 +167,24 @@ function InspectionForm({ record, repair }: { record: AsReceptionDetail; repair:
         </Button>
       </div>
       {presetOpen && (
-        <PresetPickerModal
-          onClose={() => setPresetOpen(false)}
-          onApply={(next) => {
-            setLines((current) => [...current, ...next]);
-            setNotice("수리 프리셋을 점검 항목에 반영했습니다.");
-          }}
-        />
-      )}
+  <PresetPickerModal
+    onClose={() => setPresetOpen(false)}
+    onApply={async (preset, workName) => {
+      const newLine: RepairLine = {
+        id: `preset-${preset.id}-${Date.now()}`,
+        kind: "작업",
+        name: workName,
+        quantityLabel: "1회",
+        unitPriceLabel: won(preset.basePrice),
+        amount: preset.basePrice,
+      };
+
+      setLines((current) => [...current, newLine]);
+
+      setNotice("수리 프리셋을 점검 항목에 반영했습니다.");
+    }}
+  />
+)}
     </div>
   );
 }
