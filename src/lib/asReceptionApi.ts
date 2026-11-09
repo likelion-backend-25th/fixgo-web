@@ -36,6 +36,27 @@ import {
 const returnMethods: readonly ReturnMethod[] = ["DELIVERY", "PICKUP"];
 const categories: readonly ProductCategory[] = ["LAPTOP", "PHONE"];
 
+interface RepairResponseData {
+  id: number;
+  asReceptionId: number;
+  technicianId: number;
+  diagnosis: string | null;
+  workNote: string | null;
+  repairDecision: string | null;
+  warrantyResult: string;
+  reason: string | null;
+  laborRate: number;
+  inspectionCost: number;
+  finalAmount: number;
+  status: RepairStatus;
+  reasonForRejection: string | null;
+  confirmedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: number | null;
+  updatedBy: number | null;
+}
+
 export function receptionStatusLabel(status: AsReceptionStatus): string {
   if (status === "RECEIVED") return "접수";
   if (status === "INSPECTION") return "점검 중";
@@ -77,29 +98,46 @@ export async function fetchReceptions(
   mineOnly = false,
 ): Promise<AsReceptionListResult> {
   const params = new URLSearchParams();
+
   if (query.keyword !== "") {
     params.set("keyword", query.keyword);
   }
+
   if (query.status !== null) {
     params.set("status", query.status);
   }
+
   if (!mineOnly && query.technicianId !== null) {
     params.set("technicianId", String(query.technicianId));
   }
+
   params.set("page", String(query.page - 1));
   params.set("size", String(query.size));
   params.set("sort", query.sort);
 
-  // 내 담당 목록은 서버가 로그인한 기사 ID로 필터링한다.
-  const path = mineOnly ? "/api/v1/as-receptions/my" : "/api/v1/as-receptions";
-  const response = await apiFetch(`${path}?${params.toString()}`, { signal });
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "A/S 목록을 불러오지 못했습니다."));
+  // 현재 백엔드에서 확인된 접수 목록 API
+  // 기사 전용 목록 API는 List<RepairResponse>이므로 별도 구현이 필요하다.
+  if (mineOnly) {
+    throw new Error("기사 전용 접수 목록 API는 별도 연결이 필요합니다.");
   }
+
+  const response = await apiFetch(
+    `/api/v1/as-receptions?${params.toString()}`,
+    { signal },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await readErrorMessage(response, "A/S 목록을 불러오지 못했습니다."),
+    );
+  }
+
   const body = await readJson(response, "A/S 목록 응답이 올바르지 않습니다.");
+
   if (!isPage(body)) {
     throw new Error("A/S 목록 응답이 올바르지 않습니다.");
   }
+
   return {
     items: body.content.map(parseListItem),
     number: body.number,
@@ -109,58 +147,107 @@ export async function fetchReceptions(
   };
 }
 
-export async function fetchReception(id: number, signal: AbortSignal): Promise<AsReceptionDetail> {
+export async function fetchReception(
+  id: number,
+  signal: AbortSignal,
+): Promise<AsReceptionDetail> {
   return fetchReceptionDetail(`/api/v1/as-receptions/${id}`, signal);
 }
 
-export async function fetchMyReception(id: number, signal: AbortSignal): Promise<MyReceptionDetail> {
-  // 기사 상세 응답에는 접수 정보와 저장된 수리 기록이 함께 들어온다.
-  const response = await apiFetch(`/api/v1/as-receptions/my/${id}`, { signal });
+/**
+ * 접수 ID로 로그인한 기사의 수리 목록을 조회하고
+ * 해당 접수에 연결된 수리 정보를 찾는다.
+ */
+export async function fetchMyReception(
+  receptionId: number,
+  signal: AbortSignal,
+): Promise<MyReceptionDetail> {
+  const response = await apiFetch(
+    "/api/v1/as/repairs/my",
+    { signal },
+  );
+
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "접수 정보를 불러오지 못했습니다."));
+    throw new Error(
+      await readErrorMessage(response, "담당 수리 목록을 불러오지 못했습니다."),
+    );
   }
-  const body = await readJson(response, "기사 접수 상세 응답이 올바르지 않습니다.");
-  if (!isRecord(body)) {
-    throw new Error("기사 접수 상세 응답이 올바르지 않습니다.");
+
+  const body = await readJson(
+    response,
+    "담당 수리 목록 응답이 올바르지 않습니다.",
+  );
+
+  if (!Array.isArray(body)) {
+    throw new Error("담당 수리 목록 응답이 올바르지 않습니다.");
   }
-  const reception = parseDetail(body.reception);
-  const repair = body.repair;
-  if (repair === null) return { reception, repair: null };
-  if (!isRecord(repair)
-    || !isId(repair.id)
-    || repair.status === null || !isRepairStatus(repair.status)
-    || !isNullableString(repair.diagnosis)
-    || !isNullableString(repair.reason)
-    || !isNullableString(repair.reasonForRejection)
-    || (repair.warrantyResult !== "FREE" && repair.warrantyResult !== "PAID" && repair.warrantyResult !== "UNDECIDED")) {
-    throw new Error("수리 기록 응답이 올바르지 않습니다.");
+
+  const repairs = body.map(parseRepairResponse);
+
+  const matchedRepair = repairs.find(
+    (repair) => repair.asReceptionId === receptionId,
+  );
+
+  const reception = await fetchReceptionDetail(
+    `/api/v1/as-receptions/${receptionId}`,
+    signal,
+  );
+
+  if (!matchedRepair) {
+    return {
+      reception,
+      repair: null,
+    };
   }
+
   return {
     reception,
     repair: {
-      id: repair.id,
-      status: repair.status,
-      diagnosis: repair.diagnosis,
-      warrantyResult: repair.warrantyResult,
-      reason: repair.reason,
-      reasonForRejection: repair.reasonForRejection,
+      id: matchedRepair.id,
+      status: matchedRepair.status,
+      diagnosis: matchedRepair.diagnosis,
+      warrantyResult: isWarrantyResult(matchedRepair.warrantyResult) ? matchedRepair.warrantyResult : "UNDECIDED",
+      reason: matchedRepair.reason,
+      reasonForRejection: matchedRepair.reasonForRejection,
     },
   };
 }
 
-export async function startMyInspection(receptionId: number): Promise<void> {
-  const response = await apiFetch(`/api/v1/as-receptions/my/${receptionId}/inspection/start`, { method: "POST" });
+/**
+ * 수리 ID를 사용하여 수리를 시작한다.
+ */
+export async function startMyInspection(repairId: number): Promise<void> {
+  const response = await apiFetch(
+    `/api/v1/as/repairs/${repairId}/start`,
+    {
+      method: "PATCH",
+    },
+  );
+
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "점검을 시작하지 못했습니다."));
+    throw new Error(
+      await readErrorMessage(response, "수리를 시작하지 못했습니다."),
+    );
   }
 }
 
-async function fetchReceptionDetail(path: string, signal: AbortSignal): Promise<AsReceptionDetail> {
+async function fetchReceptionDetail(
+  path: string,
+  signal: AbortSignal,
+): Promise<AsReceptionDetail> {
   const response = await apiFetch(path, { signal });
+
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "접수 정보를 불러오지 못했습니다."));
+    throw new Error(
+      await readErrorMessage(response, "접수 정보를 불러오지 못했습니다."),
+    );
   }
-  const body = await readJson(response, "접수 상세 응답이 올바르지 않습니다.");
+
+  const body = await readJson(
+    response,
+    "접수 상세 응답이 올바르지 않습니다.",
+  );
+
   return parseDetail(body);
 }
 
@@ -168,27 +255,56 @@ export function customerPortalUrl(token: string): string {
   return `${window.location.origin}/portal/${encodeURIComponent(token)}`;
 }
 
-export async function fetchCustomerPortalLink(id: number, signal: AbortSignal): Promise<CustomerPortalLink> {
-  const response = await apiFetch(`/api/v1/as-receptions/${id}/portal-link`, { signal });
+export async function fetchCustomerPortalLink(
+  id: number,
+  signal: AbortSignal,
+): Promise<CustomerPortalLink> {
+  const response = await apiFetch(
+    `/api/v1/as-receptions/${id}/portal-link`,
+    { signal },
+  );
+
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "고객 안내 링크를 불러오지 못했습니다."));
+    throw new Error(
+      await readErrorMessage(response, "고객 안내 링크를 불러오지 못했습니다."),
+    );
   }
-  return parseCustomerPortalLink(await readJson(response, "고객 안내 링크 응답이 올바르지 않습니다."));
+
+  return parseCustomerPortalLink(
+    await readJson(response, "고객 안내 링크 응답이 올바르지 않습니다."),
+  );
 }
 
-export async function fetchReceptionHistory(id: number, signal: AbortSignal): Promise<AsStatusHistory[]> {
-  const response = await apiFetch(`/api/v1/as-receptions/${id}/history`, { signal });
+export async function fetchReceptionHistory(
+  id: number,
+  signal: AbortSignal,
+): Promise<AsStatusHistory[]> {
+  const response = await apiFetch(
+    `/api/v1/as-receptions/${id}/history`,
+    { signal },
+  );
+
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "상태 변경 이력을 불러오지 못했습니다."));
+    throw new Error(
+      await readErrorMessage(response, "상태 변경 이력을 불러오지 못했습니다."),
+    );
   }
-  const body = await readJson(response, "상태 변경 이력 응답이 올바르지 않습니다.");
+
+  const body = await readJson(
+    response,
+    "상태 변경 이력 응답이 올바르지 않습니다.",
+  );
+
   if (!Array.isArray(body)) {
     throw new Error("상태 변경 이력 응답이 올바르지 않습니다.");
   }
+
   return body.map(parseHistory);
 }
 
-export async function createReception(input: CreateReceptionInput): Promise<CreateReceptionResult> {
+export async function createReception(
+  input: CreateReceptionInput,
+): Promise<CreateReceptionResult> {
   const response = await apiFetch("/api/v1/as-receptions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -202,13 +318,28 @@ export async function createReception(input: CreateReceptionInput): Promise<Crea
       returnMethod: input.returnMethod,
     }),
   });
+
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "접수를 등록하지 못했습니다."));
+    throw new Error(
+      await readErrorMessage(response, "접수를 등록하지 못했습니다."),
+    );
   }
-  const body = await readJson(response, "접수 등록 응답이 올바르지 않습니다.");
-  if (!isRecord(body) || !isId(body.id) || typeof body.receptionNumber !== "string" || !isReceptionStatusValue(body.status) || typeof body.createdAt !== "string") {
+
+  const body = await readJson(
+    response,
+    "접수 등록 응답이 올바르지 않습니다.",
+  );
+
+  if (
+    !isRecord(body)
+    || !isId(body.id)
+    || typeof body.receptionNumber !== "string"
+    || !isReceptionStatusValue(body.status)
+    || typeof body.createdAt !== "string"
+  ) {
     throw new Error("접수 등록 응답이 올바르지 않습니다.");
   }
+
   return {
     id: body.id,
     receptionNumber: body.receptionNumber,
@@ -217,19 +348,37 @@ export async function createReception(input: CreateReceptionInput): Promise<Crea
   };
 }
 
-export async function fetchTechnicianHistory(id: number, signal: AbortSignal): Promise<TechnicianAssignmentHistory[]> {
-  const response = await apiFetch(`/api/v1/as-receptions/${id}/technician-history`, { signal });
+export async function fetchTechnicianHistory(
+  id: number,
+  signal: AbortSignal,
+): Promise<TechnicianAssignmentHistory[]> {
+  const response = await apiFetch(
+    `/api/v1/as-receptions/${id}/technician-history`,
+    { signal },
+  );
+
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "기사 배정 이력을 불러오지 못했습니다."));
+    throw new Error(
+      await readErrorMessage(response, "기사 배정 이력을 불러오지 못했습니다."),
+    );
   }
-  const body = await readJson(response, "기사 배정 이력 응답이 올바르지 않습니다.");
+
+  const body = await readJson(
+    response,
+    "기사 배정 이력 응답이 올바르지 않습니다.",
+  );
+
   if (!Array.isArray(body)) {
     throw new Error("기사 배정 이력 응답이 올바르지 않습니다.");
   }
+
   return body.map(parseTechnicianHistory);
 }
 
-export async function updateReception(id: number, input: UpdateReceptionInput): Promise<void> {
+export async function updateReception(
+  id: number,
+  input: UpdateReceptionInput,
+): Promise<void> {
   const response = await apiFetch(`/api/v1/as-receptions/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -240,39 +389,73 @@ export async function updateReception(id: number, input: UpdateReceptionInput): 
       returnMethod: input.returnMethod,
     }),
   });
+
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "접수 정보를 수정하지 못했습니다."));
+    throw new Error(
+      await readErrorMessage(response, "접수 정보를 수정하지 못했습니다."),
+    );
   }
 }
 
-export async function reassignTechnician(id: number, technicianId: number, reason: string): Promise<void> {
-  const response = await apiFetch(`/api/v1/as-receptions/${id}/technician`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ technicianId, reason: reason.trim() }),
-  });
+export async function reassignTechnician(
+  id: number,
+  technicianId: number,
+  reason: string,
+): Promise<void> {
+  const response = await apiFetch(
+    `/api/v1/as-receptions/${id}/technician`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        technicianId,
+        reason: reason.trim(),
+      }),
+    },
+  );
+
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "기사를 다시 배정하지 못했습니다."));
+    throw new Error(
+      await readErrorMessage(response, "기사를 다시 배정하지 못했습니다."),
+    );
   }
 }
 
-export async function changeReceptionStatus(id: number, newStatus: AsReceptionStatus, reason: string): Promise<void> {
+export async function changeReceptionStatus(
+  id: number,
+  newStatus: AsReceptionStatus,
+  reason: string,
+): Promise<void> {
   const params = new URLSearchParams({ newStatus });
+
   if (reason.trim() !== "") {
     params.set("reason", reason.trim());
   }
-  const response = await apiFetch(`/api/v1/as-receptions/${id}/status?${params.toString()}`, { method: "PATCH" });
+
+  const response = await apiFetch(
+    `/api/v1/as-receptions/${id}/status?${params.toString()}`,
+    { method: "PATCH" },
+  );
+
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "접수 상태를 변경하지 못했습니다."));
+    throw new Error(
+      await readErrorMessage(response, "접수 상태를 변경하지 못했습니다."),
+    );
   }
 }
 
-export async function searchCustomers(query: string, signal: AbortSignal): Promise<CustomerSummary[]> {
+export async function searchCustomers(
+  query: string,
+  signal: AbortSignal,
+): Promise<CustomerSummary[]> {
   const trimmed = query.trim();
+
   if (trimmed === "") {
     return [];
   }
+
   const params = new URLSearchParams();
+
   if (trimmed.includes("@")) {
     params.set("email", trimmed);
   } else if (/^[0-9-]+$/.test(trimmed)) {
@@ -280,106 +463,260 @@ export async function searchCustomers(query: string, signal: AbortSignal): Promi
   } else {
     params.set("name", trimmed);
   }
-  const response = await apiFetch(`/api/v1/customers?${params.toString()}`, { signal });
+
+  const response = await apiFetch(
+    `/api/v1/customers?${params.toString()}`,
+    { signal },
+  );
+
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "고객을 조회하지 못했습니다."));
+    throw new Error(
+      await readErrorMessage(response, "고객을 조회하지 못했습니다."),
+    );
   }
+
   const body = await readJson(response, "고객 조회 응답이 올바르지 않습니다.");
+
   if (!Array.isArray(body)) {
     throw new Error("고객 조회 응답이 올바르지 않습니다.");
   }
+
   return body.map(parseCustomerSummary);
 }
 
-export async function createCustomer(input: CreateCustomerInput): Promise<CustomerSummary> {
+export async function createCustomer(
+  input: CreateCustomerInput,
+): Promise<CustomerSummary> {
   const response = await apiFetch("/api/v1/customers", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
+
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "고객을 등록하지 못했습니다."));
+    throw new Error(
+      await readErrorMessage(response, "고객을 등록하지 못했습니다."),
+    );
   }
+
   const body = await readJson(response, "고객 등록 응답이 올바르지 않습니다.");
+
   return parseCustomerSummary(body);
 }
 
-export async function searchProductsBySerial(serialNumber: string, signal: AbortSignal): Promise<ProductSummary[]> {
+export async function searchProductsBySerial(
+  serialNumber: string,
+  signal: AbortSignal,
+): Promise<ProductSummary[]> {
   const serial = serialNumber.trim();
+
   if (serial === "") {
     return [];
   }
+
   const params = new URLSearchParams({ serialNumber: serial });
-  const response = await apiFetch(`/api/v1/products?${params.toString()}`, { signal });
+
+  const response = await apiFetch(
+    `/api/v1/products?${params.toString()}`,
+    { signal },
+  );
+
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "제품을 조회하지 못했습니다."));
+    throw new Error(
+      await readErrorMessage(response, "제품을 조회하지 못했습니다."),
+    );
   }
+
   const body = await readJson(response, "제품 조회 응답이 올바르지 않습니다.");
+
   if (!Array.isArray(body)) {
     throw new Error("제품 조회 응답이 올바르지 않습니다.");
   }
+
   return body.map(parseProductSummary);
 }
 
-export async function searchProductBySerial(serialNumber: string, signal: AbortSignal): Promise<ProductSummary | null> {
+export async function searchProductBySerial(
+  serialNumber: string,
+  signal: AbortSignal,
+): Promise<ProductSummary | null> {
   const items = await searchProductsBySerial(serialNumber, signal);
   return items[0] ?? null;
 }
 
-export async function fetchProduct(id: number, signal: AbortSignal): Promise<ProductSummary> {
+export async function fetchProduct(
+  id: number,
+  signal: AbortSignal,
+): Promise<ProductSummary> {
   const response = await apiFetch(`/api/v1/products/${id}`, { signal });
+
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "제품 정보를 불러오지 못했습니다."));
+    throw new Error(
+      await readErrorMessage(response, "제품 정보를 불러오지 못했습니다."),
+    );
   }
-  const body = await readJson(response, "제품 정보 응답이 올바르지 않습니다.");
+
+  const body = await readJson(
+    response,
+    "제품 정보 응답이 올바르지 않습니다.",
+  );
+
   return parseProductSummary(body);
 }
 
-export async function fetchReceptionReceipt(id: number, signal: AbortSignal): Promise<ReceptionReceipt> {
-  const response = await apiFetch(`/api/v1/as-receptions/${id}/documents/reception-receipt`, { signal });
+export async function fetchReceptionReceipt(
+  id: number,
+  signal: AbortSignal,
+): Promise<ReceptionReceipt> {
+  const response = await apiFetch(
+    `/api/v1/as-receptions/${id}/documents/reception-receipt`,
+    { signal },
+  );
+
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "접수증을 불러오지 못했습니다."));
+    throw new Error(
+      await readErrorMessage(response, "접수증을 불러오지 못했습니다."),
+    );
   }
+
   const body = await readJson(response, "접수증 응답이 올바르지 않습니다.");
+
   return parseReceptionReceipt(body);
 }
 
-export async function fetchEstimate(id: number, signal: AbortSignal): Promise<EstimateDocument> {
-  const response = await apiFetch(`/api/v1/as-receptions/${id}/documents/estimate`, { signal });
+export async function fetchEstimate(
+  id: number,
+  signal: AbortSignal,
+): Promise<EstimateDocument> {
+  const response = await apiFetch(
+    `/api/v1/as-receptions/${id}/documents/estimate`,
+    { signal },
+  );
+
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "견적서를 불러오지 못했습니다."));
+    throw new Error(
+      await readErrorMessage(response, "견적서를 불러오지 못했습니다."),
+    );
   }
+
   const body = await readJson(response, "견적서 응답이 올바르지 않습니다.");
+
   return parseEstimate(body);
 }
 
-export async function fetchRepairStatement(id: number, signal: AbortSignal): Promise<RepairStatement> {
-  const response = await apiFetch(`/api/v1/as-receptions/${id}/documents/repair-statement`, { signal });
+export async function fetchRepairStatement(
+  id: number,
+  signal: AbortSignal,
+): Promise<RepairStatement> {
+  const response = await apiFetch(
+    `/api/v1/as-receptions/${id}/documents/repair-statement`,
+    { signal },
+  );
+
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "수리 내역서를 불러오지 못했습니다."));
+    throw new Error(
+      await readErrorMessage(response, "수리 내역서를 불러오지 못했습니다."),
+    );
   }
-  const body = await readJson(response, "수리 내역서 응답이 올바르지 않습니다.");
+
+  const body = await readJson(
+    response,
+    "수리 내역서 응답이 올바르지 않습니다.",
+  );
+
   return parseRepairStatement(body);
 }
 
-export async function searchTechnicians(keyword: string, signal: AbortSignal): Promise<TechnicianSummary[]> {
-  const params = new URLSearchParams({ role: "ROLE_TECHNICIAN", page: "0", size: "50" });
+export async function searchTechnicians(
+  keyword: string,
+  signal: AbortSignal,
+): Promise<TechnicianSummary[]> {
+  const params = new URLSearchParams({
+    role: "ROLE_TECHNICIAN",
+    page: "0",
+    size: "50",
+  });
+
   if (keyword.trim() !== "") {
     params.set("keyword", keyword.trim());
   }
-  const response = await apiFetch(`/api/v1/member?${params.toString()}`, { signal });
+
+  const response = await apiFetch(
+    `/api/v1/member?${params.toString()}`,
+    { signal },
+  );
+
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "기사 목록을 불러오지 못했습니다."));
+    throw new Error(
+      await readErrorMessage(response, "기사 목록을 불러오지 못했습니다."),
+    );
   }
+
   const body = await readJson(response, "기사 목록 응답이 올바르지 않습니다.");
+
   if (!isRecord(body) || !Array.isArray(body.content)) {
     throw new Error("기사 목록 응답이 올바르지 않습니다.");
   }
+
   return body.content.map(parseTechnician);
 }
 
+// --------------------
+// Response parsers
+// --------------------
+
+function parseRepairResponse(value: unknown): RepairResponseData {
+  if (
+    !isRecord(value)
+    || !isId(value.id)
+    || !isId(value.asReceptionId)
+    || !isId(value.technicianId)
+    || !isNullableString(value.diagnosis)
+    || !isNullableString(value.workNote)
+    || !isNullableString(value.repairDecision)
+    || typeof value.warrantyResult !== "string"
+    || !isNullableString(value.reason)
+    || !isWholeNumber(value.laborRate)
+    || !isWholeNumber(value.inspectionCost)
+    || !isWholeNumber(value.finalAmount)
+    || typeof value.status !== "string"
+    || !isRepairStatus(value.status)
+    || value.status === null
+    || !isNullableString(value.reasonForRejection)
+    || !isNullableString(value.confirmedAt)
+    || typeof value.createdAt !== "string"
+    || typeof value.updatedAt !== "string"
+    || !isNullableId(value.createdBy)
+    || !isNullableId(value.updatedBy)
+  ) {
+    throw new Error("수리 응답이 올바르지 않습니다.");
+  }
+
+  return {
+    id: value.id,
+    asReceptionId: value.asReceptionId,
+    technicianId: value.technicianId,
+    diagnosis: value.diagnosis,
+    workNote: value.workNote,
+    repairDecision: value.repairDecision,
+    warrantyResult: value.warrantyResult,
+    reason: value.reason,
+    laborRate: value.laborRate,
+    inspectionCost: value.inspectionCost,
+    finalAmount: value.finalAmount,
+    status: value.status,
+    reasonForRejection: value.reasonForRejection,
+    confirmedAt: value.confirmedAt,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+    createdBy: value.createdBy,
+    updatedBy: value.updatedBy,
+  };
+}
+
 function parseListItem(value: unknown): AsReceptionListItem {
-  if (!isRecord(value)
+  if (
+    !isRecord(value)
     || !isId(value.id)
     || typeof value.receptionNumber !== "string"
     || typeof value.createdAt !== "string"
@@ -388,9 +725,11 @@ function parseListItem(value: unknown): AsReceptionListItem {
     || !isNullableString(value.modelName)
     || !isReceptionStatusValue(value.receptionStatus)
     || !isRepairStatus(value.repairStatus)
-    || !isNullableString(value.technicianName)) {
+    || !isNullableString(value.technicianName)
+  ) {
     throw new Error("A/S 목록 응답이 올바르지 않습니다.");
   }
+
   return {
     id: value.id,
     receptionNumber: value.receptionNumber,
@@ -405,7 +744,8 @@ function parseListItem(value: unknown): AsReceptionListItem {
 }
 
 function parseDetail(value: unknown): AsReceptionDetail {
-  if (!isRecord(value)
+  if (
+    !isRecord(value)
     || !isId(value.id)
     || typeof value.receptionNumber !== "string"
     || typeof value.createdAt !== "string"
@@ -414,9 +754,11 @@ function parseDetail(value: unknown): AsReceptionDetail {
     || typeof value.symptomDetail !== "string"
     || !isNullableString(value.memo)
     || !isReturnMethod(value.returnMethod)
-    || !isNullableString(value.fileUrl)) {
+    || !isNullableString(value.fileUrl)
+  ) {
     throw new Error("접수 상세 응답이 올바르지 않습니다.");
   }
+
   return {
     id: value.id,
     receptionNumber: value.receptionNumber,
@@ -436,15 +778,18 @@ function parseDetail(value: unknown): AsReceptionDetail {
 }
 
 function parseHistory(value: unknown): AsStatusHistory {
-  if (!isRecord(value)
+  if (
+    !isRecord(value)
     || !isId(value.id)
     || !isNullableString(value.fromStatus)
     || typeof value.toStatus !== "string"
     || !isNullableString(value.reason)
     || !isNullableString(value.changedBy)
-    || typeof value.createdAt !== "string") {
+    || typeof value.createdAt !== "string"
+  ) {
     throw new Error("상태 변경 이력 응답이 올바르지 않습니다.");
   }
+
   return {
     id: value.id,
     fromStatus: value.fromStatus,
@@ -456,21 +801,23 @@ function parseHistory(value: unknown): AsStatusHistory {
 }
 
 function parseCustomer(value: unknown): ReceptionCustomer {
-  const summary = parseCustomerSummary(value);
-  return summary;
+  return parseCustomerSummary(value);
 }
 
 function parseCustomerSummary(value: unknown): CustomerSummary {
-  if (!isRecord(value)
+  if (
+    !isRecord(value)
     || !isId(value.id)
     || typeof value.name !== "string"
     || typeof value.phone !== "string"
     || typeof value.email !== "string"
     || !isNullableString(value.zipcode)
     || !isNullableString(value.basicAddress)
-    || !isNullableString(value.detailAddress)) {
+    || !isNullableString(value.detailAddress)
+  ) {
     throw new Error("고객 응답이 올바르지 않습니다.");
   }
+
   return {
     id: value.id,
     name: value.name,
@@ -483,13 +830,16 @@ function parseCustomerSummary(value: unknown): CustomerSummary {
 }
 
 function parseProduct(value: unknown): ReceptionProduct {
-  if (!isRecord(value)
+  if (
+    !isRecord(value)
     || !isId(value.id)
     || typeof value.serialNumber !== "string"
     || !isId(value.productModelId)
-    || !isNullableString(value.purchasedAt)) {
+    || !isNullableString(value.purchasedAt)
+  ) {
     throw new Error("접수 상세 응답이 올바르지 않습니다.");
   }
+
   return {
     id: value.id,
     serialNumber: value.serialNumber,
@@ -499,22 +849,34 @@ function parseProduct(value: unknown): ReceptionProduct {
 }
 
 function parseCustomerPortalLink(value: unknown): CustomerPortalLink {
-  if (!isRecord(value) || typeof value.token !== "string" || value.token.trim() === "" || typeof value.expiresAt !== "string") {
+  if (
+    !isRecord(value)
+    || typeof value.token !== "string"
+    || value.token.trim() === ""
+    || typeof value.expiresAt !== "string"
+  ) {
     throw new Error("고객 안내 링크 응답이 올바르지 않습니다.");
   }
-  return { token: value.token, expiresAt: value.expiresAt };
+
+  return {
+    token: value.token,
+    expiresAt: value.expiresAt,
+  };
 }
 
 function parseProductSummary(value: unknown): ProductSummary {
-  if (!isRecord(value)
+  if (
+    !isRecord(value)
     || !isId(value.id)
     || typeof value.serialNumber !== "string"
     || typeof value.modelName !== "string"
     || typeof value.name !== "string"
     || !isCategory(value.category)
-    || !isNullableString(value.purchasedAt)) {
+    || !isNullableString(value.purchasedAt)
+  ) {
     throw new Error("제품 응답이 올바르지 않습니다.");
   }
+
   return {
     id: value.id,
     serialNumber: value.serialNumber,
@@ -529,19 +891,27 @@ function parseMember(value: unknown): ReceptionMember | null {
   if (value === null || value === undefined) {
     return null;
   }
+
   if (!isRecord(value) || !isId(value.id) || typeof value.name !== "string") {
     throw new Error("접수 상세 응답이 올바르지 않습니다.");
   }
-  return { id: value.id, name: value.name };
+
+  return {
+    id: value.id,
+    name: value.name,
+  };
 }
 
 function parseTechnicianHistory(value: unknown): TechnicianAssignmentHistory {
-  if (!isRecord(value)
+  if (
+    !isRecord(value)
     || !isId(value.receptionId)
     || !isNullableString(value.reason)
-    || typeof value.createdAt !== "string") {
+    || typeof value.createdAt !== "string"
+  ) {
     throw new Error("기사 배정 이력 응답이 올바르지 않습니다.");
   }
+
   return {
     receptionId: value.receptionId,
     previousTechnician: parseAssignmentMember(value.previousTechnician),
@@ -556,14 +926,20 @@ function parseAssignmentMember(value: unknown): AssignmentMember | null {
   if (value === null || value === undefined) {
     return null;
   }
+
   if (!isRecord(value) || !isId(value.id) || typeof value.name !== "string") {
     throw new Error("기사 배정 이력 응답이 올바르지 않습니다.");
   }
-  return { id: value.id, name: value.name };
+
+  return {
+    id: value.id,
+    name: value.name,
+  };
 }
 
 function parseReceptionReceipt(value: unknown): ReceptionReceipt {
-  if (!isRecord(value)
+  if (
+    !isRecord(value)
     || typeof value.receptionNumber !== "string"
     || typeof value.createdAt !== "string"
     || typeof value.customerName !== "string"
@@ -577,9 +953,11 @@ function parseReceptionReceipt(value: unknown): ReceptionReceipt {
     || typeof value.symptom !== "string"
     || !isReturnMethod(value.returnMethod)
     || typeof value.receptionistName !== "string"
-    || !isNullableString(value.technicianName)) {
+    || !isNullableString(value.technicianName)
+  ) {
     throw new Error("접수증 응답이 올바르지 않습니다.");
   }
+
   return {
     receptionNumber: value.receptionNumber,
     createdAt: value.createdAt,
@@ -599,16 +977,19 @@ function parseReceptionReceipt(value: unknown): ReceptionReceipt {
 }
 
 function parseEstimate(value: unknown): EstimateDocument {
-  if (!isRecord(value)
+  if (
+    !isRecord(value)
     || !isId(value.receptionId)
     || typeof value.receptionNumber !== "string"
     || !isNullableString(value.confirmedAt)
     || !isWholeNumber(value.laborRate)
     || !isWholeNumber(value.inspectionCost)
     || !isWholeNumber(value.totalAmount)
-    || !Array.isArray(value.items)) {
+    || !Array.isArray(value.items)
+  ) {
     throw new Error("견적서 응답이 올바르지 않습니다.");
   }
+
   return {
     receptionId: value.receptionId,
     receptionNumber: value.receptionNumber,
@@ -621,13 +1002,16 @@ function parseEstimate(value: unknown): EstimateDocument {
 }
 
 function parseEstimateItem(value: unknown): EstimateItem {
-  if (!isRecord(value)
+  if (
+    !isRecord(value)
     || typeof value.category !== "string"
     || typeof value.name !== "string"
     || !isNullableWholeNumber(value.quantity)
-    || !isNullableWholeNumber(value.amount)) {
+    || !isNullableWholeNumber(value.amount)
+  ) {
     throw new Error("견적서 응답이 올바르지 않습니다.");
   }
+
   return {
     category: value.category,
     name: value.name,
@@ -637,7 +1021,8 @@ function parseEstimateItem(value: unknown): EstimateItem {
 }
 
 function parseRepairStatement(value: unknown): RepairStatement {
-  if (!isRecord(value)
+  if (
+    !isRecord(value)
     || typeof value.receptionNumber !== "string"
     || typeof value.customerName !== "string"
     || typeof value.issuedAt !== "string"
@@ -645,9 +1030,11 @@ function parseRepairStatement(value: unknown): RepairStatement {
     || !isNullableString(value.workNote)
     || !Array.isArray(value.repairWorks)
     || !isWholeNumber(value.laborCost)
-    || !isWholeNumber(value.finalAmount)) {
+    || !isWholeNumber(value.finalAmount)
+  ) {
     throw new Error("수리 내역서 응답이 올바르지 않습니다.");
   }
+
   return {
     receptionNumber: value.receptionNumber,
     customerName: value.customerName,
@@ -661,13 +1048,16 @@ function parseRepairStatement(value: unknown): RepairStatement {
 }
 
 function parseRepairWork(value: unknown): RepairWorkLine {
-  if (!isRecord(value)
+  if (
+    !isRecord(value)
     || !isId(value.repairWorkId)
     || !isNullableString(value.repairPresetName)
     || typeof value.workName !== "string"
-    || !Array.isArray(value.usedParts)) {
+    || !Array.isArray(value.usedParts)
+  ) {
     throw new Error("수리 내역서 응답이 올바르지 않습니다.");
   }
+
   return {
     repairWorkId: value.repairWorkId,
     repairPresetName: value.repairPresetName,
@@ -677,13 +1067,16 @@ function parseRepairWork(value: unknown): RepairWorkLine {
 }
 
 function parseRepairPart(value: unknown): RepairPartUsage {
-  if (!isRecord(value)
+  if (
+    !isRecord(value)
     || !isId(value.id)
     || typeof value.partName !== "string"
     || !isWholeNumber(value.quantity)
-    || !isWholeNumber(value.totalPrice)) {
+    || !isWholeNumber(value.totalPrice)
+  ) {
     throw new Error("수리 내역서 응답이 올바르지 않습니다.");
   }
+
   return {
     id: value.id,
     partName: value.partName,
@@ -693,10 +1086,30 @@ function parseRepairPart(value: unknown): RepairPartUsage {
 }
 
 function parseTechnician(value: unknown): TechnicianSummary {
-  if (!isRecord(value) || !isId(value.id) || typeof value.name !== "string" || typeof value.email !== "string" || typeof value.status !== "string") {
+  if (
+    !isRecord(value)
+    || !isId(value.id)
+    || typeof value.name !== "string"
+    || typeof value.email !== "string"
+    || typeof value.status !== "string"
+  ) {
     throw new Error("기사 목록 응답이 올바르지 않습니다.");
   }
-  return { id: value.id, name: value.name, email: value.email, status: value.status };
+
+  return {
+    id: value.id,
+    name: value.name,
+    email: value.email,
+    status: value.status,
+  };
+}
+
+// --------------------
+// Type guards
+// --------------------
+
+function isWarrantyResult(value: string): value is "FREE" | "PAID" | "UNDECIDED" {
+  return ["FREE", "PAID", "UNDECIDED"].includes(value);
 }
 
 function isPage(value: unknown): value is {
@@ -716,11 +1129,16 @@ function isPage(value: unknown): value is {
 }
 
 function isReceptionStatusValue(value: unknown): value is AsReceptionStatus {
-  return typeof value === "string" && AS_RECEPTION_STATUSES.some((status) => status === value);
+  return typeof value === "string"
+    && AS_RECEPTION_STATUSES.some((status) => status === value);
 }
 
 function isRepairStatus(value: unknown): value is RepairStatus | null {
-  return value === null || (typeof value === "string" && REPAIR_STATUSES.some((status) => status === value));
+  return value === null
+    || (
+      typeof value === "string"
+      && REPAIR_STATUSES.some((status) => status === value)
+    );
 }
 
 function isReturnMethod(value: unknown): value is ReturnMethod {
@@ -735,6 +1153,10 @@ function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
 }
 
+function isNullableId(value: unknown): value is number | null {
+  return value === null || isId(value);
+}
+
 function isWholeNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value);
 }
@@ -743,13 +1165,17 @@ function isNullableWholeNumber(value: unknown): value is number | null {
   return value === null || isWholeNumber(value);
 }
 
-async function readJson(response: Response, fallback: string): Promise<unknown> {
+async function readJson(
+  response: Response,
+  fallback: string,
+): Promise<unknown> {
   try {
     return await response.json();
   } catch (error: unknown) {
     if (isAbortError(error)) {
       throw error;
     }
+
     throw new Error(fallback);
   }
 }
