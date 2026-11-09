@@ -14,7 +14,6 @@ import { TechnicianStatsPage } from "@/pages/admin/statistics/TechnicianStatsPag
 import { AsDetailPage } from "@/pages/as/AsDetailPage";
 import { AsListPage } from "@/pages/as/AsListPage";
 import { AsNewPage } from "@/pages/as/AsNewPage";
-import { InspectionPage } from "@/pages/as/InspectionPage";
 import { RepairPage } from "@/pages/as/RepairPage";
 import { CustomerDetailPage } from "@/pages/customer/CustomerDetailPage";
 import { CustomerListPage } from "@/pages/customer/CustomerListPage";
@@ -32,6 +31,7 @@ import { PortalPaymentFailPage } from "@/pages/portal/PortalPaymentFailPage";
 import { PortalPaymentSuccessPage } from "@/pages/portal/PortalPaymentSuccessPage";
 import { PresetListPage } from "@/pages/preset/PresetListPage";
 import { ShipmentListPage } from "@/pages/shipment/ShipmentListPage";
+import { InspectionPage } from "./pages/as/InspectionPage";
 
 export const router = createBrowserRouter([
   { path: "/", element: <HomeRedirect /> },
