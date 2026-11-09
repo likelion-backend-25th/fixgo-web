@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { Notice } from "@/components/ui/Panel";
+import { Pagination } from "@/components/ui/Pagination";
 import { isAbortError } from "@/lib/apiClient";
 import { fetchModelSymptomStatistics } from "@/lib/statisticsApi";
 import { formatRate } from "@/lib/statisticsPeriod";
 import { PeriodFilter, StatisticsBackLink } from "@/pages/admin/statistics/PeriodFilter";
+import { useStatisticsPage } from "@/pages/admin/statistics/useStatisticsPage";
 import { useStatisticsPeriod } from "@/pages/admin/statistics/useStatisticsPeriod";
 import type { ModelSymptomStatistics } from "@/types/statistics";
 
@@ -49,6 +51,7 @@ export function SymptomStatsPage() {
       });
     return () => controller.abort();
   }, [endDate, idValid, invalid, numericId, startDate]);
+  const list = useStatisticsPage(rows, `${modelId}|${startDate}|${endDate}`);
 
   return (
     <div>
@@ -65,7 +68,7 @@ export function SymptomStatsPage() {
         <p className="text-sm text-neutral-500">조회 결과가 없습니다.</p>
       )}
       <ul className="space-y-3">
-        {rows.map((row) => (
+        {list.visible.map((row) => (
           <li key={row.symptomName}>
             <div className="mb-1 flex justify-between text-sm">
               <span>{row.symptomName}</span>
@@ -77,6 +80,7 @@ export function SymptomStatsPage() {
           </li>
         ))}
       </ul>
+      <Pagination page={list.page} pageCount={list.pageCount} onPageChange={list.setPage} />
     </div>
   );
 }
