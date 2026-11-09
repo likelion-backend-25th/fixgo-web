@@ -89,3 +89,46 @@ function toIsoDate(date: Date): string {
   const pad = (part: number) => String(part).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
+
+export interface StatisticsMonthSlice {
+  label: string;
+  startDate: string;
+  endDate: string;
+}
+
+// 통계 API는 기간 합계만 준다. 월별 그래프는 선택 기간과 겹치는 달을 잘라 각각 조회한다.
+export function listStatisticsMonths(startDate: string, endDate: string): StatisticsMonthSlice[] {
+  if (!isIsoDate(startDate) || !isIsoDate(endDate) || startDate > endDate) {
+    return [];
+  }
+  const start = parseIsoDate(startDate);
+  const end = parseIsoDate(endDate);
+  const slices: { year: number; month: number; startDate: string; endDate: string }[] = [];
+  let cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+  const lastMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+  while (cursor.getTime() <= lastMonth.getTime()) {
+    const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+    const sliceStart = monthStart < start ? start : monthStart;
+    const sliceEnd = monthEnd > end ? end : monthEnd;
+    slices.push({
+      year: cursor.getFullYear(),
+      month: cursor.getMonth() + 1,
+      startDate: toIsoDate(sliceStart),
+      endDate: toIsoDate(sliceEnd),
+    });
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
+  const recent = slices.slice(-24);
+  const spansYears = recent.some((slice) => slice.year !== recent[0]?.year);
+  return recent.map((slice) => ({
+    label: spansYears ? `${String(slice.year).slice(2)}.${String(slice.month).padStart(2, "0")}` : `${slice.month}월`,
+    startDate: slice.startDate,
+    endDate: slice.endDate,
+  }));
+}
+
+function parseIsoDate(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
