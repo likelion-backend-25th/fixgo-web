@@ -16,21 +16,16 @@ export async function fetchReceptionStatistics(
   signal: AbortSignal,
 ): Promise<ReceptionStatistics> {
   const body = await getStatistics("/receptions", startDate, endDate, signal, "접수 통계를 불러오지 못했습니다.");
-  if (
-    !isPeriod(body, startDate, endDate)
-    || !isCount(body.receivedCount)
-    || !isCount(body.completedCount)
-    || !isRate(body.completionRate)
-  ) {
+  if (!isRecord(body) || !matchesPeriod(body, startDate, endDate)) {
     throw new Error("접수 통계 응답이 올바르지 않습니다.");
   }
-  return {
-    startDate: body.startDate,
-    endDate: body.endDate,
-    receivedCount: body.receivedCount,
-    completedCount: body.completedCount,
-    completionRate: body.completionRate,
-  };
+  const receivedCount = body.receivedCount;
+  const completedCount = body.completedCount;
+  const completionRate = body.completionRate;
+  if (!isCount(receivedCount) || !isCount(completedCount) || !isRate(completionRate)) {
+    throw new Error("접수 통계 응답이 올바르지 않습니다.");
+  }
+  return { startDate, endDate, receivedCount, completedCount, completionRate };
 }
 
 export async function fetchTechnicianStatistics(
@@ -82,23 +77,17 @@ export async function fetchPaymentStatistics(
   signal: AbortSignal,
 ): Promise<PaymentStatistics> {
   const body = await getStatistics("/payments", startDate, endDate, signal, "결제 통계를 불러오지 못했습니다.");
-  if (
-    !isPeriod(body, startDate, endDate)
-    || !isCount(body.totalPaidAmount)
-    || !isCount(body.totalRefundAmount)
-    || !isAmount(body.netCollectedAmount)
-    || !isCount(body.unpaidCount)
-  ) {
+  if (!isRecord(body) || !matchesPeriod(body, startDate, endDate)) {
     throw new Error("결제 통계 응답이 올바르지 않습니다.");
   }
-  return {
-    startDate: body.startDate,
-    endDate: body.endDate,
-    totalPaidAmount: body.totalPaidAmount,
-    totalRefundAmount: body.totalRefundAmount,
-    netCollectedAmount: body.netCollectedAmount,
-    unpaidCount: body.unpaidCount,
-  };
+  const totalPaidAmount = body.totalPaidAmount;
+  const totalRefundAmount = body.totalRefundAmount;
+  const netCollectedAmount = body.netCollectedAmount;
+  const unpaidCount = body.unpaidCount;
+  if (!isCount(totalPaidAmount) || !isCount(totalRefundAmount) || !isAmount(netCollectedAmount) || !isCount(unpaidCount)) {
+    throw new Error("결제 통계 응답이 올바르지 않습니다.");
+  }
+  return { startDate, endDate, totalPaidAmount, totalRefundAmount, netCollectedAmount, unpaidCount };
 }
 
 export async function fetchMonthlyStatistics(
@@ -127,21 +116,16 @@ export async function fetchShipmentStatistics(
   signal: AbortSignal,
 ): Promise<ShipmentStatistics> {
   const body = await getStatistics("/shipments", startDate, endDate, signal, "배송 통계를 불러오지 못했습니다.");
-  if (
-    !isPeriod(body, startDate, endDate)
-    || !isCount(body.readyCount)
-    || !isCount(body.shippingCount)
-    || !isCount(body.completedCount)
-  ) {
+  if (!isRecord(body) || !matchesPeriod(body, startDate, endDate)) {
     throw new Error("배송 통계 응답이 올바르지 않습니다.");
   }
-  return {
-    startDate: body.startDate,
-    endDate: body.endDate,
-    readyCount: body.readyCount,
-    shippingCount: body.shippingCount,
-    completedCount: body.completedCount,
-  };
+  const readyCount = body.readyCount;
+  const shippingCount = body.shippingCount;
+  const completedCount = body.completedCount;
+  if (!isCount(readyCount) || !isCount(shippingCount) || !isCount(completedCount)) {
+    throw new Error("배송 통계 응답이 올바르지 않습니다.");
+  }
+  return { startDate, endDate, readyCount, shippingCount, completedCount };
 }
 
 async function getStatistics(
@@ -231,12 +215,8 @@ function parseSymptom(value: unknown): ModelSymptomStatistics {
   };
 }
 
-function isPeriod(
-  value: unknown,
-  startDate: string,
-  endDate: string,
-): value is { startDate: string; endDate: string } {
-  return isRecord(value) && value.startDate === startDate && value.endDate === endDate;
+function matchesPeriod(value: Record<string, unknown>, startDate: string, endDate: string): boolean {
+  return value.startDate === startDate && value.endDate === endDate;
 }
 
 function isCount(value: unknown): value is number {
