@@ -4,6 +4,7 @@ import { Notice, Panel } from "@/components/ui/Panel";
 import { won } from "@/lib/format";
 import {
   fetchPaymentDetail,
+  registerCashPayment,
   paymentAttemptStatusLabel,
   paymentBillStatusLabel,
   paymentMethodLabel,
@@ -20,6 +21,10 @@ type LoadState =
 export function PaymentDetailPage() {
   const { billId = "" } = useParams();
   const [load, setLoad] = useState<LoadState>({ kind: "loading" });
+
+  const [reload, setReload] = useState(0);
+  const [registering, setRegistering] = useState(false);
+  const [cashError, setCashError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!/^\d+$/.test(billId)) {
@@ -48,7 +53,7 @@ export function PaymentDetailPage() {
       });
 
     return () => controller.abort();
-  }, [billId]);
+  }, [billId, reload]);
 
   if (load.kind === "loading") {
     return <p className="text-sm text-neutral-600">결제 정보를 불러오는 중입니다.</p>;
@@ -65,6 +70,26 @@ export function PaymentDetailPage() {
   const account = detail.virtualAccount;
   const history = detail.paymentHistory;
   const refund = detail.refundHistory;
+  const canRegisterCash = detail.status === "UNPAID"
+    && (detail.paymentStatus === null || detail.paymentStatus === "READY" || detail.paymentStatus === "FAILED");
+
+  async function handleCashPayment() {
+    if (registering || !window.confirm(`${won(detail.amount)}을 현금으로 받았나요? 확인하면 결제 완료로 등록됩니다.`)) {
+      return;
+    }
+
+    setRegistering(true);
+    setCashError(null);
+    try {
+      await registerCashPayment(detail.billId);
+      setLoad({ kind: "loading" });
+      setReload((previous) => previous + 1);
+    } catch (error: unknown) {
+      setCashError(error instanceof Error ? error.message : "현금 결제를 등록하지 못했습니다.");
+    } finally {
+      setRegistering(false);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -87,6 +112,19 @@ export function PaymentDetailPage() {
           <p>결제 수단 {paymentMethodLabel(detail.paymentMethod)}</p>
         </div>
       </Panel>
+      {canRegisterCash && (
+        <Panel title="현장 결제">
+          {cashError !== null && <Notice tone="error">{cashError}</Notice>}
+          <button
+            type="button"
+            className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            disabled={registering}
+            onClick={handleCashPayment}
+          >
+            {registering ? "등록 중..." : "현금 결제 등록"}
+          </button>
+        </Panel>
+      )}
       {(account !== null || history !== null || refund !== null) && (
         <div className="grid gap-4 lg:grid-cols-2">
           {account !== null && (

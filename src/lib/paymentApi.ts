@@ -141,7 +141,7 @@ export async function fetchPaymentList(query: PaymentListQuery, signal: AbortSig
 
   let response: Response;
   try {
-    response = await fetch(`/api/v1/payments?${params.toString()}`, {
+    response = await apiFetch(`/api/v1/payments?${params.toString()}`, {
       headers: { Accept: "application/json" },
       signal,
     });
@@ -181,7 +181,7 @@ export async function fetchPaymentList(query: PaymentListQuery, signal: AbortSig
 export async function fetchPaymentDetail(billId: number, signal: AbortSignal): Promise<PaymentDetail> {
   let response: Response;
   try {
-    response = await fetch(`/api/v1/payments/${billId}`, {
+    response = await apiFetch(`/api/v1/payments/${billId}`, {
       headers: { Accept: "application/json" },
       signal,
     });
@@ -209,6 +209,13 @@ export async function fetchPaymentDetail(billId: number, signal: AbortSignal): P
     throw new Error("결제 상세 응답이 올바르지 않습니다.");
   }
   return body;
+}
+
+export async function registerCashPayment(billId: number): Promise<void> {
+  const response = await apiFetch(`/api/v1/payments/${billId}/cash`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "현금 결제를 등록하지 못했습니다."));
+  }
 }
 
 function parsePaymentListItem(value: unknown): PaymentListItem {
