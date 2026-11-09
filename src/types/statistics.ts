@@ -42,6 +42,13 @@ export interface PaymentStatistics extends StatisticsPeriod {
   unpaidCount: number;
 }
 
+export interface MonthlyStatistics {
+  label: string;
+  receivedCount: number;
+  completedCount: number;
+  revenue: number;
+}
+
 export interface ShipmentStatistics extends StatisticsPeriod {
   readyCount: number;
   shippingCount: number;

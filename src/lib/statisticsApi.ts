@@ -1,7 +1,9 @@
 import { apiFetch, isAbortError, isId, isRecord, readErrorMessage } from "@/lib/apiClient";
+import { listStatisticsMonths } from "@/lib/statisticsPeriod";
 import type {
   ModelStatistics,
   ModelSymptomStatistics,
+  MonthlyStatistics,
   PaymentStatistics,
   ReceptionStatistics,
   ShipmentStatistics,
@@ -97,6 +99,26 @@ export async function fetchPaymentStatistics(
     netCollectedAmount: body.netCollectedAmount,
     unpaidCount: body.unpaidCount,
   };
+}
+
+export async function fetchMonthlyStatistics(
+  startDate: string,
+  endDate: string,
+  signal: AbortSignal,
+): Promise<MonthlyStatistics[]> {
+  const months = listStatisticsMonths(startDate, endDate);
+  return Promise.all(months.map(async (month) => {
+    const [reception, payment] = await Promise.all([
+      fetchReceptionStatistics(month.startDate, month.endDate, signal),
+      fetchPaymentStatistics(month.startDate, month.endDate, signal),
+    ]);
+    return {
+      label: month.label,
+      receivedCount: reception.receivedCount,
+      completedCount: reception.completedCount,
+      revenue: payment.netCollectedAmount,
+    };
+  }));
 }
 
 export async function fetchShipmentStatistics(

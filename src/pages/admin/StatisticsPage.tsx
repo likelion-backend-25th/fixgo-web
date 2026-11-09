@@ -3,6 +3,7 @@ import { Notice } from "@/components/ui/Panel";
 import { fetchLongPendingReceptions } from "@/lib/longPendingApi";
 import {
   fetchModelStatistics,
+  fetchMonthlyStatistics,
   fetchPaymentStatistics,
   fetchReceptionStatistics,
   fetchShipmentStatistics,
@@ -10,6 +11,7 @@ import {
 } from "@/lib/statisticsApi";
 import { formatDurationMinutes, formatRate, statisticsSearch } from "@/lib/statisticsPeriod";
 import { won } from "@/lib/format";
+import { MonthlyTrendChart } from "@/pages/admin/statistics/MonthlyTrendChart";
 import { PeriodFilter } from "@/pages/admin/statistics/PeriodFilter";
 import { useStatisticsPeriod } from "@/pages/admin/statistics/useStatisticsPeriod";
 import { useStatisticsResource } from "@/pages/admin/statistics/useStatisticsResource";
@@ -23,8 +25,10 @@ export function StatisticsPage() {
   const models = useStatisticsResource(fetchModelStatistics, startDate, endDate, invalid);
   const shipments = useStatisticsResource(fetchShipmentStatistics, startDate, endDate, invalid);
   const pending = useStatisticsResource(loadLongPending, startDate, endDate, invalid);
+  const monthly = useStatisticsResource(fetchMonthlyStatistics, startDate, endDate, invalid);
   const query = statisticsSearch(startDate, endDate);
-  const errors = [reception.error, payment.error, technicians.error, models.error, shipments.error, pending.error]
+  const monthLabels = monthly.data?.map((point) => point.label) ?? [];
+  const errors = [reception.error, payment.error, technicians.error, models.error, shipments.error, pending.error, monthly.error]
     .filter((message, index, all) => message !== "" && all.indexOf(message) === index);
 
   return (
@@ -61,6 +65,27 @@ export function StatisticsPage() {
         </Link>
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
+        <MonthlyTrendChart
+          title="월별 수리 건수 추이"
+          labels={monthLabels}
+          loading={monthly.loading}
+          formatValue={formatCount}
+          series={[
+            { name: "접수", tone: "blue", values: monthly.data?.map((point) => point.receivedCount) ?? [] },
+            { name: "완료", tone: "green", values: monthly.data?.map((point) => point.completedCount) ?? [] },
+          ]}
+        />
+        <MonthlyTrendChart
+          title="월별 수익"
+          labels={monthLabels}
+          loading={monthly.loading}
+          formatValue={formatCount}
+          series={[
+            { name: "수익", tone: "blue", values: monthly.data?.map((point) => point.revenue) ?? [] },
+          ]}
+        />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
         <Link to={`/admin/statistics/shipments?${query}`} className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm hover:border-blue-400">
           <p className="mb-3 text-sm font-medium">배송 현황</p>
           <div className="grid grid-cols-3 gap-3 text-sm">
@@ -88,6 +113,11 @@ export function StatisticsPage() {
           <ModelPreview loading={models.loading} rows={models.data ?? []} />
         </Link>
       </div>
+      <Kpi
+        label="총 입금액"
+        value={moneyText(payment.loading, payment.data?.totalPaidAmount)}
+        hint="기간 내 승인 완료 금액"
+      />
     </div>
   );
 }
@@ -114,6 +144,10 @@ function weightedAverageMinutes(rows: TechnicianStatistics[]): number | null {
     { minutes: 0, count: 0 },
   );
   return totals.count === 0 ? null : totals.minutes / totals.count;
+}
+
+function formatCount(value: number): string {
+  return Math.round(value).toLocaleString("ko-KR");
 }
 
 function countText(loading: boolean, value: number | undefined, unit: string): string {
