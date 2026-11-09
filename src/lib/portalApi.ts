@@ -1,4 +1,6 @@
-export type PaymentSummaryStatus = "NOT_ISSUED" | "UNPAID" | "WAITING_FOR_DEPOSIT" | "PAID";
+import { AS_RECEPTION_STATUSES, type AsReceptionStatus } from "@/types/asReception";
+
+export type PaymentSummaryStatus = "NOT_ISSUED" | "UNPAID" | "WAITING_FOR_DEPOSIT" | "PAID" | "REFUNDED";
 
 export interface VirtualAccountInfo {
   bankName: string | null;
@@ -15,8 +17,27 @@ export interface PaymentSummary {
   virtualAccount?: VirtualAccountInfo | null;
 }
 
+export interface PortalStatusHistory {
+  status: AsReceptionStatus;
+  changedAt: string | null;
+}
+
+export interface PortalReception {
+  receptionNumber: string | null;
+  receivedAt: string | null;
+  customerName: string | null;
+  customerPhone: string | null;
+  modelName: string | null;
+  serialNumber: string | null;
+  symptom: string | null;
+  symptomDetail: string | null;
+  status: AsReceptionStatus;
+  histories: PortalStatusHistory[];
+}
+
 export interface PortalResponse {
-  payment: PaymentSummary;
+  reception: PortalReception;
+  payment: PaymentSummary | null;
 }
 
 export interface StartPaymentResponse {
@@ -38,7 +59,7 @@ export class InvalidPortalLinkError extends Error {
   }
 }
 
-const statuses: readonly PaymentSummaryStatus[] = ["NOT_ISSUED", "UNPAID", "WAITING_FOR_DEPOSIT", "PAID"];
+const statuses: readonly PaymentSummaryStatus[] = ["NOT_ISSUED", "UNPAID", "WAITING_FOR_DEPOSIT", "PAID", "REFUNDED"];
 
 export async function fetchPortal(token: string, signal: AbortSignal): Promise<PortalResponse> {
   if (token === "") {
@@ -72,10 +93,11 @@ export async function fetchPortal(token: string, signal: AbortSignal): Promise<P
     throw new Error("포털 정보를 불러오지 못했습니다.");
   }
 
-  if (!isPortalResponse(body)) {
+  const portal = parsePortal(body);
+  if (portal === null) {
     throw new Error("포털 정보를 불러오지 못했습니다.");
   }
-  return body;
+  return portal;
 }
 
 export async function startPortalPayment(token: string): Promise<StartPaymentResponse> {
@@ -180,15 +202,95 @@ async function postConfirm(request: ConfirmPaymentRequest): Promise<void> {
   // 성공 응답은 204 No Content라 본문이 없다.
 }
 
-function isPortalResponse(value: unknown): value is PortalResponse {
+function parsePortal(value: unknown): PortalResponse | null {
   if (!isRecord(value)) {
-    return false;
+    return null;
   }
-  const payment = value.payment;
-  if (!isRecord(payment)) {
-    return false;
+  const reception = parseReception(value.reception);
+  if (reception === null) {
+    return null;
   }
-  return statuses.some((status) => status === payment.status);
+  // 결제 단계 전이면 null이거나 NOT_ISSUED다. 형식이 달라도 접수 내역은 남긴다.
+  return { reception, payment: parsePayment(value.payment) };
+}
+
+function parseReception(value: unknown): PortalReception | null {
+  if (!isRecord(value) || !isReceptionStatus(value.status)) {
+    return null;
+  }
+  return {
+    receptionNumber: readNullableString(value.receptionNumber),
+    receivedAt: readNullableString(value.receivedAt),
+    customerName: readNullableString(value.customerName),
+    customerPhone: readNullableString(value.customerPhone),
+    modelName: readNullableString(value.modelName),
+    serialNumber: readNullableString(value.serialNumber),
+    symptom: readNullableString(value.symptom),
+    symptomDetail: readNullableString(value.symptomDetail),
+    status: value.status,
+    histories: parseHistories(value.histories),
+  };
+}
+
+function parseHistories(value: unknown): PortalStatusHistory[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const histories: PortalStatusHistory[] = [];
+  for (const item of value) {
+    if (!isRecord(item) || !isReceptionStatus(item.status)) {
+      continue;
+    }
+    histories.push({
+      status: item.status,
+      changedAt: readNullableString(item.changedAt),
+    });
+  }
+  return histories;
+}
+
+function parsePayment(value: unknown): PaymentSummary | null {
+  if (!isRecord(value) || !isPaymentStatus(value.status)) {
+    return null;
+  }
+  return {
+    status: value.status,
+    orderName: readNullableString(value.orderName),
+    amount: typeof value.amount === "number" && Number.isFinite(value.amount) ? value.amount : null,
+    paymentMethod: readPaymentMethod(value.paymentMethod),
+    paidAt: readNullableString(value.paidAt),
+    virtualAccount: parseVirtualAccount(value.virtualAccount),
+  };
+}
+
+function parseVirtualAccount(value: unknown): VirtualAccountInfo | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  return {
+    bankName: readNullableString(value.bankName),
+    accountNumber: readNullableString(value.accountNumber),
+    dueAt: readNullableString(value.dueAt),
+  };
+}
+
+function readNullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function readPaymentMethod(value: unknown): PaymentSummary["paymentMethod"] {
+  if (value === "CARD" || value === "VIRTUAL_ACCOUNT" || value === "CASH") {
+    return value;
+  }
+  return null;
+}
+
+function isReceptionStatus(value: unknown): value is AsReceptionStatus {
+  return typeof value === "string" && (AS_RECEPTION_STATUSES as readonly string[]).includes(value);
+}
+
+function isPaymentStatus(value: unknown): value is PaymentSummaryStatus {
+  return typeof value === "string" && (statuses as readonly string[]).includes(value);
 }
 
 function isStartPaymentResponse(value: unknown): value is StartPaymentResponse {

@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { Button } from "@/components/ui/Button";
+import { receptionStatusLabel } from "@/lib/asReceptionApi";
 import { won } from "@/lib/format";
+import type { AsReceptionStatus } from "@/types/asReception";
 import {
   cancelPortalPayment,
   fetchPortal,
   InvalidPortalLinkError,
   startPortalPayment,
   type PaymentSummary,
-  type PaymentSummaryStatus,
+  type PortalReception,
   type PortalResponse,
+  type PortalStatusHistory,
 } from "@/lib/portalApi";
 import {
   isPaymentCanceled,
@@ -27,12 +30,24 @@ type LoadState =
   | { kind: "error"; message: string }
   | { kind: "ready"; portal: PortalResponse };
 
-const statusLabel: Record<PaymentSummaryStatus, string> = {
-  NOT_ISSUED: "청구 전",
-  UNPAID: "결제 대기",
-  WAITING_FOR_DEPOSIT: "입금 대기",
-  PAID: "결제 완료",
-};
+const STEPS = ["접수", "점검", "견적 승인", "수리", "결제"] as const;
+
+// 고객에게 보이는 5단계. 보증 판정은 점검, 배송·수령·완료는 결제 단계에 둔다.
+function stageIndex(status: AsReceptionStatus): number {
+  if (status === "RECEIVED") {
+    return 0;
+  }
+  if (status === "INSPECTION" || status === "WARRANTY_REVIEW") {
+    return 1;
+  }
+  if (status === "AWAITING_QUOTE_APPROVAL") {
+    return 2;
+  }
+  if (status === "AWAITING_REPAIR" || status === "REPAIR_IN_PROGRESS") {
+    return 3;
+  }
+  return 4;
+}
 
 export function CustomerPortalPage() {
   const { token = "" } = useParams();
@@ -102,29 +117,258 @@ export function CustomerPortalPage() {
     );
   }
 
-  const payment = load.portal.payment;
-
-  if (payment.status === "NOT_ISSUED") {
-    return (
-      <PortalFrame>
-        <p className="text-center text-sm text-neutral-600">아직 청구 내역이 없습니다</p>
-      </PortalFrame>
-    );
-  }
-
   return (
     <PortalFrame>
-      <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm font-semibold text-neutral-900">{payment.status === "WAITING_FOR_DEPOSIT" ? "입금 안내" : "결제"}</p>
-        <span className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">{statusLabel[payment.status]}</span>
-      </div>
-      <PaymentBody
+      <PortalBody
         token={token}
-        payment={payment}
+        portal={load.portal}
         onRefresh={() => setReloadKey((current) => current + 1)}
       />
     </PortalFrame>
   );
+}
+
+function PortalBody({
+  token,
+  portal,
+  onRefresh,
+}: {
+  token: string;
+  portal: PortalResponse;
+  onRefresh: () => void;
+}) {
+  const { reception, payment } = portal;
+  const current = stageIndex(reception.status);
+  const [selected, setSelected] = useState(current);
+  const [seenStatus, setSeenStatus] = useState(reception.status);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  if (seenStatus !== reception.status) {
+    setSeenStatus(reception.status);
+    setSelected(stageIndex(reception.status));
+  }
+
+  const timeline = [...reception.histories].reverse();
+  const stageHistories = reception.histories.filter((item) => stageIndex(item.status) === selected).reverse();
+  const showPayment = selected === 4 && payment !== null && payment.status !== "NOT_ISSUED";
+
+  return (
+    <div>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-base font-semibold text-neutral-900">A/S 진행</p>
+          {reception.receptionNumber !== null && reception.receptionNumber.trim() !== "" && (
+            <p className="mt-0.5 text-sm text-neutral-500">{reception.receptionNumber}</p>
+          )}
+        </div>
+        <span className="shrink-0 rounded-md border border-blue-600 px-2 py-1 text-xs font-medium text-blue-600">
+          {receptionStatusLabel(reception.status)}
+        </span>
+      </div>
+
+      <div className="mt-4 rounded-lg border border-neutral-200 px-3 py-2.5">
+        <p className="text-xs text-neutral-500">서버에서 발급한 링크</p>
+        <p className="mt-1 break-all text-sm font-medium text-neutral-900">fixgo/{token}</p>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border border-neutral-200 px-3 py-3">
+        <SummaryItem label="고객" value={reception.customerName} />
+        <SummaryItem label="연락처" value={reception.customerPhone} />
+        <SummaryItem label="제품" value={reception.modelName} />
+        <SummaryItem label="증상" value={reception.symptom} />
+      </div>
+
+      <section className="mt-5">
+        <p className="text-sm font-semibold text-neutral-900">진행</p>
+        <ol className="relative mt-3 grid grid-cols-5">
+          <div className="absolute top-[7px] right-[10%] left-[10%] h-px bg-neutral-300" />
+          {current > 0 && (
+            <div
+              className="absolute top-[7px] left-[10%] h-px bg-blue-600"
+              style={{ width: `${(current / (STEPS.length - 1)) * 80}%` }}
+            />
+          )}
+          {STEPS.map((label, index) => {
+            const reached = index <= current;
+            const active = index === selected;
+            return (
+              <li key={label} className="relative">
+                <button
+                  type="button"
+                  disabled={!reached}
+                  aria-current={index === current ? "step" : undefined}
+                  onClick={() => setSelected(index)}
+                  className="flex w-full flex-col items-center gap-2 disabled:cursor-default"
+                >
+                  <span
+                    className={
+                      reached
+                        ? `h-3.5 w-3.5 rounded-full bg-blue-600 ${active ? "ring-2 ring-blue-200 ring-offset-2" : ""}`
+                        : "h-3.5 w-3.5 rounded-full bg-neutral-300"
+                    }
+                  />
+                  <span
+                    className={
+                      reached
+                        ? `text-center text-[11px] leading-tight ${active ? "font-semibold text-blue-600" : "text-blue-600"}`
+                        : "text-center text-[11px] leading-tight text-neutral-500"
+                    }
+                  >
+                    {label}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+
+      <section className="mt-5">
+        <p className="text-sm font-semibold text-neutral-900">{selected === current ? "지금 단계" : "이전 단계"}</p>
+        <div className="mt-2 rounded-lg border border-neutral-300 px-3 py-3">
+          <p className="text-sm font-semibold text-neutral-900">{STEPS[selected]}</p>
+          {stageLines(selected, reception.status, payment).map((line) => (
+            <p key={line} className="text-sm text-neutral-700">{line}</p>
+          ))}
+          {selected === 0 && (
+            <ReceiptDetails open={receiptOpen} reception={reception} onToggle={() => setReceiptOpen((open) => !open)} />
+          )}
+          {selected > 0 && selected < 4 && stageHistories.length > 0 && (
+            <StageRecords histories={stageHistories} />
+          )}
+          {showPayment && payment !== null && (
+            <div className="mt-3">
+              <PaymentBody token={token} payment={payment} onRefresh={onRefresh} />
+            </div>
+          )}
+        </div>
+      </section>
+
+      {timeline.length > 0 && (
+        <section className="mt-5">
+          <p className="text-sm font-semibold text-neutral-900">진행 이력</p>
+          <ol className="mt-2">
+            {timeline.map((item, index) => {
+              const changedAt = formatDateTime(item.changedAt);
+              return (
+                <li key={`${item.status}-${item.changedAt ?? "none"}-${index}`} className="py-1.5 text-sm text-neutral-700">
+                  {changedAt !== null ? `${changedAt} ${receptionStatusLabel(item.status)}` : receptionStatusLabel(item.status)}
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function SummaryItem({ label, value }: { label: string; value: string | null }) {
+  if (value === null || value.trim() === "") {
+    return null;
+  }
+  return (
+    <div>
+      <p className="text-xs text-neutral-500">{label}</p>
+      <p className="mt-0.5 text-sm font-medium break-all text-neutral-900">{value}</p>
+    </div>
+  );
+}
+
+function ReceiptDetails({
+  open,
+  reception,
+  onToggle,
+}: {
+  open: boolean;
+  reception: PortalReception;
+  onToggle: () => void;
+}) {
+  return (
+    <div>
+      <Button className="mt-3 w-full" onClick={onToggle}>
+        {open ? "접수증 닫기" : "접수증 보기"}
+      </Button>
+      {open && (
+        <dl className="mt-2">
+          <Field label="접수번호" value={reception.receptionNumber} />
+          <Field label="접수 시각" value={formatDateTime(reception.receivedAt)} />
+          <Field label="고객명" value={reception.customerName} />
+          <Field label="연락처" value={reception.customerPhone} />
+          <Field label="제품" value={reception.modelName} />
+          <Field label="시리얼" value={reception.serialNumber} />
+          <Field label="고장 증상" value={reception.symptom} />
+          <Field label="증상 상세" value={reception.symptomDetail} />
+        </dl>
+      )}
+    </div>
+  );
+}
+
+function StageRecords({ histories }: { histories: PortalStatusHistory[] }) {
+  return (
+    <ul className="mt-3 border-t border-neutral-100 pt-2">
+      {histories.map((item, index) => {
+        const changedAt = formatDateTime(item.changedAt);
+        return (
+          <li key={`${item.status}-${item.changedAt ?? "none"}-${index}`} className="py-1.5 text-sm text-neutral-700">
+            {changedAt !== null ? `${changedAt} ${receptionStatusLabel(item.status)}` : receptionStatusLabel(item.status)}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function stageLines(stage: number, status: AsReceptionStatus, payment: PaymentSummary | null): string[] {
+  if (stage === 0) {
+    return status === "RECEIVED" ? ["접수가 완료되었습니다.", "점검 전입니다."] : ["접수가 완료되었습니다."];
+  }
+  if (stage === 1) {
+    if (status === "INSPECTION") {
+      return ["점검이 진행 중입니다.", "견적 전입니다."];
+    }
+    if (status === "WARRANTY_REVIEW") {
+      return ["보증을 확인하고 있습니다.", "견적 전입니다."];
+    }
+    return ["점검이 완료되었습니다."];
+  }
+  if (stage === 2) {
+    if (status === "AWAITING_QUOTE_APPROVAL") {
+      return ["견적 승인을 기다리고 있습니다.", "수리 전입니다."];
+    }
+    return ["견적 단계가 완료되었습니다."];
+  }
+  if (stage === 3) {
+    if (status === "AWAITING_REPAIR") {
+      return ["수리를 기다리고 있습니다.", "결제 전입니다."];
+    }
+    if (status === "REPAIR_IN_PROGRESS") {
+      return ["수리가 진행 중입니다.", "결제 전입니다."];
+    }
+    return ["수리가 완료되었습니다."];
+  }
+  if (status === "AWAITING_SHIPMENT") {
+    return ["결제가 완료되었습니다.", "배송을 기다리고 있습니다."];
+  }
+  if (status === "AWAITING_PICKUP") {
+    return ["결제가 완료되었습니다.", "수령을 기다리고 있습니다."];
+  }
+  if (status === "COMPLETED") {
+    return ["모든 단계가 완료되었습니다."];
+  }
+  if (payment === null || payment.status === "NOT_ISSUED") {
+    return ["결제 전입니다."];
+  }
+  if (payment.status === "WAITING_FOR_DEPOSIT") {
+    return ["가상계좌 입금을 기다리고 있습니다."];
+  }
+  if (payment.status === "REFUNDED") {
+    return ["환불이 완료되었습니다."];
+  }
+  if (payment.status === "PAID") {
+    return ["결제가 완료되었습니다."];
+  }
+  return ["결제를 기다리고 있습니다."];
 }
 
 function PaymentBody({
@@ -144,20 +388,17 @@ function PaymentBody({
     return <WaitingDeposit token={token} payment={payment} onRefresh={onRefresh} />;
   }
 
-  if (payment.status !== "PAID") {
-    return null;
+  if (payment.status === "PAID" || payment.status === "REFUNDED") {
+    return (
+      <dl>
+        <Field label="금액" value={money(payment.amount)} emphasize />
+        <Field label="결제 수단" value={methodLabel(payment.paymentMethod)} />
+        <Field label="결제 시각" value={formatDateTime(payment.paidAt)} />
+      </dl>
+    );
   }
 
-  return (
-    <section>
-      <p className="text-sm text-neutral-700">결제가 완료되었습니다.</p>
-      <dl className="mt-2">
-        <InfoRow label="금액" value={money(payment.amount)} emphasize />
-        <InfoRow label="결제 수단" value={methodLabel(payment.paymentMethod)} />
-        <InfoRow label="결제 시각" value={formatDateTime(payment.paidAt)} />
-      </dl>
-    </section>
-  );
+  return null;
 }
 
 function WaitingDeposit({
@@ -197,9 +438,9 @@ function WaitingDeposit({
   return (
     <section>
       <dl>
-        <InfoRow label="은행명" value={text(account?.bankName)} />
-        <InfoRow label="계좌번호" value={text(account?.accountNumber)} />
-        <InfoRow label="입금 기한" value={formatDateTime(account?.dueAt)} />
+        <Field label="은행명" value={account?.bankName ?? null} />
+        <Field label="계좌번호" value={account?.accountNumber ?? null} />
+        <Field label="입금 기한" value={formatDateTime(account?.dueAt)} />
       </dl>
       <Button className="mt-4 w-full" variant="outline" disabled={pending} onClick={() => void cancelAccount()}>
         가상계좌 취소
@@ -238,8 +479,8 @@ function UnpaidPayment({ token, payment }: { token: string; payment: PaymentSumm
   return (
     <section>
       <dl>
-        <InfoRow label="항목명" value={text(payment.orderName)} />
-        <InfoRow label="금액" value={money(payment.amount)} emphasize />
+        <Field label="항목명" value={payment.orderName} />
+        <Field label="금액" value={money(payment.amount)} emphasize />
       </dl>
       <div className="mt-4 grid grid-cols-2 gap-2">
         <Button className="h-11" disabled={pending} onClick={() => void pay("CARD")}>
@@ -255,23 +496,23 @@ function UnpaidPayment({ token, payment }: { token: string; payment: PaymentSumm
   );
 }
 
-function money(amount: number | null): string {
+function Field({ label, value, emphasize = false }: { label: string; value: string | null; emphasize?: boolean }) {
+  if (value === null || value.trim() === "") {
+    return null;
+  }
+  return <InfoRow label={label} value={value} emphasize={emphasize} />;
+}
+
+function money(amount: number | null): string | null {
   if (amount === null) {
-    return "—";
+    return null;
   }
   return won(amount);
 }
 
-function text(value: string | null | undefined): string {
+function formatDateTime(value: string | null | undefined): string | null {
   if (value === null || value === undefined || value.trim() === "") {
-    return "—";
-  }
-  return value;
-}
-
-function formatDateTime(value: string | null | undefined): string {
-  if (value === null || value === undefined || value.trim() === "") {
-    return "—";
+    return null;
   }
   const matched = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/.exec(value);
   if (matched === null) {
@@ -280,7 +521,7 @@ function formatDateTime(value: string | null | undefined): string {
   return `${matched[1]} ${matched[2]}`;
 }
 
-function methodLabel(method: PaymentSummary["paymentMethod"]): string {
+function methodLabel(method: PaymentSummary["paymentMethod"]): string | null {
   if (method === "CARD") {
     return "카드";
   }
@@ -290,5 +531,5 @@ function methodLabel(method: PaymentSummary["paymentMethod"]): string {
   if (method === "CASH") {
     return "현금";
   }
-  return "—";
+  return null;
 }
