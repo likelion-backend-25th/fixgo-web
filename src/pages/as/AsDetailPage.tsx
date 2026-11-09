@@ -288,7 +288,6 @@ function DocumentSection({ detail, product }: { detail: AsReceptionDetail; produ
         <Button onClick={() => setDocumentKind("receipt")}>접수증</Button>
         <Button variant="outline" onClick={() => setDocumentKind("estimate")}>견적서</Button>
         <Button variant="outline" onClick={() => setDocumentKind("repair")}>수리 내역서</Button>
-        <Button variant="outline" onClick={() => setDocumentKind("payment")}>결제 내역서</Button>
       </div>
       <p className="mt-3 text-xs text-neutral-500">견적서는 수리비 확정 후, 수리내역서는 수리 완료 후 조회됩니다.</p>
       {documentKind !== null && (

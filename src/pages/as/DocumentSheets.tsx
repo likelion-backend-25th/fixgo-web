@@ -130,7 +130,7 @@ function WorkRows({ work }: { work: RepairStatement["repairWorks"][number] }) {
 
 function SheetFrame({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <article className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm">
+    <article data-print-sheet className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm">
       <p className="mb-4 text-center text-2xl font-semibold text-blue-600">FixGo</p>
       <p className="mb-3 text-center text-lg">{title}</p>
       {children}

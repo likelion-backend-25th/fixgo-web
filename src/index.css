@@ -14,3 +14,66 @@ body,
 body {
   @apply bg-neutral-50 text-neutral-900 antialiased;
 }
+
+/* 인쇄 중에는 서류만 보이게 한다. display:none 으로 화면을 지우면 프린터 창이 바로 닫힌다. */
+.print-host {
+  display: none;
+}
+
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
+@media print {
+  html,
+  body.printing-document {
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  body.printing-document * {
+    visibility: hidden;
+  }
+
+  body.printing-document #root {
+    position: absolute;
+    width: 0;
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden;
+  }
+
+  body.printing-document .print-host,
+  body.printing-document .print-host * {
+    visibility: visible;
+  }
+
+  /* 서류는 문서 흐름에 둬서, 짧으면 한 페이지, 길면 다음 페이지로 이어진다. */
+  body.printing-document .print-host {
+    display: block;
+    position: static;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+
+  body.printing-document [data-print-sheet] {
+    border: 0;
+    border-radius: 0;
+    background: white;
+    padding: 0;
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  body.printing-document [data-print-sheet] tr,
+  body.printing-document [data-print-sheet] thead {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  body.printing-document [data-print-sheet] thead {
+    display: table-header-group;
+  }
+}

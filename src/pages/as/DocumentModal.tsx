@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Panel";
@@ -66,17 +66,41 @@ export function DocumentModal({
   }, [kind, receptionId]);
 
   const ready = kind === "payment" || (error === "" && !loading && (receipt !== null || estimate !== null || repair !== null));
+  const sheetRef = useRef<HTMLDivElement>(null);
+
+  function printDocument() {
+    const sheet = sheetRef.current?.querySelector("[data-print-sheet]");
+    if (!(sheet instanceof HTMLElement)) {
+      return;
+    }
+    // 서류만 인쇄한다. 화면 자체를 display:none 하면 프린터 선택 창이 바로 닫힌다.
+    document.querySelectorAll(".print-host").forEach((node) => node.remove());
+    const host = document.createElement("div");
+    host.className = "print-host";
+    host.append(sheet.cloneNode(true));
+    document.body.append(host);
+    document.body.classList.add("printing-document");
+    const cleanup = () => {
+      host.remove();
+      document.body.classList.remove("printing-document");
+      window.removeEventListener("afterprint", cleanup);
+    };
+    window.addEventListener("afterprint", cleanup);
+    window.print();
+  }
 
   return (
     <Modal title={titleOf[kind]} onClose={onClose} wide={kind !== "receipt"}>
       {loading && <p className="text-sm text-neutral-500">서류를 불러오는 중입니다.</p>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
-      {kind === "receipt" && receipt !== null && <ReceiptSheet data={receipt} />}
-      {kind === "estimate" && estimate !== null && <EstimateSheet data={estimate} />}
-      {kind === "repair" && repair !== null && <RepairSheet data={repair} />}
-      {kind === "payment" && <PaymentSheet record={record} />}
-      <div className="mt-4 text-right">
-        <Button onClick={() => window.print()} disabled={!ready}>인쇄</Button>
+      <div ref={sheetRef}>
+        {kind === "receipt" && receipt !== null && <ReceiptSheet data={receipt} />}
+        {kind === "estimate" && estimate !== null && <EstimateSheet data={estimate} />}
+        {kind === "repair" && repair !== null && <RepairSheet data={repair} />}
+        {kind === "payment" && <PaymentSheet record={record} />}
+      </div>
+      <div className="mt-4 text-right print:hidden">
+        <Button onClick={printDocument} disabled={!ready}>인쇄</Button>
       </div>
     </Modal>
   );
