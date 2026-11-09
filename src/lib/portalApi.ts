@@ -35,8 +35,28 @@ export interface PortalReception {
   histories: PortalStatusHistory[];
 }
 
+export type QuoteStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+export interface QuoteItem {
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  amount: number;
+}
+
+export interface PortalQuote {
+  status: QuoteStatus;
+  diagnosis: string | null;
+  items: QuoteItem[];
+  laborCost: number;
+  inspectionCost: number;
+  totalAmount: number;
+  issuedAt: string | null;
+}
+
 export interface PortalResponse {
   reception: PortalReception;
+  quote: PortalQuote | null;
   payment: PaymentSummary | null;
 }
 
@@ -129,6 +149,28 @@ export async function startPortalPayment(token: string): Promise<StartPaymentRes
   return body;
 }
 
+export async function decidePortalQuote(token: string, decision: "approve" | "reject"): Promise<void> {
+  const fallback = decision === "approve"
+    ? "견적을 승인하지 못했습니다. 다시 시도해 주세요."
+    : "견적을 거부하지 못했습니다. 다시 시도해 주세요.";
+  let response: Response;
+  try {
+    response = await fetch(`/api/v1/portal/${encodeURIComponent(token)}/quote/${decision}`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new Error(fallback);
+  }
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, fallback));
+  }
+
+  // 성공 응답은 204 No Content라 본문이 없다.
+}
+
 export async function cancelPortalPayment(token: string): Promise<void> {
   let response: Response;
   try {
@@ -210,8 +252,63 @@ function parsePortal(value: unknown): PortalResponse | null {
   if (reception === null) {
     return null;
   }
-  // 결제 단계 전이면 null이거나 NOT_ISSUED다. 형식이 달라도 접수 내역은 남긴다.
-  return { reception, payment: parsePayment(value.payment) };
+  // 아직 도달하지 않은 견적·결제는 null이다. 형식이 달라도 접수 내역은 남긴다.
+  return {
+    reception,
+    quote: parseQuote(value.quote),
+    payment: parsePayment(value.payment),
+  };
+}
+
+const quoteStatuses: readonly QuoteStatus[] = ["PENDING", "APPROVED", "REJECTED"];
+
+function parseQuote(value: unknown): PortalQuote | null {
+  if (!isRecord(value) || !isQuoteStatus(value.status)) {
+    return null;
+  }
+  const laborCost = readAmount(value.laborCost);
+  const inspectionCost = readAmount(value.inspectionCost);
+  const totalAmount = readAmount(value.totalAmount);
+  if (laborCost === null || inspectionCost === null || totalAmount === null) {
+    return null;
+  }
+  return {
+    status: value.status,
+    diagnosis: readNullableString(value.diagnosis),
+    items: parseQuoteItems(value.items),
+    laborCost,
+    inspectionCost,
+    totalAmount,
+    issuedAt: readNullableString(value.issuedAt),
+  };
+}
+
+function parseQuoteItems(value: unknown): QuoteItem[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const items: QuoteItem[] = [];
+  for (const item of value) {
+    if (!isRecord(item) || typeof item.name !== "string" || item.name.trim() === "") {
+      continue;
+    }
+    const quantity = readAmount(item.quantity);
+    const unitPrice = readAmount(item.unitPrice);
+    const amount = readAmount(item.amount);
+    if (quantity === null || unitPrice === null || amount === null) {
+      continue;
+    }
+    items.push({ name: item.name, quantity, unitPrice, amount });
+  }
+  return items;
+}
+
+function readAmount(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function isQuoteStatus(value: unknown): value is QuoteStatus {
+  return typeof value === "string" && (quoteStatuses as readonly string[]).includes(value);
 }
 
 function parseReception(value: unknown): PortalReception | null {

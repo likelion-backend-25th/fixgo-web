@@ -178,6 +178,63 @@ export async function fetchPaymentList(query: PaymentListQuery, signal: AbortSig
   };
 }
 
+export interface RefundAccountInput {
+  bank: string;
+  accountNumber: string;
+  holderName: string;
+}
+
+export async function payByCash(billId: number): Promise<void> {
+  let response: Response;
+  try {
+    response = await apiFetch(`/api/v1/payments/${billId}/cash`, {
+      method: "POST",
+      headers: { Accept: "application/json" },
+    });
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
+    throw new Error("현금 결제하지 못했습니다. 다시 시도해 주세요.");
+  }
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "현금 결제하지 못했습니다. 다시 시도해 주세요."));
+  }
+}
+
+export async function refundPayment(
+  billId: number,
+  cancelReason: string,
+  refundAccount: RefundAccountInput | null,
+): Promise<void> {
+  const body: { cancelReason: string; refundAccount?: RefundAccountInput } = { cancelReason };
+  if (refundAccount !== null) {
+    body.refundAccount = refundAccount;
+  }
+
+  let response: Response;
+  try {
+    response = await apiFetch(`/api/v1/payments/${billId}/refund`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
+    throw new Error("환불하지 못했습니다. 다시 시도해 주세요.");
+  }
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "환불하지 못했습니다. 다시 시도해 주세요."));
+  }
+}
+
 export async function fetchPaymentDetail(billId: number, signal: AbortSignal): Promise<PaymentDetail> {
   let response: Response;
   try {
@@ -209,13 +266,6 @@ export async function fetchPaymentDetail(billId: number, signal: AbortSignal): P
     throw new Error("결제 상세 응답이 올바르지 않습니다.");
   }
   return body;
-}
-
-export async function registerCashPayment(billId: number): Promise<void> {
-  const response = await apiFetch(`/api/v1/payments/${billId}/cash`, { method: "POST" });
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "현금 결제를 등록하지 못했습니다."));
-  }
 }
 
 function parsePaymentListItem(value: unknown): PaymentListItem {
