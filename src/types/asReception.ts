@@ -85,6 +85,7 @@ export interface AsReceptionDetail {
   createdAt: string;
   customer: ReceptionCustomer;
   product: ReceptionProduct;
+  modelName: string | null;
   receptionist: ReceptionMember | null;
   technician: ReceptionMember | null;
   status: AsReceptionStatus;
@@ -93,6 +94,20 @@ export interface AsReceptionDetail {
   memo: string | null;
   returnMethod: ReturnMethod;
   fileUrl: string | null;
+}
+
+export interface ReceptionRepair {
+  id: number;
+  status: RepairStatus;
+  diagnosis: string | null;
+  warrantyResult: "FREE" | "PAID" | "UNDECIDED";
+  reason: string | null;
+  reasonForRejection: string | null;
+}
+
+export interface MyReceptionDetail {
+  reception: AsReceptionDetail;
+  repair: ReceptionRepair | null;
 }
 
 export interface AsStatusHistory {

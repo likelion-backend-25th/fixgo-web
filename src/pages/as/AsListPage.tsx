@@ -262,10 +262,10 @@ function TechnicianAsListPage() {
               : "조회 결과가 없습니다."
         }
         onRowClick={(row) => {
-          // 라우트는 접수번호가 아니라 repairId(row.id) 기준
+          // 수리 진행 상태에 따라 점검 또는 수리 탭으로 이동한다. 주소의 id는 접수 ID다.
           const goRepair =
             row.status === "REPAIRING" || row.status === "COMPLETED" || row.status === "REJECTED";
-          navigate(goRepair ? `/as/${row.id}/repair` : `/as/${row.id}/inspection`);
+          navigate(goRepair ? `/as/${row.asReceptionId}/repair` : `/as/${row.asReceptionId}/inspection`);
         }}
       />
       <Pagination page={currentPage} pageCount={pageCount} onPageChange={setPage} />
@@ -292,6 +292,7 @@ function ReceptionAsListPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const user = useSessionStore((state) => state.user);
+  const isTechnician = user?.role === "TECHNICIAN";
   const canCreate =
     user?.role === "ADMIN" || user?.role === "RECEPTIONIST" || user?.role === "MANAGER";
   const notice = readNotice(location.state);
@@ -299,12 +300,14 @@ function ReceptionAsListPage() {
   const [status, setStatus] = useState<StatusFilter>("ALL");
   const [assignee, setAssignee] = useState("ALL");
   const [technicians, setTechnicians] = useState<TechnicianSummary[]>([]);
+  const [mineOnly, setMineOnly] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
   const [applied, setApplied] = useState({ keyword: "", status: "ALL" as StatusFilter });
-  const technicianId = assignee === "ALL" ? null : Number(assignee);
-  const filterKey = `${applied.keyword}:${applied.status}:${technicianId ?? ""}:${sortKey}:${sortDir}`;
+  const showAssignedOnly = isTechnician && mineOnly;
+  const technicianId = isTechnician || assignee === "ALL" ? null : Number(assignee);
+  const filterKey = `${applied.keyword}:${applied.status}:${technicianId ?? ""}:${showAssignedOnly}:${sortKey}:${sortDir}`;
   const [seenFilter, setSeenFilter] = useState(filterKey);
   const [rows, setRows] = useState<AsReceptionListItem[]>([]);
   const [pageCount, setPageCount] = useState(1);
@@ -352,7 +355,7 @@ function ReceptionAsListPage() {
     setError("");
     setRows([]);
 
-    // 화면 페이지는 1부터, Spring Pageable은 0부터 센다.
+    // 체크를 켰을 때만 기사 전용 목록 API를 사용한다.
     fetchReceptions(
       {
         keyword: applied.keyword,
@@ -366,6 +369,7 @@ function ReceptionAsListPage() {
         sort: `${sortField(sortKey)},${sortDir}`,
       },
       controller.signal,
+      showAssignedOnly,
     )
       .then((result) => {
         if (controller.signal.aborted) {
@@ -389,7 +393,7 @@ function ReceptionAsListPage() {
       });
 
     return () => controller.abort();
-  }, [applied, page, sortDir, sortKey, technicianId]);
+  }, [applied, page, showAssignedOnly, sortDir, sortKey, technicianId]);
 
   function onSort(key: string) {
     if (!isSortKey(key)) {
@@ -423,14 +427,26 @@ function ReceptionAsListPage() {
           }}
           options={statusOptions}
         />
-        <SelectBox
-          value={assignee}
-          onChange={setAssignee}
-          options={[
-            { value: "ALL", label: "담당 전체" },
-            ...technicians.map((item) => ({ value: String(item.id), label: item.name })),
-          ]}
-        />
+        {!isTechnician && (
+          <SelectBox
+            value={assignee}
+            onChange={setAssignee}
+            options={[
+              { value: "ALL", label: "담당 전체" },
+              ...technicians.map((item) => ({ value: String(item.id), label: item.name })),
+            ]}
+          />
+        )}
+        {isTechnician && (
+          <label className="ml-2 flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={mineOnly}
+              onChange={(event) => setMineOnly(event.target.checked)}
+            />
+            내 담당 A/S 목록만 보기
+          </label>
+        )}
         {canCreate && (
           <Button className="ml-auto" onClick={() => navigate("/as/new")}>
             새 접수

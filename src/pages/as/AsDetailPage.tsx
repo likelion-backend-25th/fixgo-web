@@ -20,6 +20,7 @@ import {
 import { formatDate, formatDateTime } from "@/lib/format";
 import { readNotice } from "@/lib/guards";
 import { useHeadingMeta } from "@/layouts/RootLayout";
+import { useSessionStore } from "@/stores/useSessionStore";
 import { DocumentModal, type DocumentKind } from "@/pages/as/DocumentModal";
 import { ReceptionEditPanel } from "@/pages/as/ReceptionEditPanel";
 import { TechnicianAssignPanel } from "@/pages/as/TechnicianAssignPanel";
@@ -38,6 +39,7 @@ export function AsDetailPage() {
   const [error, setError] = useState(validId ? "" : "접수 정보를 찾을 수 없습니다.");
   const [notice, setNotice] = useState(readNotice(location.state) ?? "");
   const [version, setVersion] = useState(0);
+  const isTechnician = useSessionStore((state) => state.user?.role === "TECHNICIAN");
   useHeadingMeta(detail?.receptionNumber);
 
   useEffect(() => {
@@ -48,8 +50,11 @@ export function AsDetailPage() {
     setLoading(true);
     setError("");
 
-    // 상세와 이력을 같이 읽고, 모델명은 제품 API로 보완한다.
-    Promise.all([fetchReception(receptionId, controller.signal), fetchReceptionHistory(receptionId, controller.signal)])
+    // 상세와 이력을 같이 읽고, 모델명은 제품 API로 보완한다. 기사 화면은 이력을 쓰지 않는다.
+    Promise.all([
+      fetchReception(receptionId, controller.signal),
+      isTechnician ? Promise.resolve([]) : fetchReceptionHistory(receptionId, controller.signal),
+    ])
       .then(async ([nextDetail, nextHistory]) => {
         if (controller.signal.aborted) {
           return;
@@ -82,7 +87,7 @@ export function AsDetailPage() {
       });
 
     return () => controller.abort();
-  }, [receptionId, validId, version]);
+  }, [isTechnician, receptionId, validId, version]);
 
   if (loading && detail === null) {
     return <Notice>접수 정보를 불러오는 중입니다.</Notice>;
@@ -95,36 +100,40 @@ export function AsDetailPage() {
     <div className="space-y-4">
       {notice !== "" && <Notice>{notice}</Notice>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
-      <Panel>
-        <div className="space-y-4">
-          <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-[max-content_max-content_minmax(0,1.3fr)_max-content_minmax(0,1.8fr)]">
-            <Field label="고객명" value={detail.customer.name} />
-            <Field label="연락처" value={detail.customer.phone} />
-            <Field label="이메일" value={detail.customer.email} />
-            <Field label="우편번호" value={detail.customer.zipcode ?? "-"} />
-            <Field label="주소" value={`${detail.customer.basicAddress ?? ""} ${detail.customer.detailAddress ?? ""}`.trim() || "-"} />
-            <Field label="제품군" value={product === null ? "-" : categoryLabel(product.category)} />
-            <Field label="모델명" value={product?.modelName ?? "-"} />
-            <Field label="시리얼번호" value={detail.product.serialNumber} />
-            <Field label="구매일" value={formatDate(product?.purchasedAt ?? detail.product.purchasedAt)} />
-            <Field label="수령 방식" value={returnMethodLabel(detail.returnMethod)} />
-            <div className="lg:col-span-2">
-              <Field label="증상 요약" value={detail.symptom} />
-            </div>
-            <Field label="접수 직원" value={detail.receptionist?.name ?? "-"} />
-            <Field label="담당 기사" value={detail.technician?.name ?? "-"} />
-            <Field label="접수 날짜" value={formatDateTime(detail.createdAt)} />
-            <div className="min-w-0 sm:col-span-2 lg:col-span-3">
-              <p className="mb-1 text-xs text-neutral-500">고장 증상 상세</p>
-              <div className="min-h-20 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm break-words">{detail.symptomDetail}</div>
-            </div>
-            <div className="min-w-0 lg:col-span-2">
-              <p className="mb-1 text-xs text-neutral-500">고객 요청 사항 / 메모</p>
-              <div className="min-h-20 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm break-words">{detail.memo ?? "-"}</div>
+      {isTechnician ? (
+        <TechnicianSummary detail={detail} productName={product?.modelName ?? detail.modelName ?? "-"} />
+      ) : (
+        <Panel>
+          <div className="space-y-4">
+            <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-[max-content_max-content_minmax(0,1.3fr)_max-content_minmax(0,1.8fr)]">
+              <Field label="고객명" value={detail.customer.name} />
+              <Field label="연락처" value={detail.customer.phone} />
+              <Field label="이메일" value={detail.customer.email} />
+              <Field label="우편번호" value={detail.customer.zipcode ?? "-"} />
+              <Field label="주소" value={`${detail.customer.basicAddress ?? ""} ${detail.customer.detailAddress ?? ""}`.trim() || "-"} />
+              <Field label="제품군" value={product === null ? "-" : categoryLabel(product.category)} />
+              <Field label="모델명" value={product?.modelName ?? "-"} />
+              <Field label="시리얼번호" value={detail.product.serialNumber} />
+              <Field label="구매일" value={formatDate(product?.purchasedAt ?? detail.product.purchasedAt)} />
+              <Field label="수령 방식" value={returnMethodLabel(detail.returnMethod)} />
+              <div className="lg:col-span-2">
+                <Field label="증상 요약" value={detail.symptom} />
+              </div>
+              <Field label="접수 직원" value={detail.receptionist?.name ?? "-"} />
+              <Field label="담당 기사" value={detail.technician?.name ?? "-"} />
+              <Field label="접수 날짜" value={formatDateTime(detail.createdAt)} />
+              <div className="min-w-0 sm:col-span-2 lg:col-span-3">
+                <p className="mb-1 text-xs text-neutral-500">고장 증상 상세</p>
+                <div className="min-h-20 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm break-words">{detail.symptomDetail}</div>
+              </div>
+              <div className="min-w-0 lg:col-span-2">
+                <p className="mb-1 text-xs text-neutral-500">고객 요청 사항 / 메모</p>
+                <div className="min-h-20 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm break-words">{detail.memo ?? "-"}</div>
+              </div>
             </div>
           </div>
-        </div>
-      </Panel>
+        </Panel>
+      )}
       <ReceptionEditPanel
         detail={detail}
         onSaved={(message) => {
@@ -133,33 +142,6 @@ export function AsDetailPage() {
           setVersion((current) => current + 1);
         }}
       />
-      <StatusPanel
-        detail={detail}
-        onChanged={(message) => {
-          setNotice(message);
-          setError("");
-          setVersion((current) => current + 1);
-        }}
-        onError={setError}
-      />
-      <Panel title="상태 변경 이력">
-        {history.length === 0 ? (
-          <p className="text-sm text-neutral-500">상태 변경 이력이 없습니다.</p>
-        ) : (
-          <ul className="space-y-3">
-            {history.map((item) => (
-              <li key={item.id} className="text-sm">
-                <p className="font-medium">
-                  {historyStatusLabel(item.fromStatus)} → {historyStatusLabel(item.toStatus)}
-                </p>
-                <p className="mt-1 text-neutral-500">
-                  {formatDateTime(item.createdAt)} · {item.changedBy ?? "-"} · {item.reason ?? "-"}
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
       <TechnicianAssignPanel
         detail={detail}
         refreshKey={version}
@@ -169,8 +151,39 @@ export function AsDetailPage() {
           setVersion((current) => current + 1);
         }}
       />
-      <CustomerLinkPanel receptionId={detail.id} />
-      <DocumentSection detail={detail} product={product} />
+      {!isTechnician && (
+        <>
+          <StatusPanel
+            detail={detail}
+            onChanged={(message) => {
+              setNotice(message);
+              setError("");
+              setVersion((current) => current + 1);
+            }}
+            onError={setError}
+          />
+          <Panel title="상태 변경 이력">
+            {history.length === 0 ? (
+              <p className="text-sm text-neutral-500">상태 변경 이력이 없습니다.</p>
+            ) : (
+              <ul className="space-y-3">
+                {history.map((item) => (
+                  <li key={item.id} className="text-sm">
+                    <p className="font-medium">
+                      {historyStatusLabel(item.fromStatus)} → {historyStatusLabel(item.toStatus)}
+                    </p>
+                    <p className="mt-1 text-neutral-500">
+                      {formatDateTime(item.createdAt)} · {item.changedBy ?? "-"} · {item.reason ?? "-"}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+          <CustomerLinkPanel receptionId={detail.id} />
+          <DocumentSection detail={detail} product={product} />
+        </>
+      )}
     </div>
   );
 }
@@ -326,6 +339,40 @@ function toDocumentRecord(detail: AsReceptionDetail, product: ProductSummary | n
     assignedAt: formatDateTime(detail.createdAt),
     portalToken: "",
   };
+}
+
+function TechnicianSummary({ detail, productName }: { detail: AsReceptionDetail; productName: string }) {
+  return (
+    <Panel>
+      <div className="space-y-4">
+        <div className="grid grid-cols-4 gap-x-6">
+          <Field label="고객명" value={detail.customer.name} />
+          <Field label="연락처" value={detail.customer.phone} />
+          <Field label="제품" value={productName} />
+          <Field label="시리얼번호" value={detail.product.serialNumber} />
+        </div>
+        <div className="grid grid-cols-4 gap-x-6">
+          <Field label="고장 증상" value={detail.symptom} />
+          <Field label="수령 방식" value={returnMethodLabel(detail.returnMethod)} />
+          <Field label="접수일" value={formatDateTime(detail.createdAt)} />
+          <Field label="담당 기사" value={detail.technician?.name ?? "-"} />
+        </div>
+        <div className="grid grid-cols-2 gap-x-6">
+          <Note label="고장 증상 상세" value={detail.symptomDetail} />
+          <Note label="고객 요청 사항 / 메모" value={detail.memo ?? "-"} />
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function Note({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="mb-1 text-xs text-neutral-500">{label}</p>
+      <div className="min-h-20 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm break-words">{value}</div>
+    </div>
+  );
 }
 
 function Field({ label, value }: { label: string; value: string }) {

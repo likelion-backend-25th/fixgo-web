@@ -3,6 +3,7 @@ import {
   AS_RECEPTION_STATUSES,
   REPAIR_STATUSES,
   type AsReceptionDetail,
+  type MyReceptionDetail,
   type AsReceptionListItem,
   type AsReceptionListQuery,
   type AsReceptionListResult,
@@ -73,6 +74,7 @@ export function isReceptionStatus(value: string): value is AsReceptionStatus {
 export async function fetchReceptions(
   query: AsReceptionListQuery,
   signal: AbortSignal,
+  mineOnly = false,
 ): Promise<AsReceptionListResult> {
   const params = new URLSearchParams();
   if (query.keyword !== "") {
@@ -81,14 +83,16 @@ export async function fetchReceptions(
   if (query.status !== null) {
     params.set("status", query.status);
   }
-  if (query.technicianId !== null) {
+  if (!mineOnly && query.technicianId !== null) {
     params.set("technicianId", String(query.technicianId));
   }
   params.set("page", String(query.page - 1));
   params.set("size", String(query.size));
   params.set("sort", query.sort);
 
-  const response = await apiFetch(`/api/v1/as-receptions?${params.toString()}`, { signal });
+  // 내 담당 목록은 서버가 로그인한 기사 ID로 필터링한다.
+  const path = mineOnly ? "/api/v1/as-receptions/my" : "/api/v1/as-receptions";
+  const response = await apiFetch(`${path}?${params.toString()}`, { signal });
   if (!response.ok) {
     throw new Error(await readErrorMessage(response, "A/S 목록을 불러오지 못했습니다."));
   }
@@ -106,7 +110,53 @@ export async function fetchReceptions(
 }
 
 export async function fetchReception(id: number, signal: AbortSignal): Promise<AsReceptionDetail> {
-  const response = await apiFetch(`/api/v1/as-receptions/${id}`, { signal });
+  return fetchReceptionDetail(`/api/v1/as-receptions/${id}`, signal);
+}
+
+export async function fetchMyReception(id: number, signal: AbortSignal): Promise<MyReceptionDetail> {
+  // 기사 상세 응답에는 접수 정보와 저장된 수리 기록이 함께 들어온다.
+  const response = await apiFetch(`/api/v1/as-receptions/my/${id}`, { signal });
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "접수 정보를 불러오지 못했습니다."));
+  }
+  const body = await readJson(response, "기사 접수 상세 응답이 올바르지 않습니다.");
+  if (!isRecord(body)) {
+    throw new Error("기사 접수 상세 응답이 올바르지 않습니다.");
+  }
+  const reception = parseDetail(body.reception);
+  const repair = body.repair;
+  if (repair === null) return { reception, repair: null };
+  if (!isRecord(repair)
+    || !isId(repair.id)
+    || repair.status === null || !isRepairStatus(repair.status)
+    || !isNullableString(repair.diagnosis)
+    || !isNullableString(repair.reason)
+    || !isNullableString(repair.reasonForRejection)
+    || (repair.warrantyResult !== "FREE" && repair.warrantyResult !== "PAID" && repair.warrantyResult !== "UNDECIDED")) {
+    throw new Error("수리 기록 응답이 올바르지 않습니다.");
+  }
+  return {
+    reception,
+    repair: {
+      id: repair.id,
+      status: repair.status,
+      diagnosis: repair.diagnosis,
+      warrantyResult: repair.warrantyResult,
+      reason: repair.reason,
+      reasonForRejection: repair.reasonForRejection,
+    },
+  };
+}
+
+export async function startMyInspection(receptionId: number): Promise<void> {
+  const response = await apiFetch(`/api/v1/as-receptions/my/${receptionId}/inspection/start`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "점검을 시작하지 못했습니다."));
+  }
+}
+
+async function fetchReceptionDetail(path: string, signal: AbortSignal): Promise<AsReceptionDetail> {
+  const response = await apiFetch(path, { signal });
   if (!response.ok) {
     throw new Error(await readErrorMessage(response, "접수 정보를 불러오지 못했습니다."));
   }
@@ -373,6 +423,7 @@ function parseDetail(value: unknown): AsReceptionDetail {
     createdAt: value.createdAt,
     customer: parseCustomer(value.customer),
     product: parseProduct(value.product),
+    modelName: typeof value.modelName === "string" ? value.modelName : null,
     receptionist: parseMember(value.receptionist),
     technician: parseMember(value.technician),
     status: value.status,
