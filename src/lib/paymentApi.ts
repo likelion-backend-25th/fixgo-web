@@ -1,3 +1,5 @@
+import { apiFetch } from "@/lib/apiClient";
+
 export type PaymentBillStatus = "UNPAID" | "PAID" | "REFUNDED" | "PARTIALLY_REFUNDED";
 
 export type PaymentMethod = "CARD" | "VIRTUAL_ACCOUNT" | "CASH";
@@ -13,6 +15,8 @@ export interface PaymentListItem {
   amount: number;
   status: PaymentBillStatus;
   paymentMethod: PaymentMethod | null;
+  modelName: string | null;
+  billedAt: string | null;
 }
 
 export interface PaymentListQuery {
@@ -225,7 +229,103 @@ function parsePaymentListItem(value: unknown): PaymentListItem {
     amount: value.amount,
     status: value.status,
     paymentMethod: value.paymentMethod,
+    modelName: typeof value.modelName === "string" && value.modelName !== "" ? value.modelName : null,
+    billedAt: typeof value.billedAt === "string" && value.billedAt !== "" ? value.billedAt : null,
   };
+}
+
+export async function fetchDepositWaiting(signal: AbortSignal): Promise<PaymentListItem[]> {
+  let response: Response;
+  try {
+    response = await apiFetch("/api/v1/admin/statistics/unpaid-bills", { signal });
+  } catch (error: unknown) {
+    if (isAbortError(error)) {
+      throw error;
+    }
+    throw error instanceof Error ? error : new Error("입금 대기 내역을 불러오지 못했습니다.");
+  }
+  // 주소가 없거나 토큰이 거절되면 결제 목록과 상세로 모델명만 채운다.
+  if (response.status === 404 || response.status === 401) {
+    return enrichModels(await fetchUnpaidBills(signal), signal);
+  }
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "입금 대기 내역을 불러오지 못했습니다."));
+  }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new Error("입금 대기 내역 응답이 올바르지 않습니다.");
+  }
+  if (!Array.isArray(body)) {
+    throw new Error("입금 대기 내역 응답이 올바르지 않습니다.");
+  }
+  return body.map(parseDepositBill);
+}
+
+function parseDepositBill(value: unknown): PaymentListItem {
+  if (!isRecord(value)
+    || !isId(value.billId)
+    || typeof value.receptionNumber !== "string"
+    || value.receptionNumber === ""
+    || typeof value.customerName !== "string"
+    || !isNullableString(value.modelName)
+    || !isAmount(value.amount)
+    || !isBillStatus(value.status)
+    || !isNullableString(value.billedAt)) {
+    throw new Error("입금 대기 내역 응답이 올바르지 않습니다.");
+  }
+  return {
+    billId: value.billId,
+    asReceptionNumber: value.receptionNumber,
+    customerName: value.customerName,
+    amount: value.amount,
+    status: value.status,
+    paymentMethod: null,
+    modelName: value.modelName === "" ? null : value.modelName,
+    billedAt: value.billedAt === "" ? null : value.billedAt,
+  };
+}
+
+async function enrichModels(items: PaymentListItem[], signal: AbortSignal): Promise<PaymentListItem[]> {
+  const names = new Map<number, string | null>();
+  const pending = items.filter((item) => item.modelName === null);
+  for (let index = 0; index < pending.length; index += 8) {
+    const batch = pending.slice(index, index + 8);
+    const loaded = await Promise.all(batch.map(async (item) => {
+      try {
+        const detail = await fetchPaymentDetail(item.billId, signal);
+        return [item.billId, detail.reception.productName] as const;
+      } catch (error: unknown) {
+        if (isAbortError(error)) {
+          throw error;
+        }
+        return [item.billId, null] as const;
+      }
+    }));
+    for (const [billId, name] of loaded) {
+      names.set(billId, name);
+    }
+  }
+  return items.map((item) => {
+    const name = names.get(item.billId);
+    if (item.modelName !== null || name === undefined || name === null || name === "") {
+      return item;
+    }
+    return { ...item, modelName: name };
+  });
+}
+
+export async function fetchUnpaidBills(signal: AbortSignal): Promise<PaymentListItem[]> {
+  const first = await fetchPaymentList({ keyword: "", status: "UNPAID", page: 1, size: 100 }, signal);
+  const items = [...first.items];
+  const lastPage = Math.min(first.totalPages, 20);
+  for (let page = 2; page <= lastPage; page += 1) {
+    const next = await fetchPaymentList({ keyword: "", status: "UNPAID", page, size: 100 }, signal);
+    items.push(...next.items);
+  }
+  return items;
 }
 
 function isPaymentDetail(value: unknown): value is PaymentDetail {
