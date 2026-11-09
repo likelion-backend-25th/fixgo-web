@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
@@ -6,7 +6,7 @@ import { SelectBox, TextField } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Panel";
 import { Pagination } from "@/components/ui/Pagination";
 import { readNotice } from "@/lib/guards";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, won } from "@/lib/format";
 import { isAbortError } from "@/lib/apiClient";
 import {
   fetchReceptions,
@@ -14,37 +14,296 @@ import {
   receptionStatusLabel,
   searchTechnicians,
 } from "@/lib/asReceptionApi";
+import {
+  fetchMyRepairs,
+  repairStatusLabel,
+  warrantyResultLabel,
+  type RepairListItem,
+  type RepairStatus,
+} from "@/lib/repair";
 import { useSessionStore } from "@/stores/useSessionStore";
-import { AS_RECEPTION_STATUSES, type AsReceptionListItem, type AsReceptionStatus, type TechnicianSummary } from "@/types/asReception";
+import {
+  AS_RECEPTION_STATUSES,
+  type AsReceptionListItem,
+  type AsReceptionStatus,
+  type TechnicianSummary,
+} from "@/types/asReception";
 
 const PAGE_SIZE = 20;
+
+// ==============================
+// 진입 컴포넌트: 역할별로 화면 분기
+// ==============================
+
+export function AsListPage() {
+  const user = useSessionStore((state) => state.user);
+
+  // 세션 로딩 전에는 역할을 알 수 없으므로 API 호출 없이 대기
+  if (user === null || user === undefined) {
+    return <Notice>사용자 정보를 확인하는 중입니다.</Notice>;
+  }
+
+  if (user.role === "TECHNICIAN") {
+    return <TechnicianAsListPage />;
+  }
+
+  return <ReceptionAsListPage />;
+}
+
+// ==============================
+// 기사용 목록: GET /api/v1/as/repairs/my
+// ==============================
+
+type RepairStatusFilter = "ALL" | RepairStatus;
+type TechSortKey = "asReceptionId" | "status" | "finalAmount" | "createdAt";
+
+const REPAIR_STATUSES: RepairStatus[] = [
+  "REQUESTED",
+  "APPROVED",
+  "REJECTED",
+  "DIAGNOSING",
+  "REPAIRING",
+  "COMPLETED",
+];
+
+const repairStatusOptions: { value: RepairStatusFilter; label: string }[] = [
+  { value: "ALL", label: "상태 전체" },
+  ...REPAIR_STATUSES.map((value) => ({ value, label: repairStatusLabel(value) })),
+];
+
+function isRepairStatusFilter(value: string): value is RepairStatusFilter {
+  return value === "ALL" || REPAIR_STATUSES.some((item) => item === value);
+}
+
+function isTechSortKey(value: string): value is TechSortKey {
+  return (
+    value === "asReceptionId" ||
+    value === "status" ||
+    value === "finalAmount" ||
+    value === "createdAt"
+  );
+}
+
+function compareRepair(a: RepairListItem, b: RepairListItem, key: TechSortKey): number {
+  switch (key) {
+    case "asReceptionId":
+      return a.asReceptionId - b.asReceptionId;
+    case "status":
+      return a.status.localeCompare(b.status);
+    case "finalAmount":
+      return a.finalAmount - b.finalAmount;
+    case "createdAt":
+      return a.createdAt.localeCompare(b.createdAt);
+  }
+}
+
+function TechnicianAsListPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const notice = readNotice(location.state);
+
+  const [items, setItems] = useState<RepairListItem[]>([]);
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<RepairStatusFilter>("ALL");
+  const [sortKey, setSortKey] = useState<TechSortKey>("createdAt");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  // 본인에게 배정된 수리 건만 서버가 내려준다 (조건: ROLE_TECHNICIAN)
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError("");
+
+    fetchMyRepairs(controller.signal)
+      .then((result) => {
+        if (!controller.signal.aborted) {
+          setItems(result);
+        }
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || isAbortError(cause)) {
+          return;
+        }
+        setItems([]);
+        setError(
+          cause instanceof Error ? cause.message : "내 담당 A/S 목록을 불러오지 못했습니다.",
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, []);
+
+  // 검색 + 상태 필터 + 정렬 (현재 /my가 List만 반환하므로 화면에서 처리)
+  const processed = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+
+    const filtered = items.filter((item) => {
+      if (status !== "ALL" && item.status !== status) {
+        return false;
+      }
+      if (keyword === "") {
+        return true;
+      }
+      return (
+        String(item.asReceptionId).includes(keyword) ||
+        (item.diagnosis ?? "").toLowerCase().includes(keyword) ||
+        (item.workNote ?? "").toLowerCase().includes(keyword)
+      );
+    });
+
+    const direction = sortDir === "asc" ? 1 : -1;
+    return [...filtered].sort((a, b) => compareRepair(a, b, sortKey) * direction);
+  }, [items, query, status, sortKey, sortDir]);
+
+  const pageCount = Math.max(1, Math.ceil(processed.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const rows = processed.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  function onSort(key: string) {
+    if (!isTechSortKey(key)) {
+      return;
+    }
+    setPage(1);
+    if (sortKey === key) {
+      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDir("asc");
+  }
+
+  const columns: Column<RepairListItem>[] = [
+    {
+      key: "asReceptionId",
+      header: "접수 ID",
+      sortable: true,
+      render: (row) => `#${row.asReceptionId}`,
+    },
+    {
+      key: "diagnosis",
+      header: "진단 내용",
+      render: (row) => (
+        <span className="line-clamp-1 max-w-xs">{row.diagnosis ?? "-"}</span>
+      ),
+    },
+    {
+      key: "warrantyResult",
+      header: "보증",
+      render: (row) => warrantyResultLabel(row.warrantyResult),
+    },
+    {
+      key: "status",
+      header: "진행 상태",
+      sortable: true,
+      render: (row) => repairStatusLabel(row.status),
+    },
+    {
+      key: "finalAmount",
+      header: "수리비",
+      sortable: true,
+      render: (row) => won(row.finalAmount),
+    },
+    {
+      key: "createdAt",
+      header: "배정일",
+      sortable: true,
+      render: (row) => formatDateTime(row.createdAt),
+    },
+  ];
+
+  return (
+    <div>
+      {notice !== null && <Notice>{notice}</Notice>}
+      {error !== "" && <Notice tone="error">{error}</Notice>}
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <TextField
+          value={query}
+          onChange={(value) => {
+            setQuery(value);
+            setPage(1);
+          }}
+          placeholder="접수 ID, 진단 내용 검색"
+          className="w-64"
+        />
+        <SelectBox
+          value={status}
+          onChange={(value) => {
+            if (isRepairStatusFilter(value)) {
+              setStatus(value);
+              setPage(1);
+            }
+          }}
+          options={repairStatusOptions}
+        />
+        <span className="ml-2 text-sm text-neutral-500">내 담당 A/S만 표시됩니다.</span>
+      </div>
+
+      <DataTable
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => String(row.id)}
+        sortKey={sortKey}
+        sortDir={sortDir}
+        onSort={onSort}
+        emptyText={
+          loading
+            ? "A/S 목록을 불러오는 중입니다."
+            : error !== ""
+              ? "A/S 목록을 불러오지 못했습니다."
+              : "조회 결과가 없습니다."
+        }
+        onRowClick={(row) => {
+          // 라우트는 접수번호가 아니라 repairId(row.id) 기준
+          const goRepair =
+            row.status === "REPAIRING" || row.status === "COMPLETED" || row.status === "REJECTED";
+          navigate(goRepair ? `/as/${row.id}/repair` : `/as/${row.id}/inspection`);
+        }}
+      />
+      <Pagination page={currentPage} pageCount={pageCount} onPageChange={setPage} />
+    </div>
+  );
+}
+
+// ==============================
+// 접수담당자/관리자/매니저용 목록: GET /api/v1/as-receptions (기존 로직)
+// ==============================
 
 type StatusFilter = "ALL" | AsReceptionStatus;
 type SortKey = "receptionNumber" | "createdAt" | "status" | "customerName";
 
 const statusOptions: { value: StatusFilter; label: string }[] = [
   { value: "ALL", label: "상태 전체" },
-  ...AS_RECEPTION_STATUSES.map((status) => ({ value: status, label: receptionStatusLabel(status) })),
+  ...AS_RECEPTION_STATUSES.map((status) => ({
+    value: status,
+    label: receptionStatusLabel(status),
+  })),
 ];
 
-export function AsListPage() {
+function ReceptionAsListPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const user = useSessionStore((state) => state.user);
-  const memberId = useSessionStore((state) => state.memberId);
-  const isTechnician = user?.role === "TECHNICIAN";
-  const canCreate = user?.role === "ADMIN" || user?.role === "RECEPTIONIST" || user?.role === "MANAGER";
+  const canCreate =
+    user?.role === "ADMIN" || user?.role === "RECEPTIONIST" || user?.role === "MANAGER";
   const notice = readNotice(location.state);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("ALL");
   const [assignee, setAssignee] = useState("ALL");
   const [technicians, setTechnicians] = useState<TechnicianSummary[]>([]);
-  const [mineOnly, setMineOnly] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
   const [applied, setApplied] = useState({ keyword: "", status: "ALL" as StatusFilter });
-  const technicianId = mineOnly ? memberId : assignee === "ALL" ? null : Number(assignee);
+  const technicianId = assignee === "ALL" ? null : Number(assignee);
   const filterKey = `${applied.keyword}:${applied.status}:${technicianId ?? ""}:${sortKey}:${sortDir}`;
   const [seenFilter, setSeenFilter] = useState(filterKey);
   const [rows, setRows] = useState<AsReceptionListItem[]>([]);
@@ -70,6 +329,7 @@ export function AsListPage() {
     return () => window.clearTimeout(timer);
   }, [query, status]);
 
+  // 담당 기사 필터용 직원 목록 (이 컴포넌트는 기사 계정에서는 렌더링되지 않는다)
   useEffect(() => {
     const controller = new AbortController();
     searchTechnicians("", controller.signal)
@@ -97,7 +357,10 @@ export function AsListPage() {
       {
         keyword: applied.keyword,
         status: applied.status === "ALL" ? null : applied.status,
-        technicianId: typeof technicianId === "number" && Number.isInteger(technicianId) ? technicianId : null,
+        technicianId:
+          typeof technicianId === "number" && Number.isInteger(technicianId)
+            ? technicianId
+            : null,
         page,
         size: PAGE_SIZE,
         sort: `${sortField(sortKey)},${sortDir}`,
@@ -140,8 +403,6 @@ export function AsListPage() {
     setSortDir("asc");
   }
 
-  const columns: Column<AsReceptionListItem>[] = isTechnician ? technicianColumns : deskColumns;
-
   return (
     <div>
       {notice !== null && <Notice>{notice}</Notice>}
@@ -150,7 +411,7 @@ export function AsListPage() {
         <TextField
           value={query}
           onChange={setQuery}
-          placeholder={isTechnician ? "접수번호, 고객명 검색" : "접수번호, 고객명, 증상 검색"}
+          placeholder="접수번호, 고객명, 증상 검색"
           className="w-64"
         />
         <SelectBox
@@ -162,26 +423,14 @@ export function AsListPage() {
           }}
           options={statusOptions}
         />
-        {!isTechnician && (
-          <SelectBox
-            value={assignee}
-            onChange={setAssignee}
-            options={[
-              { value: "ALL", label: "담당 전체" },
-              ...technicians.map((item) => ({ value: String(item.id), label: item.name })),
-            ]}
-          />
-        )}
-        {isTechnician && (
-          <label className="ml-2 flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={mineOnly}
-              onChange={(event) => setMineOnly(event.target.checked)}
-            />
-            내 담당 A/S 목록만 보기
-          </label>
-        )}
+        <SelectBox
+          value={assignee}
+          onChange={setAssignee}
+          options={[
+            { value: "ALL", label: "담당 전체" },
+            ...technicians.map((item) => ({ value: String(item.id), label: item.name })),
+          ]}
+        />
         {canCreate && (
           <Button className="ml-auto" onClick={() => navigate("/as/new")}>
             새 접수
@@ -189,23 +438,14 @@ export function AsListPage() {
         )}
       </div>
       <DataTable
-        columns={columns}
+        columns={deskColumns}
         rows={rows}
         rowKey={(row) => String(row.id)}
         sortKey={sortKey}
         sortDir={sortDir}
         onSort={onSort}
         emptyText={tableMessage(loading, error)}
-        onRowClick={(row) => {
-          if (isTechnician) {
-            const repair = row.receptionStatus === "REPAIR_IN_PROGRESS"
-              || row.receptionStatus === "COMPLETED"
-              || row.repairStatus === "REJECTED";
-            navigate(repair ? `/as/${row.receptionNumber}/repair` : `/as/${row.receptionNumber}/inspection`);
-            return;
-          }
-          navigate(`/as/details/${row.id}`);
-        }}
+        onRowClick={(row) => navigate(`/as/details/${row.id}`)}
       />
       <Pagination page={page} pageCount={pageCount} onPageChange={setPage} />
     </div>
@@ -234,7 +474,12 @@ function isStatusFilter(value: string): value is StatusFilter {
 }
 
 function isSortKey(value: string): value is SortKey {
-  return value === "receptionNumber" || value === "createdAt" || value === "status" || value === "customerName";
+  return (
+    value === "receptionNumber" ||
+    value === "createdAt" ||
+    value === "status" ||
+    value === "customerName"
+  );
 }
 
 function statusText(row: AsReceptionListItem): string {
@@ -251,14 +496,5 @@ const deskColumns: Column<AsReceptionListItem>[] = [
   { key: "modelName", header: "모델", render: (row) => row.modelName ?? "-" },
   { key: "status", header: "상태", sortable: true, render: (row) => statusText(row) },
   { key: "technician", header: "담당", render: (row) => row.technicianName ?? "-" },
-  { key: "createdAt", header: "접수일", sortable: true, render: (row) => formatDateTime(row.createdAt) },
-];
-
-const technicianColumns: Column<AsReceptionListItem>[] = [
-  { key: "receptionNumber", header: "접수번호", sortable: true, render: (row) => row.receptionNumber },
-  { key: "customerName", header: "고객", sortable: true, render: (row) => row.customerName },
-  { key: "technician", header: "담당 기사", render: (row) => row.technicianName ?? "-" },
-  { key: "modelName", header: "모델명", render: (row) => row.modelName ?? "-" },
-  { key: "status", header: "상태", sortable: true, render: (row) => statusText(row) },
   { key: "createdAt", header: "접수일", sortable: true, render: (row) => formatDateTime(row.createdAt) },
 ];
