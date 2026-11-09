@@ -104,7 +104,7 @@ export function PaymentListPage() {
       key: "detail",
       header: "",
       render: (row) => (
-        <Button onClick={() => navigate(`/payment/${row.billId}`)}>상세</Button>
+        <Button onClick={() => navigate(`/payment/${row.billId}`)}>상세 보기</Button>
       ),
     },
   ];

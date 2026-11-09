@@ -160,7 +160,7 @@ export function NotificationListPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center gap-2 whitespace-nowrap">
-          <Button onClick={() => setSelectedId(row.id)}>상세</Button>
+          <Button onClick={() => setSelectedId(row.id)}>상세 보기</Button>
           {row.status === "FAILED" && (
             <Button disabled={retryingId === row.id} onClick={() => void retry(row.id)}>발송</Button>
           )}

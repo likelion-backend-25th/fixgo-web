@@ -4,6 +4,14 @@ export interface SweetTrackerCarrier {
   name: string;
 }
 
+export function carrierLabel(courier: string | null, courierCode: string | null): string {
+  if (courier !== null && courier.trim() !== "") {
+    return courier;
+  }
+  const found = sweetTrackerCarriers.find((item) => item.code === courierCode);
+  return found === undefined ? "-" : found.name;
+}
+
 export const sweetTrackerCarriers: readonly SweetTrackerCarrier[] = [
   { code: "04", name: "CJ대한통운" },
   { code: "01", name: "우체국택배" },
