@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { Button } from "@/components/ui/Button";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { receptionStatusLabel } from "@/lib/asReceptionApi";
 import { won } from "@/lib/format";
 import type { AsReceptionStatus } from "@/types/asReception";
 import {
   cancelPortalPayment,
+  decidePortalQuote,
   fetchPortal,
   InvalidPortalLinkError,
   startPortalPayment,
   type PaymentSummary,
+  type PortalQuote,
   type PortalReception,
   type PortalResponse,
   type PortalStatusHistory,
@@ -137,7 +140,7 @@ function PortalBody({
   portal: PortalResponse;
   onRefresh: () => void;
 }) {
-  const { reception, payment } = portal;
+  const { reception, quote, payment } = portal;
   const current = stageIndex(reception.status);
   const [selected, setSelected] = useState(current);
   const [seenStatus, setSeenStatus] = useState(reception.status);
@@ -226,11 +229,14 @@ function PortalBody({
         <p className="text-sm font-semibold text-neutral-900">{selected === current ? "지금 단계" : "이전 단계"}</p>
         <div className="mt-2 rounded-lg border border-neutral-300 px-3 py-3">
           <p className="text-sm font-semibold text-neutral-900">{STEPS[selected]}</p>
-          {stageLines(selected, reception.status, payment).map((line) => (
+          {stageLines(selected, reception.status, quote, payment).map((line) => (
             <p key={line} className="text-sm text-neutral-700">{line}</p>
           ))}
           {selected === 0 && (
             <ReceiptDetails open={receiptOpen} reception={reception} onToggle={() => setReceiptOpen((open) => !open)} />
+          )}
+          {selected === 2 && quote !== null && (
+            <QuoteDetails token={token} quote={quote} onRefresh={onRefresh} />
           )}
           {selected > 0 && selected < 4 && stageHistories.length > 0 && (
             <StageRecords histories={stageHistories} />
@@ -304,6 +310,100 @@ function ReceiptDetails({
   );
 }
 
+function QuoteDetails({
+  token,
+  quote,
+  onRefresh,
+}: {
+  token: string;
+  quote: PortalQuote;
+  onRefresh: () => void;
+}) {
+  const [pending, setPending] = useState(false);
+  const [asking, setAsking] = useState<"approve" | "reject" | null>(null);
+  const [error, setError] = useState("");
+  const pendingRef = useRef(false);
+
+  async function decide(decision: "approve" | "reject") {
+    if (pendingRef.current) {
+      return;
+    }
+    setAsking(null);
+    pendingRef.current = true;
+    setError("");
+    setPending(true);
+    try {
+      await decidePortalQuote(token, decision);
+      onRefresh();
+    } catch (caught) {
+      pendingRef.current = false;
+      setPending(false);
+      setError(caught instanceof Error ? caught.message : "견적을 처리하지 못했습니다. 다시 시도해 주세요.");
+    }
+  }
+
+  return (
+    <div>
+      <div className="mt-3 border-t border-neutral-100 pt-2">
+        <p className="text-sm font-semibold text-neutral-900">견적서</p>
+        <dl>
+          <Field label="진단" value={quote.diagnosis} />
+          <Field label="발행 시각" value={formatDateTime(quote.issuedAt)} />
+        </dl>
+        <ul className="mt-1 border-t border-neutral-100">
+          {quote.items.map((item, index) => (
+            <li
+              key={`${item.name}-${index}`}
+              className="flex items-baseline justify-between gap-3 border-b border-neutral-100 py-2 text-sm"
+            >
+              <span className="text-neutral-900">
+                {item.name}{item.quantity > 0 ? ` × ${item.quantity}` : ""}
+              </span>
+              <span className="shrink-0 font-medium text-neutral-900">{won(item.amount)}</span>
+            </li>
+          ))}
+          {quote.laborCost > 0 && (
+            <li className="flex items-baseline justify-between gap-3 border-b border-neutral-100 py-2 text-sm">
+              <span className="text-neutral-900">공임</span>
+              <span className="shrink-0 font-medium text-neutral-900">{won(quote.laborCost)}</span>
+            </li>
+          )}
+          {quote.inspectionCost > 0 && (
+            <li className="flex items-baseline justify-between gap-3 border-b border-neutral-100 py-2 text-sm">
+              <span className="text-neutral-900">점검비</span>
+              <span className="shrink-0 font-medium text-neutral-900">{won(quote.inspectionCost)}</span>
+            </li>
+          )}
+        </ul>
+        <div className="flex items-baseline justify-between gap-3 py-2 text-sm">
+          <span className="text-neutral-500">합계</span>
+          <span className="text-base font-semibold text-neutral-900">{won(quote.totalAmount)}</span>
+        </div>
+      </div>
+      {quote.status === "PENDING" && (
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <Button disabled={pending} onClick={() => setAsking("approve")}>견적 승인</Button>
+          <Button variant="outline" disabled={pending} onClick={() => setAsking("reject")}>견적 거부</Button>
+        </div>
+      )}
+      {error !== "" && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {asking !== null && (
+        <ConfirmModal
+          title={asking === "approve" ? "견적 승인" : "견적 거부"}
+          message={
+            asking === "approve"
+              ? "견적을 승인하시겠습니까?"
+              : "견적을 거부하시겠습니까? 거부하면 점검비 결제로 넘어갑니다."
+          }
+          confirmLabel={asking === "approve" ? "승인" : "거부"}
+          onConfirm={() => void decide(asking)}
+          onClose={() => setAsking(null)}
+        />
+      )}
+    </div>
+  );
+}
+
 function StageRecords({ histories }: { histories: PortalStatusHistory[] }) {
   return (
     <ul className="mt-3 border-t border-neutral-100 pt-2">
@@ -319,7 +419,12 @@ function StageRecords({ histories }: { histories: PortalStatusHistory[] }) {
   );
 }
 
-function stageLines(stage: number, status: AsReceptionStatus, payment: PaymentSummary | null): string[] {
+function stageLines(
+  stage: number,
+  status: AsReceptionStatus,
+  quote: PortalQuote | null,
+  payment: PaymentSummary | null,
+): string[] {
   if (stage === 0) {
     return status === "RECEIVED" ? ["접수가 완료되었습니다.", "점검 전입니다."] : ["접수가 완료되었습니다."];
   }
@@ -333,8 +438,14 @@ function stageLines(stage: number, status: AsReceptionStatus, payment: PaymentSu
     return ["점검이 완료되었습니다."];
   }
   if (stage === 2) {
-    if (status === "AWAITING_QUOTE_APPROVAL") {
-      return ["견적 승인을 기다리고 있습니다.", "수리 전입니다."];
+    if (quote?.status === "APPROVED") {
+      return ["견적을 승인했습니다."];
+    }
+    if (quote?.status === "REJECTED") {
+      return ["견적을 거부했습니다."];
+    }
+    if (status === "AWAITING_QUOTE_APPROVAL" || quote?.status === "PENDING") {
+      return ["견적 승인을 기다리고 있습니다."];
     }
     return ["견적 단계가 완료되었습니다."];
   }
@@ -411,6 +522,7 @@ function WaitingDeposit({
   onRefresh: () => void;
 }) {
   const [pending, setPending] = useState(false);
+  const [asking, setAsking] = useState(false);
   const [error, setError] = useState("");
   const pendingRef = useRef(false);
   const account = payment.virtualAccount ?? null;
@@ -419,9 +531,7 @@ function WaitingDeposit({
     if (pendingRef.current) {
       return;
     }
-    if (!window.confirm("발급된 가상계좌를 취소하시겠습니까?")) {
-      return;
-    }
+    setAsking(false);
     pendingRef.current = true;
     setError("");
     setPending(true);
@@ -442,10 +552,20 @@ function WaitingDeposit({
         <Field label="계좌번호" value={account?.accountNumber ?? null} />
         <Field label="입금 기한" value={formatDateTime(account?.dueAt)} />
       </dl>
-      <Button className="mt-4 w-full" variant="outline" disabled={pending} onClick={() => void cancelAccount()}>
+      <Button className="mt-4 w-full" variant="outline" disabled={pending} onClick={() => setAsking(true)}>
         가상계좌 취소
       </Button>
       {error !== "" && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {asking && (
+        <ConfirmModal
+          title="가상계좌 취소"
+          message="발급된 가상계좌를 취소하시겠습니까?"
+          confirmLabel="가상계좌 취소"
+          cancelLabel="닫기"
+          onConfirm={() => void cancelAccount()}
+          onClose={() => setAsking(false)}
+        />
+      )}
     </section>
   );
 }

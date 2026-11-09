@@ -7,9 +7,10 @@ interface ModalProps {
   onClose: () => void;
   children: ReactNode;
   wide?: boolean;
+  compact?: boolean;
 }
 
-export function Modal({ title, onClose, children, wide = false }: ModalProps) {
+export function Modal({ title, onClose, children, wide = false, compact = false }: ModalProps) {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -22,7 +23,10 @@ export function Modal({ title, onClose, children, wide = false }: ModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-neutral-900/40 p-4"
+      className={cn(
+        "fixed inset-0 z-50 flex justify-center overflow-y-auto bg-neutral-900/40 p-4",
+        compact ? "items-center" : "items-start",
+      )}
       role="presentation"
       onClick={onClose}
     >
@@ -31,8 +35,9 @@ export function Modal({ title, onClose, children, wide = false }: ModalProps) {
         aria-modal="true"
         aria-label={title}
         className={cn(
-          "my-8 w-full rounded-2xl bg-white p-6 shadow-xl",
-          wide ? "max-w-5xl" : "max-w-lg",
+          "w-full rounded-2xl bg-white p-6 shadow-xl",
+          compact ? "my-auto" : "my-8",
+          wide ? "max-w-5xl" : compact ? "max-w-md" : "max-w-lg",
         )}
         onClick={(event) => event.stopPropagation()}
       >
