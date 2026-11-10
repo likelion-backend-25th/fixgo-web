@@ -5,6 +5,7 @@ const API_BASE = "/api/v1/as/repairs";
 const WORK_API_BASE = "/api/v1/as/repair-works";
 const PART_USAGE_API_BASE = "/api/v1/as/repair-part-usages";
 const PRESET_API_BASE = "/api/v1/as/repair-presets";
+const SYMPTOM_PRESET_API_BASE = "/api/v1/as/symptom-presets";
 
 // ==============================
 // Types
@@ -20,7 +21,7 @@ export type RepairStatus =
   | "REPAIRING"
   | "COMPLETED";
 
-export type WarrantyResult = "FREE" | "PAID";
+  export type WarrantyResult = "FREE" | "PAID" | "UNDECIDED";
 
 export interface RepairDetail {
   id: number;
@@ -63,6 +64,7 @@ export interface RepairWork {
   updatedAt: string;
   createdBy: number | null;
   updatedBy: number | null;
+  estimatedMinutes: number;
 }
 
 export interface RepairPartUsageRequest {
@@ -82,16 +84,19 @@ export interface RepairPartUsage {
   createdAt: string;
 }
 
+
 export interface RepairPreset {
-  id: number;
-  name: string;
-  description: string | null;
-  createdAt: string;
-  updatedAt: string;
-  createdBy: number | null;
-  updatedBy: number | null;
-  basePrice: number;
-}
+    id: number;
+    name: string;
+    description: string | null;
+    createdAt: string;
+    updatedAt: string;
+    createdBy: number | null;
+    updatedBy: number | null;
+    basePrice: number;
+    estimatedMinutes: number;
+  }
+
 
 // ==============================
 // Labels
@@ -119,8 +124,15 @@ export function repairStatusLabel(status: RepairStatus): string {
 }
 
 export function warrantyResultLabel(result: WarrantyResult): string {
-  return result === "FREE" ? "무상 수리" : "유상 수리";
-}
+    const labels: Record<WarrantyResult, string> = {
+      FREE: "무상 수리",
+      PAID: "유상 수리",
+      UNDECIDED: "미판정",
+    };
+  
+    return labels[result];
+  }
+
 
 // ==============================
 // Error Handling
@@ -328,6 +340,73 @@ export async function searchRepairPresets(
   );
 }
 
+export interface RepairPresetPartRequest {
+    partId: number;
+    quantity: number;
+  }
+  
+  export interface RepairPresetRequest {
+    name: string;
+    description?: string;
+    parts?: RepairPresetPartRequest[];
+    symptomIds?: number[];
+  }
+  
+  export interface RepairPresetUpdate {
+    name: string;
+    description?: string;
+    parts?: RepairPresetPartRequest[];
+  }
+
+  // 수리 프리셋 등록
+export async function createRepairPreset(
+    request: RepairPresetRequest,
+  ): Promise<RepairPreset> {
+    const response = await apiFetch(PRESET_API_BASE, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+    });
+  
+    return handleResponse<RepairPreset>(
+      response,
+      "수리 프리셋 등록에 실패했습니다.",
+    );
+  }
+
+  // 수리 프리셋 수정
+export async function updateRepairPreset(
+    id: number,
+    request: RepairPresetUpdate,
+  ): Promise<RepairPreset> {
+    const response = await apiFetch(`${PRESET_API_BASE}/${id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+    });
+  
+    return handleResponse<RepairPreset>(
+      response,
+      "수리 프리셋 수정에 실패했습니다.",
+    );
+  }
+
+  // 수리 프리셋 삭제
+export async function deleteRepairPreset(id: number): Promise<void> {
+    const response = await apiFetch(`${PRESET_API_BASE}/${id}`, {
+      method: "DELETE",
+    });
+  
+    await handleResponse<void>(
+      response,
+      "수리 프리셋 삭제에 실패했습니다.",
+    );
+  }
+
 // ==============================
 // Repair Cost API
 // ==============================
@@ -447,3 +526,71 @@ export async function fetchMyRepairDetail(
     "내 담당 수리 상세 정보를 불러오지 못했습니다.",
   );
 }
+
+
+// ==============================
+// Symptom Preset API
+// ==============================
+
+export interface SymptomPreset {
+    id: number;
+    productCategory: string;
+    name: string;
+  }
+  
+  // 고장 증상 프리셋 전체 조회
+  export async function fetchSymptomPresets(
+    signal?: AbortSignal,
+  ): Promise<SymptomPreset[]> {
+    const response = await apiFetch(SYMPTOM_PRESET_API_BASE, {
+      method: "GET",
+      signal,
+    });
+  
+    return handleResponse<SymptomPreset[]>(
+      response,
+      "고장 증상 프리셋 목록을 불러오지 못했습니다.",
+    );
+  }
+  
+  // 증상명/제품군으로 고장 증상 프리셋 검색
+  // 백엔드 @RequestParam String name에 맞춰 name으로 전달
+  export async function searchSymptomPresets(
+    keyword: string,
+    signal?: AbortSignal,
+  ): Promise<SymptomPreset[]> {
+    const params = new URLSearchParams({ name: keyword });
+  
+    const response = await apiFetch(
+      `${SYMPTOM_PRESET_API_BASE}/search?${params.toString()}`,
+      {
+        method: "GET",
+        signal,
+      },
+    );
+  
+    return handleResponse<SymptomPreset[]>(
+      response,
+      "고장 증상 프리셋 검색에 실패했습니다.",
+    );
+  }
+  
+  // 선택한 증상에 연결된 수리 프리셋 조회
+  export async function fetchRepairPresetsBySymptom(
+    symptomId: number,
+    signal?: AbortSignal,
+  ): Promise<RepairPreset[]> {
+    const response = await apiFetch(
+      `${SYMPTOM_PRESET_API_BASE}/${symptomId}/repair-presets`,
+      {
+        method: "GET",
+        signal,
+      },
+    );
+  
+    return handleResponse<RepairPreset[]>(
+      response,
+      "해당 증상의 수리 프리셋을 불러오지 못했습니다.",
+    );
+  }
+  
