@@ -101,6 +101,11 @@ function MemberDetails({ id }: { id: number }) {
             onRole={(role) => void applyChange(() => updateMemberRole(record.email, role), "직원 역할을 변경했습니다.")}
           />
         )}
+        {isAdmin && record.role === "ROLE_TECHNICIAN" && !deleted && (
+          <p className="mt-3 text-sm text-neutral-500">
+            완료되지 않은 A/S가 있으면 역할을 바꾸거나 비활성화·삭제할 수 없습니다. 점검을 시작하지 않은 접수도 포함됩니다.
+          </p>
+        )}
       </Panel>
       <AssignedReceptions memberId={id} />
       {editing && (

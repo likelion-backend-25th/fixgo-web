@@ -143,9 +143,9 @@ function InspectionForm({
       <AsSummary record={record} />
       <ProgressTabs receptionId={record.id} current="inspection" />
       {diagnosing ? (
-        <Notice>점검 내용을 저장하면 견적 승인 대기로 바뀌고, 이 화면에 그대로 남습니다.</Notice>
+        <Notice>유상으로 저장하면 견적 승인 대기가 됩니다. 무상은 0원으로 확정되고 고객 승인 없이 수리 대기로 넘어갑니다.</Notice>
       ) : (
-        <Notice>{inspectionResultMessage(repair.status)}</Notice>
+        <Notice>{inspectionResultMessage(repair)}</Notice>
       )}
       <section>
         <p className="mb-2 text-sm font-medium">점검 사진</p>
@@ -256,15 +256,18 @@ function InspectionForm({
   );
 }
 
-function inspectionResultMessage(status: ReceptionRepair["status"]): string {
-  if (status === "REQUESTED") {
+function inspectionResultMessage(repair: ReceptionRepair): string {
+  if (repair.status === "REQUESTED") {
     return "견적 승인 대기입니다. 고객이 승인하면 수리 페이지에서 수리를 시작할 수 있습니다.";
   }
-  if (status === "APPROVED" || status === "REPAIRING" || status === "COMPLETED") {
+  if (repair.status === "APPROVED" && repair.warrantyResult === "FREE") {
+    return "무상 수리로 확정되었습니다. 수리 페이지에서 수리를 시작합니다.";
+  }
+  if (repair.status === "APPROVED" || repair.status === "REPAIRING" || repair.status === "COMPLETED") {
     return "고객이 견적을 승인했습니다. 수리 페이지에서 진행합니다.";
   }
-  if (status === "REJECTED") {
-    return "고객이 견적을 거부했습니다.";
+  if (repair.status === "REJECTED") {
+    return "고객이 견적을 거부했습니다. 점검비 결제 후 배송 또는 수령으로 넘어갑니다.";
   }
   return "점검이 완료된 건입니다.";
 }

@@ -119,6 +119,37 @@ export interface AsStatusHistory {
   createdAt: string;
 }
 
+export interface StatusHistoryListItem {
+  id: number;
+  receptionId: number;
+  receptionNumber: string;
+  customerName: string;
+  modelName: string | null;
+  fromStatus: string | null;
+  toStatus: string;
+  reason: string | null;
+  changedBy: string | null;
+  createdAt: string;
+}
+
+export interface TechnicianHistoryListItem {
+  id: number;
+  receptionId: number;
+  receptionNumber: string;
+  customerName: string;
+  modelName: string | null;
+  previousTechnicianName: string | null;
+  newTechnicianName: string | null;
+  reason: string | null;
+  changedBy: string | null;
+  createdAt: string;
+}
+
+export interface HistoryListResult<T> {
+  items: T[];
+  totalPages: number;
+}
+
 export interface AssignmentMember {
   id: number;
   name: string;
@@ -177,6 +208,26 @@ export interface TechnicianSummary {
   name: string;
   email: string;
   status: string;
+}
+
+export const TECHNICIAN_SORTS = [
+  "NAME",
+  "INSPECTION_WAITING_COUNT",
+  "REPAIR_IN_PROGRESS_COUNT",
+  "ESTIMATED_DURATION_MINUTES",
+] as const;
+
+export type TechnicianSort = (typeof TECHNICIAN_SORTS)[number];
+
+// 배정 가능한 활성 기사. 건수와 예상 시간은 접수·수리 기록으로 서버가 계산한다.
+export interface AssignableTechnician {
+  id: number;
+  name: string;
+  email: string;
+  status: string;
+  inspectionWaitingCount: number;
+  repairInProgressCount: number;
+  estimatedDurationMinutes: number | null;
 }
 
 export interface CustomerPortalLink {

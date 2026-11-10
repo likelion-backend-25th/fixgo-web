@@ -18,7 +18,7 @@ import { AsSummary } from "@/pages/as/AsSummary";
 import { ProgressTabs } from "@/pages/as/ProgressTabs";
 import { ReceptionProgress } from "@/pages/as/ReceptionProgress";
 import { useSessionStore } from "@/stores/useSessionStore";
-import type { AsReceptionDetail, ReceptionRepair } from "@/types/asReception";
+import type { AsReceptionDetail, AsReceptionStatus, ReceptionRepair } from "@/types/asReception";
 
 export function RepairPage() {
   return (
@@ -26,6 +26,22 @@ export function RepairPage() {
       <RepairView reception={reception} repair={repair} onStarted={reload} />
     )} />
   );
+}
+
+function completedReceptionMessage(status: AsReceptionStatus): string {
+  if (status === "AWAITING_PAYMENT") {
+    return "수리가 완료되어 결제 대기입니다.";
+  }
+  if (status === "AWAITING_SHIPMENT") {
+    return "수리가 완료되어 배송 대기입니다. 배송 관리에서 출고할 수 있습니다.";
+  }
+  if (status === "AWAITING_PICKUP") {
+    return "수리가 완료되어 수령 대기입니다. 배송 관리에서 방문 수령을 처리할 수 있습니다.";
+  }
+  if (status === "REPAIR_IN_PROGRESS") {
+    return "수리는 완료됐지만 접수가 수리 중에 남아 있습니다. 배송·수령 대기로 전환해 주세요.";
+  }
+  return "수리가 완료된 건입니다.";
 }
 
 function RepairView({
@@ -153,8 +169,13 @@ function RepairView({
               </div>
 
               <div>
-                <dt className="text-neutral-500">담당 기사 ID</dt>
-                <dd className="mt-1 font-medium">{detail.technicianId}</dd>
+                <dt className="text-neutral-500">담당 기사</dt>
+                <dd className="mt-1 font-medium">
+                  {reception.technician?.name ?? "-"}
+                  {reception.technician?.id !== detail.technicianId && (
+                    <span className="text-red-600"> (수리 기록 #{detail.technicianId})</span>
+                  )}
+                </dd>
               </div>
 
               <div>
@@ -203,7 +224,11 @@ function RepairView({
 
           {approved && role === "TECHNICIAN" && (
             <div className="flex items-center justify-between gap-3">
-              <Notice>고객이 견적을 승인했습니다. 수리를 시작하면 수리 중으로 바뀝니다.</Notice>
+              <Notice>
+                {detail.warrantyResult === "FREE"
+                  ? "무상 수리로 확정되어 수리 대기입니다. 수리를 시작하면 수리 중으로 바뀝니다."
+                  : "고객이 견적을 승인했습니다. 수리를 시작하면 수리 중으로 바뀝니다."}
+              </Notice>
               <Button disabled={pending} onClick={() => void runRepairAction(startRepair)}>
                 {pending ? "수리 시작 중…" : "수리 시작"}
               </Button>
@@ -219,7 +244,7 @@ function RepairView({
               {pending ? "처리 중…" : needsReturnRecovery ? "배송·수령 대기로 전환" : "수리 완료"}
             </Button>
           )}
-          {completed && <Notice>수리가 완료된 건입니다.</Notice>}
+          {completed && <Notice>{completedReceptionMessage(reception.status)}</Notice>}
 
           {agreed && (
             <section className="space-y-4">

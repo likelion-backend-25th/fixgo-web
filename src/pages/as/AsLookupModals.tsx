@@ -5,10 +5,10 @@ import { TextField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Panel";
 import { isAbortError } from "@/lib/apiClient";
-import { categoryLabel, searchCustomers, searchProductsBySerial, searchTechnicians } from "@/lib/asReceptionApi";
-import { formatYearMonthDay } from "@/lib/format";
+import { categoryLabel, fetchAssignableTechnicians, searchCustomers, searchProductsBySerial } from "@/lib/asReceptionApi";
+import { formatDurationMinutes } from "@/lib/format";
 import { loadDaumPostcode, selectedAddress } from "@/lib/daumPostcode";
-import type { CustomerSummary, ProductSummary, TechnicianSummary } from "@/types/asReception";
+import type { AssignableTechnician, CustomerSummary, ProductSummary, TechnicianSort } from "@/types/asReception";
 
 export type LookupKind = "customer" | "serial" | "tech" | "post" | null;
 
@@ -148,7 +148,6 @@ function SerialLookup({ customerId, onClose, onApply }: Pick<AsLookupModalsProps
     { key: "serial", header: "시리얼번호", render: (row) => row.serialNumber },
     { key: "group", header: "제품군", render: (row) => categoryLabel(row.category) },
     { key: "model", header: "모델명", render: (row) => row.modelName },
-    { key: "manufacturedAt", header: "생산일", render: (row) => formatYearMonthDay(row.manufacturedAt) },
   ];
 
   useEffect(() => {
@@ -222,16 +221,47 @@ function SerialLookup({ customerId, onClose, onApply }: Pick<AsLookupModalsProps
   );
 }
 
+type TechnicianSortKey = "name" | "inspectionWaitingCount" | "repairInProgressCount" | "estimatedDurationMinutes";
+
+function technicianSortBy(key: TechnicianSortKey): TechnicianSort {
+  if (key === "inspectionWaitingCount") {
+    return "INSPECTION_WAITING_COUNT";
+  }
+  if (key === "repairInProgressCount") {
+    return "REPAIR_IN_PROGRESS_COUNT";
+  }
+  if (key === "estimatedDurationMinutes") {
+    return "ESTIMATED_DURATION_MINUTES";
+  }
+  return "NAME";
+}
+
+function isTechnicianSortKey(value: string): value is TechnicianSortKey {
+  return value === "name"
+    || value === "inspectionWaitingCount"
+    || value === "repairInProgressCount"
+    || value === "estimatedDurationMinutes";
+}
+
 function TechnicianLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClose" | "onApply">) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<number | null>(null);
-  const [rows, setRows] = useState<TechnicianSummary[]>([]);
+  const [rows, setRows] = useState<AssignableTechnician[]>([]);
+  const [sortKey, setSortKey] = useState<TechnicianSortKey>("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const columns: Column<TechnicianSummary>[] = [
-    { key: "name", header: "이름", render: (row) => row.name },
+  const columns: Column<AssignableTechnician>[] = [
+    { key: "name", header: "이름", sortable: true, render: (row) => row.name },
     { key: "email", header: "이메일", render: (row) => row.email },
-    { key: "status", header: "상태", render: (row) => (row.status === "ACTIVE" ? "근무" : "비활성") },
+    { key: "inspectionWaitingCount", header: "점검 대기", sortable: true, render: (row) => `${row.inspectionWaitingCount}건` },
+    { key: "repairInProgressCount", header: "수리 진행", sortable: true, render: (row) => `${row.repairInProgressCount}건` },
+    {
+      key: "estimatedDurationMinutes",
+      header: "예상 소요시간",
+      sortable: true,
+      render: (row) => formatDurationMinutes(row.estimatedDurationMinutes),
+    },
   ];
 
   useEffect(() => {
@@ -239,7 +269,7 @@ function TechnicianLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClo
     const timer = window.setTimeout(() => {
       setLoading(true);
       setError("");
-      searchTechnicians(query, controller.signal)
+      fetchAssignableTechnicians(query, technicianSortBy(sortKey), sortDir === "asc" ? "ASC" : "DESC", controller.signal)
         .then((items) => {
           if (!controller.signal.aborted) {
             setRows(items);
@@ -262,7 +292,19 @@ function TechnicianLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClo
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [query]);
+  }, [query, sortDir, sortKey]);
+
+  function onSort(key: string) {
+    if (!isTechnicianSortKey(key)) {
+      return;
+    }
+    if (sortKey === key) {
+      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDir(key === "name" ? "asc" : "desc");
+  }
 
   return (
     <Modal title="A/S 기사 목록" wide onClose={onClose}>
@@ -274,6 +316,9 @@ function TechnicianLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClo
         rowKey={(row) => String(row.id)}
         selectedKey={selected === null ? undefined : String(selected)}
         onRowClick={(row) => setSelected(row.id)}
+        sortKey={sortKey}
+        sortDir={sortDir}
+        onSort={onSort}
         emptyText={loading ? "기사 목록을 불러오는 중입니다." : "조회 결과가 없습니다."}
       />
       <div className="mt-4 flex justify-end gap-2">

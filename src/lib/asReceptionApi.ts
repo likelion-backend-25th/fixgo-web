@@ -11,6 +11,9 @@ import {
   type AsReceptionStatus,
   type AsStatusHistory,
   type AssignmentMember,
+  type HistoryListResult,
+  type StatusHistoryListItem,
+  type TechnicianHistoryListItem,
   type CreateReceptionInput,
   type CreateReceptionResult,
   type CustomerPortalLink,
@@ -27,7 +30,9 @@ import {
   type ReceptionProduct,
   type RepairStatus,
   type ReturnMethod,
+  type AssignableTechnician,
   type TechnicianAssignmentHistory,
+  type TechnicianSort,
   type TechnicianSummary,
   type UpdateReceptionInput,
 } from "@/types/asReception";
@@ -86,6 +91,11 @@ export function historyStatusLabel(status: string | null): string {
   if (isReceptionStatus(status)) {
     return receptionStatusLabel(status);
   }
+  if (status === "REQUESTED") return "수리 요청";
+  if (status === "APPROVED") return "수리 승인";
+  if (status === "REJECTED") return "수리 반려";
+  if (status === "DIAGNOSING") return "점검 중";
+  if (status === "REPAIRING") return "수리 중";
   return status;
 }
 
@@ -116,8 +126,10 @@ export async function fetchReceptions(
   params.set("size", String(query.size));
   params.set("sort", query.sort);
 
+  // 기사 화면은 전체 목록이 아니라 로그인한 기사에게 배정된 접수만 조회한다.
+  const path = mineOnly ? "/api/v1/as-receptions/my" : "/api/v1/as-receptions";
   const response = await apiFetch(
-    `/api/v1/as-receptions?${params.toString()}`,
+    `${path}?${params.toString()}`,
     { signal },
   );
 
@@ -268,6 +280,62 @@ export async function fetchReceptionHistory(
   }
 
   return body.map(parseHistory);
+}
+
+export async function fetchStatusHistories(
+  query: { keyword: string; toStatus: string | null; page: number; size: number },
+  signal: AbortSignal,
+): Promise<HistoryListResult<StatusHistoryListItem>> {
+  const params = historyParams(query.keyword, query.page, query.size);
+  if (query.toStatus !== null) {
+    params.set("toStatus", query.toStatus);
+  }
+  return readHistoryPage(
+    await apiFetch(`/api/v1/as-receptions/status-histories?${params.toString()}`, { signal }),
+    "상태 변경 이력을 불러오지 못했습니다.",
+    "상태 변경 이력 응답이 올바르지 않습니다.",
+    parseStatusHistoryItem,
+  );
+}
+
+export async function fetchTechnicianHistories(
+  query: { keyword: string; page: number; size: number },
+  signal: AbortSignal,
+): Promise<HistoryListResult<TechnicianHistoryListItem>> {
+  const params = historyParams(query.keyword, query.page, query.size);
+  return readHistoryPage(
+    await apiFetch(`/api/v1/as-receptions/technician-histories?${params.toString()}`, { signal }),
+    "기사 배정 이력을 불러오지 못했습니다.",
+    "기사 배정 이력 응답이 올바르지 않습니다.",
+    parseTechnicianHistoryItem,
+  );
+}
+
+function historyParams(keyword: string, page: number, size: number): URLSearchParams {
+  const params = new URLSearchParams({
+    page: String(page - 1),
+    size: String(size),
+  });
+  if (keyword.trim() !== "") {
+    params.set("keyword", keyword.trim());
+  }
+  return params;
+}
+
+async function readHistoryPage<T>(
+  response: Response,
+  fallback: string,
+  invalid: string,
+  parseItem: (value: unknown) => T,
+): Promise<HistoryListResult<T>> {
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, fallback));
+  }
+  const body = await readJson(response, invalid);
+  if (!isPage(body)) {
+    throw new Error(invalid);
+  }
+  return { items: body.content.map(parseItem), totalPages: body.totalPages };
 }
 
 export async function createReception(
@@ -558,6 +626,43 @@ export async function searchTechnicians(
   return body.content.map(parseTechnician);
 }
 
+export async function fetchAssignableTechnicians(
+  keyword: string,
+  sortBy: TechnicianSort,
+  direction: "ASC" | "DESC",
+  signal: AbortSignal,
+): Promise<AssignableTechnician[]> {
+  const items: AssignableTechnician[] = [];
+  let totalPages = 1;
+
+  for (let page = 0; page < totalPages && page < 20; page += 1) {
+    const params = new URLSearchParams({
+      sortBy,
+      direction,
+      page: String(page),
+      size: "50",
+    });
+    if (keyword.trim() !== "") {
+      params.set("keyword", keyword.trim());
+    }
+
+    const response = await apiFetch(`/api/v1/member/technicians?${params.toString()}`, { signal });
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response, "기사 목록을 불러오지 못했습니다."));
+    }
+
+    const body = await readJson(response, "기사 목록 응답이 올바르지 않습니다.");
+    if (!isPage(body)) {
+      throw new Error("기사 목록 응답이 올바르지 않습니다.");
+    }
+
+    items.push(...body.content.map(parseAssignableTechnician));
+    totalPages = body.totalPages;
+  }
+
+  return items;
+}
+
 // --------------------
 // Utility functions
 // --------------------
@@ -702,6 +807,66 @@ function parseHistory(value: unknown): AsStatusHistory {
     id: value.id,
     fromStatus: value.fromStatus,
     toStatus: value.toStatus,
+    reason: value.reason,
+    changedBy: value.changedBy,
+    createdAt: value.createdAt,
+  };
+}
+
+function parseStatusHistoryItem(value: unknown): StatusHistoryListItem {
+  if (
+    !isRecord(value)
+    || !isId(value.id)
+    || !isId(value.receptionId)
+    || typeof value.receptionNumber !== "string"
+    || typeof value.customerName !== "string"
+    || !isNullableString(value.modelName)
+    || !isNullableString(value.fromStatus)
+    || typeof value.toStatus !== "string"
+    || !isNullableString(value.reason)
+    || !isNullableString(value.changedBy)
+    || typeof value.createdAt !== "string"
+  ) {
+    throw new Error("상태 변경 이력 응답이 올바르지 않습니다.");
+  }
+  return {
+    id: value.id,
+    receptionId: value.receptionId,
+    receptionNumber: value.receptionNumber,
+    customerName: value.customerName,
+    modelName: value.modelName,
+    fromStatus: value.fromStatus,
+    toStatus: value.toStatus,
+    reason: value.reason,
+    changedBy: value.changedBy,
+    createdAt: value.createdAt,
+  };
+}
+
+function parseTechnicianHistoryItem(value: unknown): TechnicianHistoryListItem {
+  if (
+    !isRecord(value)
+    || !isId(value.id)
+    || !isId(value.receptionId)
+    || typeof value.receptionNumber !== "string"
+    || typeof value.customerName !== "string"
+    || !isNullableString(value.modelName)
+    || !isNullableString(value.previousTechnicianName)
+    || !isNullableString(value.newTechnicianName)
+    || !isNullableString(value.reason)
+    || !isNullableString(value.changedBy)
+    || typeof value.createdAt !== "string"
+  ) {
+    throw new Error("기사 배정 이력 응답이 올바르지 않습니다.");
+  }
+  return {
+    id: value.id,
+    receptionId: value.receptionId,
+    receptionNumber: value.receptionNumber,
+    customerName: value.customerName,
+    modelName: value.modelName,
+    previousTechnicianName: value.previousTechnicianName,
+    newTechnicianName: value.newTechnicianName,
     reason: value.reason,
     changedBy: value.changedBy,
     createdAt: value.createdAt,
@@ -968,6 +1133,39 @@ function parseRepairPart(value: unknown): RepairPartUsage {
     quantity: value.quantity,
     totalPrice: value.totalPrice,
   };
+}
+
+function parseAssignableTechnician(value: unknown): AssignableTechnician {
+  if (
+    !isRecord(value)
+    || !isId(value.technicianId)
+    || typeof value.name !== "string"
+    || typeof value.email !== "string"
+    || typeof value.status !== "string"
+    || !isCount(value.inspectionWaitingCount)
+    || !isCount(value.repairInProgressCount)
+    || !isMinutes(value.estimatedDurationMinutes)
+  ) {
+    throw new Error("기사 목록 응답이 올바르지 않습니다.");
+  }
+
+  return {
+    id: value.technicianId,
+    name: value.name,
+    email: value.email,
+    status: value.status,
+    inspectionWaitingCount: value.inspectionWaitingCount,
+    repairInProgressCount: value.repairInProgressCount,
+    estimatedDurationMinutes: value.estimatedDurationMinutes,
+  };
+}
+
+function isCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isMinutes(value: unknown): value is number | null {
+  return value === null || (typeof value === "number" && Number.isFinite(value) && value >= 0);
 }
 
 function parseTechnician(value: unknown): TechnicianSummary {

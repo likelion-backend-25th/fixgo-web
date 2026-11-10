@@ -228,6 +228,9 @@ function StatusPanel({
   return (
     <Panel title="접수 상태">
       <p className="text-sm">현재 상태 {receptionStatusLabel(detail.status)}</p>
+      <p className="mt-2 text-sm text-neutral-500">
+        점검 중이고 점검 기록이 있는 건만 보증 판정으로 바꿀 수 있습니다. 수리, 결제, 배송, 완료는 각 업무 화면에서 함께 처리됩니다.
+      </p>
       {canChange && detail.status === "INSPECTION" && (
         <div className="mt-3 flex flex-wrap items-end gap-2">
           <TextField className="w-72" value={reason} onChange={setReason} placeholder="변경 사유" />

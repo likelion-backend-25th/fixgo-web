@@ -3,10 +3,10 @@ import { Button } from "@/components/ui/Button";
 import { SelectBox, TextField } from "@/components/ui/Field";
 import { Notice, Panel } from "@/components/ui/Panel";
 import { isAbortError } from "@/lib/apiClient";
-import { fetchTechnicianHistory, reassignTechnician, searchTechnicians } from "@/lib/asReceptionApi";
-import { formatDateTime } from "@/lib/format";
+import { fetchAssignableTechnicians, fetchTechnicianHistory, reassignTechnician } from "@/lib/asReceptionApi";
+import { formatDateTime, formatDurationMinutes } from "@/lib/format";
 import { useSessionStore } from "@/stores/useSessionStore";
-import type { AsReceptionDetail, AsReceptionStatus, TechnicianAssignmentHistory, TechnicianSummary } from "@/types/asReception";
+import type { AsReceptionDetail, AsReceptionStatus, AssignableTechnician, TechnicianAssignmentHistory } from "@/types/asReception";
 
 const closedStatuses: readonly AsReceptionStatus[] = [
   "AWAITING_PAYMENT",
@@ -25,7 +25,7 @@ export function TechnicianAssignPanel({ detail, refreshKey, onReassigned }: Tech
   const role = useSessionStore((state) => state.user?.role);
   const canAssign = role === "ADMIN" || role === "RECEPTIONIST";
   const locked = closedStatuses.includes(detail.status);
-  const [technicians, setTechnicians] = useState<TechnicianSummary[]>([]);
+  const [technicians, setTechnicians] = useState<AssignableTechnician[]>([]);
   const [history, setHistory] = useState<TechnicianAssignmentHistory[]>([]);
   const [technicianId, setTechnicianId] = useState("");
   const [reason, setReason] = useState("");
@@ -43,14 +43,14 @@ export function TechnicianAssignPanel({ detail, refreshKey, onReassigned }: Tech
 
     // 재배정 가능 여부와 관계없이 이력은 항상 보여 준다.
     Promise.all([
-      searchTechnicians("", controller.signal),
+      fetchAssignableTechnicians("", "INSPECTION_WAITING_COUNT", "ASC", controller.signal),
       fetchTechnicianHistory(detail.id, controller.signal),
     ])
       .then(([nextTechnicians, nextHistory]) => {
         if (controller.signal.aborted) {
           return;
         }
-        setTechnicians(nextTechnicians.filter((item) => item.status === "ACTIVE"));
+        setTechnicians(nextTechnicians);
         setHistory(nextHistory);
       })
       .catch((cause: unknown) => {
@@ -116,7 +116,10 @@ export function TechnicianAssignPanel({ detail, refreshKey, onReassigned }: Tech
             onChange={setTechnicianId}
             options={[
               { value: "", label: "기사 선택" },
-              ...technicians.map((item) => ({ value: String(item.id), label: item.name })),
+              ...technicians.map((item) => ({
+                value: String(item.id),
+                label: `${item.name} · 점검 ${item.inspectionWaitingCount} · 수리 ${item.repairInProgressCount} · ${formatDurationMinutes(item.estimatedDurationMinutes)}`,
+              })),
             ]}
           />
           <TextField className="w-72" value={reason} onChange={setReason} placeholder="재배정 사유" />

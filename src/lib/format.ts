@@ -29,6 +29,22 @@ export function formatYearMonthDay(value: string | null): string {
   return `${digits.slice(0, 4)}/${digits.slice(4, 6)}/${digits.slice(6, 8)}`;
 }
 
+export function formatDurationMinutes(value: number | null): string {
+  if (value === null || !Number.isFinite(value) || value < 0) {
+    return "-";
+  }
+  const total = Math.round(value);
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  if (hours === 0) {
+    return `${minutes}분`;
+  }
+  if (minutes === 0) {
+    return `${hours}시간`;
+  }
+  return `${hours}시간 ${minutes}분`;
+}
+
 export function includesText(source: string, query: string): boolean {
   const needle = query.trim().toLocaleLowerCase();
   if (needle === "") {

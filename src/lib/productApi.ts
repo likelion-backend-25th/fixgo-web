@@ -31,6 +31,7 @@ function parseProductSummary(value: unknown): ProductSummary {
     || typeof value.modelName !== "string"
     || typeof value.name !== "string"
     || !isCategory(value.category)
+    || !isNullableString(value.manufacturedAt)
     || !isNullableString(value.purchasedAt)
   ) {
     throw new Error("제품 응답이 올바르지 않습니다.");
@@ -41,6 +42,7 @@ function parseProductSummary(value: unknown): ProductSummary {
     modelName: value.modelName,
     name: value.name,
     category: value.category,
+    manufacturedAt: value.manufacturedAt,
     purchasedAt: value.purchasedAt,
   };
 }
