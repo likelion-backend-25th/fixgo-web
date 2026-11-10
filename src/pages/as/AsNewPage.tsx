@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/Button";
-import { TextArea, TextField } from "@/components/ui/Field";
+import { DateField, TextArea, TextField } from "@/components/ui/Field";
 import { Notice, Panel } from "@/components/ui/Panel";
 import { categoryLabel, createCustomer, createReception, searchCustomers, searchProductBySerial, searchTechnicians } from "@/lib/asReceptionApi";
 import { CustomerNameField } from "@/pages/as/CustomerNameField";
@@ -207,12 +207,7 @@ export function AsNewPage() {
           </div>
           <TextField label="제품군" value={form.productGroup} onChange={(productGroup) => patch({ productGroup })} readOnly />
           <TextField label="모델명" value={form.modelName} onChange={(modelName) => patch({ modelName })} readOnly />
-          <TextField label="구매일" value={form.purchasedAt} onChange={(purchasedAt) => patch({ purchasedAt })} />
-          <div className="flex items-end">
-            <Button variant="outline" onClick={() => setLookup("ai")}>
-              이미지 기반 자동 입력
-            </Button>
-          </div>
+          <DateField label="구매일" value={form.purchasedAt} onChange={(purchasedAt) => patch({ purchasedAt })} />
         </div>
       </Panel>
 

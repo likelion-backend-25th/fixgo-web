@@ -5,7 +5,7 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { SelectBox, TextField } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Panel";
 import { Pagination } from "@/components/ui/Pagination";
-import { readNotice } from "@/lib/guards";
+import { compareText, readNotice } from "@/lib/guards";
 import { formatDateTime, won } from "@/lib/format";
 import { isAbortError } from "@/lib/apiClient";
 import {
@@ -25,6 +25,7 @@ import { useSessionStore } from "@/stores/useSessionStore";
 import {
   AS_RECEPTION_STATUSES,
   type AsReceptionListItem,
+  type AsReceptionListQuery,
   type AsReceptionStatus,
   type TechnicianSummary,
 } from "@/types/asReception";
@@ -349,7 +350,7 @@ function TechnicianAsListPage() {
 // ==============================
 
 type StatusFilter = "ALL" | AsReceptionStatus;
-type SortKey = "receptionNumber" | "createdAt" | "status" | "customerName";
+type SortKey = "receptionNumber" | "createdAt" | "status" | "customerName" | "modelName";
 
 const statusOptions: { value: StatusFilter; label: string }[] = [
   { value: "ALL", label: "상태 전체" },
@@ -381,6 +382,7 @@ function ReceptionAsListPage() {
   const filterKey = `${applied.keyword}:${applied.status}:${technicianId ?? ""}:${showAssignedOnly}:${sortKey}:${sortDir}`;
   const [seenFilter, setSeenFilter] = useState(filterKey);
   const [rows, setRows] = useState<AsReceptionListItem[]>([]);
+  const [modelSorted, setModelSorted] = useState<AsReceptionListItem[] | null>(null);
   const [pageCount, setPageCount] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -425,35 +427,53 @@ function ReceptionAsListPage() {
     setLoading(true);
     setError("");
     setRows([]);
+    if (sortKey !== "modelName") {
+      setModelSorted(null);
+    }
 
-    // 체크를 켰을 때만 기사 전용 목록 API를 사용한다.
-    fetchReceptions(
-      {
-        keyword: applied.keyword,
-        status: applied.status === "ALL" ? null : applied.status,
-        technicianId:
-          typeof technicianId === "number" && Number.isInteger(technicianId)
-            ? technicianId
-            : null,
-        page,
-        size: PAGE_SIZE,
-        sort: `${sortField(sortKey)},${sortDir}`,
-      },
-      controller.signal,
-      showAssignedOnly,
-    )
+    const listQuery = {
+      keyword: applied.keyword,
+      status: applied.status === "ALL" ? null : applied.status,
+      technicianId:
+        typeof technicianId === "number" && Number.isInteger(technicianId)
+          ? technicianId
+          : null,
+    };
+
+    // 모델 정렬은 목록 API가 지원하지 않아, 조건에 맞는 접수를 모아 화면에서 정렬한다.
+    const request = sortKey === "modelName"
+      ? fetchReceptionsSortedByModel(listQuery, sortDir, controller.signal, showAssignedOnly)
+      : fetchReceptions(
+          {
+            ...listQuery,
+            page,
+            size: PAGE_SIZE,
+            sort: `${sortField(sortKey)},${sortDir}`,
+          },
+          controller.signal,
+          showAssignedOnly,
+        ).then((result) => ({ items: result.items, pageCount: Math.max(1, result.totalPages) }));
+
+    request
       .then((result) => {
         if (controller.signal.aborted) {
           return;
         }
+        if (sortKey === "modelName") {
+          setModelSorted(result.items);
+          setPageCount(result.pageCount);
+          return;
+        }
+        setModelSorted(null);
         setRows(result.items);
-        setPageCount(Math.max(1, result.totalPages));
+        setPageCount(result.pageCount);
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted || isAbortError(cause)) {
           return;
         }
         setRows([]);
+        setModelSorted(null);
         setPageCount(1);
         setError(cause instanceof Error ? cause.message : "A/S 목록을 불러오지 못했습니다.");
       })
@@ -526,7 +546,7 @@ function ReceptionAsListPage() {
       </div>
       <DataTable
         columns={deskColumns}
-        rows={rows}
+        rows={visibleRows(rows, modelSorted, page)}
         rowKey={(row) => String(row.id)}
         sortKey={sortKey}
         sortDir={sortDir}
@@ -539,11 +559,52 @@ function ReceptionAsListPage() {
   );
 }
 
-function sortField(key: SortKey): string {
+function sortField(key: Exclude<SortKey, "modelName">): string {
   if (key === "customerName") {
     return "customer.name";
   }
   return key;
+}
+
+function visibleRows(
+  rows: AsReceptionListItem[],
+  modelSorted: AsReceptionListItem[] | null,
+  page: number,
+): AsReceptionListItem[] {
+  if (modelSorted === null) {
+    return rows;
+  }
+  const start = (page - 1) * PAGE_SIZE;
+  return modelSorted.slice(start, start + PAGE_SIZE);
+}
+
+async function fetchReceptionsSortedByModel(
+  query: Pick<AsReceptionListQuery, "keyword" | "status" | "technicianId">,
+  sortDir: "asc" | "desc",
+  signal: AbortSignal,
+  mineOnly: boolean,
+): Promise<{ items: AsReceptionListItem[]; pageCount: number }> {
+  const size = 100;
+  const first = await fetchReceptions(
+    { ...query, page: 1, size, sort: "createdAt,desc" },
+    signal,
+    mineOnly,
+  );
+  const items = [...first.items];
+  for (let page = 2; page <= first.totalPages; page += 1) {
+    const next = await fetchReceptions(
+      { ...query, page, size, sort: "createdAt,desc" },
+      signal,
+      mineOnly,
+    );
+    items.push(...next.items);
+  }
+  const direction = sortDir === "asc" ? 1 : -1;
+  items.sort((left, right) => compareText(left.modelName ?? "", right.modelName ?? "") * direction);
+  return {
+    items,
+    pageCount: Math.max(1, Math.ceil(items.length / PAGE_SIZE)),
+  };
 }
 
 function tableMessage(loading: boolean, error: string): string {
@@ -565,7 +626,8 @@ function isSortKey(value: string): value is SortKey {
     value === "receptionNumber" ||
     value === "createdAt" ||
     value === "status" ||
-    value === "customerName"
+    value === "customerName" ||
+    value === "modelName"
   );
 }
 
@@ -580,7 +642,7 @@ const deskColumns: Column<AsReceptionListItem>[] = [
   { key: "receptionNumber", header: "접수번호", sortable: true, render: (row) => row.receptionNumber },
   { key: "customerName", header: "고객", sortable: true, render: (row) => row.customerName },
   { key: "phone", header: "연락처", render: (row) => row.customerPhone },
-  { key: "modelName", header: "모델", render: (row) => row.modelName ?? "-" },
+  { key: "modelName", header: "모델", sortable: true, render: (row) => row.modelName ?? "-" },
   { key: "status", header: "상태", sortable: true, render: (row) => statusText(row) },
   { key: "technician", header: "담당", render: (row) => row.technicianName ?? "-" },
   { key: "createdAt", header: "접수일", sortable: true, render: (row) => formatDateTime(row.createdAt) },

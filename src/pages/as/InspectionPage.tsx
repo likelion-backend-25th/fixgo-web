@@ -4,7 +4,7 @@ import { TextArea } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Panel";
 import { startMyInspection } from "@/lib/asReceptionApi";
 import { calculateRepairCost, confirmRepairCost, createRepairWork, updateRepair } from "@/lib/repair";
-import { formatDate, won } from "@/lib/format";
+import { formatYearMonthDay, won } from "@/lib/format";
 import { ReceptionProgress } from "@/pages/as/ReceptionProgress";
 import type { AsReceptionDetail, ReceptionRepair } from "@/types/asReception";
 import { AsSummary } from "@/pages/as/AsSummary";
@@ -181,7 +181,7 @@ function InspectionForm({
       <section className="rounded-xl border border-neutral-200 bg-white p-4 text-sm shadow-sm">
         <p className="mb-3 font-medium">보증 판정</p>
         <div className="grid gap-3 sm:grid-cols-3">
-          <p>구매일 {formatDate(record.product.purchasedAt)}</p>
+          <p>구매일 {formatYearMonthDay(record.product.purchasedAt)}</p>
           <p>보증 판정 미확인</p>
         </div>
       </section>

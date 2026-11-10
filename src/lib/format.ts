@@ -18,6 +18,17 @@ export function formatDate(value: string | null): string {
   return value.slice(0, 10);
 }
 
+export function formatYearMonthDay(value: string | null): string {
+  if (value === null || value.trim() === "") {
+    return "-";
+  }
+  const digits = value.replace(/\D/g, "");
+  if (digits.length < 8) {
+    return value;
+  }
+  return `${digits.slice(0, 4)}/${digits.slice(4, 6)}/${digits.slice(6, 8)}`;
+}
+
 export function includesText(source: string, query: string): boolean {
   const needle = query.trim().toLocaleLowerCase();
   if (needle === "") {

@@ -332,36 +332,35 @@ export async function searchRepairPresets(
 // Repair Cost API
 // ==============================
 
+export interface RepairCostResponse {
+  laborRate: number;
+  inspectionCost: number;
+  finalAmount: number;
+}
+
 // 최종 수리비 계산
-export async function calculateRepairCost(
-    repairId: number,
-  ): Promise<RepairCostResponse> {
-    const response = await apiFetch(`${API_BASE}/${repairId}/cost`, {
-      method: "POST",
-    });
-  
-    return handleResponse<RepairCostResponse>(
-      response,
-      "수리 비용 계산에 실패했습니다.",
-    );
-  }
-  
-  // 수리 비용 확정
-  export async function confirmRepairCost(
-    repairId: number,
-  ): Promise<{ message: string }> {
-    const response = await apiFetch(
-      `${API_BASE}/${repairId}/cost/confirm`,
-      {
-        method: "POST",
-      },
-    );
-  
-    return handleResponse<{ message: string }>(
-      response,
-      "수리 비용 확정에 실패했습니다.",
-    );
-  }
+export async function calculateRepairCost(repairId: number): Promise<RepairCostResponse> {
+  const response = await apiFetch(`${API_BASE}/${repairId}/cost`, {
+    method: "POST",
+  });
+
+  return handleResponse<RepairCostResponse>(
+    response,
+    "수리 비용 계산에 실패했습니다.",
+  );
+}
+
+// 수리 비용 확정
+export async function confirmRepairCost(repairId: number): Promise<{ message: string }> {
+  const response = await apiFetch(`${API_BASE}/${repairId}/cost/confirm`, {
+    method: "POST",
+  });
+
+  return handleResponse<{ message: string }>(
+    response,
+    "수리 비용 확정에 실패했습니다.",
+  );
+}
 
 export interface RepairUpdateRequest {
   asReceptionId: number;
@@ -398,54 +397,44 @@ export async function startRepair(repairId: number): Promise<void> {
 }
 
 
-// repair.ts
 export interface RepairListItem {
-    id: number;
-    asReceptionId: number;
-    technicianId: number;
-    diagnosis: string | null;
-    workNote: string | null;
-    repairDecision: RepairDecision | null;
-    warrantyResult: WarrantyResult;
-    finalAmount: number;
-    status: RepairStatus;
-    createdAt: string;
-  }
-  
-  // 본인에게 배정된 수리 목록 (기사 전용)
-  export async function fetchMyRepairs(
-    signal?: AbortSignal,
-  ): Promise<RepairListItem[]> {
-    const response = await apiFetch(`${API_BASE}/my`, {
-      method: "GET",
-      signal,
-    });
-  
-    return handleResponse<RepairListItem[]>(
-      response,
-      "내 담당 A/S 목록을 불러오지 못했습니다.",
-    );
-  }
+  id: number;
+  asReceptionId: number;
+  technicianId: number;
+  diagnosis: string | null;
+  workNote: string | null;
+  repairDecision: RepairDecision | null;
+  warrantyResult: WarrantyResult;
+  finalAmount: number;
+  status: RepairStatus;
+  createdAt: string;
+}
 
+// 본인에게 배정된 수리 목록 (기사 전용)
+export async function fetchMyRepairs(signal?: AbortSignal): Promise<RepairListItem[]> {
+  const response = await apiFetch(`${API_BASE}/my`, {
+    method: "GET",
+    signal,
+  });
+
+  return handleResponse<RepairListItem[]>(
+    response,
+    "내 담당 A/S 목록을 불러오지 못했습니다.",
+  );
+}
 
 // 기사 본인에게 배정된 수리 상세 조회
 export async function fetchMyRepairDetail(
-    repairId: number,
-    signal?: AbortSignal,
-  ): Promise<RepairDetail> {
-    const response = await apiFetch(`${API_BASE}/my/${repairId}`, {
-      method: "GET",
-      signal,
-    });
-  
-    return handleResponse<RepairDetail>(
-      response,
-      "내 담당 수리 상세 정보를 불러오지 못했습니다.",
-    );
-  }
-  
-  export interface RepairCostResponse {
-    laborRate: number;
-    inspectionCost: number;
-    finalAmount: number;
-  }
+  repairId: number,
+  signal?: AbortSignal,
+): Promise<RepairDetail> {
+  const response = await apiFetch(`${API_BASE}/my/${repairId}`, {
+    method: "GET",
+    signal,
+  });
+
+  return handleResponse<RepairDetail>(
+    response,
+    "내 담당 수리 상세 정보를 불러오지 못했습니다.",
+  );
+}

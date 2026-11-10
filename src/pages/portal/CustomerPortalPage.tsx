@@ -226,7 +226,7 @@ function PortalBody({
       </section>
 
       <section className="mt-5">
-        <p className="text-sm font-semibold text-neutral-900">{selected === current ? "지금 단계" : "이전 단계"}</p>
+        <p className="text-sm font-semibold text-neutral-900">{selected === current ? "현재 단계" : "이전 단계"}</p>
         <div className="mt-2 rounded-lg border border-neutral-300 px-3 py-3">
           <p className="text-sm font-semibold text-neutral-900">{STEPS[selected]}</p>
           {stageLines(selected, reception.status, quote, payment).map((line) => (

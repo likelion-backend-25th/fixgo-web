@@ -17,7 +17,7 @@ import {
   receptionStatusLabel,
   returnMethodLabel,
 } from "@/lib/asReceptionApi";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDateTime, formatYearMonthDay } from "@/lib/format";
 import { readNotice } from "@/lib/guards";
 import { useHeadingMeta } from "@/layouts/RootLayout";
 import { useSessionStore } from "@/stores/useSessionStore";
@@ -114,7 +114,7 @@ export function AsDetailPage() {
               <Field label="제품군" value={product === null ? "-" : categoryLabel(product.category)} />
               <Field label="모델명" value={product?.modelName ?? "-"} />
               <Field label="시리얼번호" value={detail.product.serialNumber} />
-              <Field label="구매일" value={formatDate(product?.purchasedAt ?? detail.product.purchasedAt)} />
+              <Field label="구매일" value={formatYearMonthDay(product?.purchasedAt ?? detail.product.purchasedAt)} />
               <Field label="수령 방식" value={returnMethodLabel(detail.returnMethod)} />
               <div className="lg:col-span-2">
                 <Field label="증상 요약" value={detail.symptom} />
@@ -327,7 +327,7 @@ function toDocumentRecord(detail: AsReceptionDetail, product: ProductSummary | n
     productGroup: product?.category === "LAPTOP" ? "노트북" : "스마트폰",
     modelName: product?.modelName ?? "",
     serial: detail.product.serialNumber,
-    purchasedAt: formatDate(product?.purchasedAt ?? detail.product.purchasedAt),
+    purchasedAt: formatYearMonthDay(product?.purchasedAt ?? detail.product.purchasedAt),
     symptom: detail.symptom,
     symptomDetail: detail.symptomDetail,
     memo: detail.memo ?? "",
