@@ -1,4 +1,5 @@
 import { apiFetch, isAbortError, isId, isRecord, readErrorMessage } from "@/lib/apiClient";
+import { parseCustomerSummary } from "@/lib/customerApi";
 import {
   AS_RECEPTION_STATUSES,
   REPAIR_STATUSES,
@@ -10,11 +11,9 @@ import {
   type AsReceptionStatus,
   type AsStatusHistory,
   type AssignmentMember,
-  type CreateCustomerInput,
   type CreateReceptionInput,
   type CreateReceptionResult,
   type CustomerPortalLink,
-  type CustomerSummary,
   type EstimateDocument,
   type EstimateItem,
   type ProductCategory,
@@ -32,6 +31,8 @@ import {
   type TechnicianSummary,
   type UpdateReceptionInput,
 } from "@/types/asReception";
+
+export { createCustomer, searchCustomers } from "@/lib/customerApi";
 
 const returnMethods: readonly ReturnMethod[] = ["DELIVERY", "PICKUP"];
 const categories: readonly ProductCategory[] = ["LAPTOP", "PHONE"];
@@ -438,66 +439,6 @@ export async function changeReceptionStatus(
   }
 }
 
-export async function searchCustomers(
-  query: string,
-  signal: AbortSignal,
-): Promise<CustomerSummary[]> {
-  const trimmed = query.trim();
-
-  if (trimmed === "") {
-    return [];
-  }
-
-  const params = new URLSearchParams();
-
-  if (trimmed.includes("@")) {
-    params.set("email", trimmed);
-  } else if (/^[0-9-]+$/.test(trimmed)) {
-    params.set("phone", trimmed);
-  } else {
-    params.set("name", trimmed);
-  }
-
-  const response = await apiFetch(
-    `/api/v1/customers?${params.toString()}`,
-    { signal },
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      await readErrorMessage(response, "고객을 조회하지 못했습니다."),
-    );
-  }
-
-  const body = await readJson(response, "고객 조회 응답이 올바르지 않습니다.");
-
-  if (!Array.isArray(body)) {
-    throw new Error("고객 조회 응답이 올바르지 않습니다.");
-  }
-
-  return body.map(parseCustomerSummary);
-}
-
-export async function createCustomer(
-  input: CreateCustomerInput,
-): Promise<CustomerSummary> {
-  const response = await apiFetch("/api/v1/customers", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      await readErrorMessage(response, "고객을 등록하지 못했습니다."),
-    );
-  }
-
-  const body = await readJson(response, "고객 등록 응답이 올바르지 않습니다.");
-
-  return parseCustomerSummary(body);
-}
-
 export async function searchProductsBySerial(
   serialNumber: string,
   signal: AbortSignal,
@@ -807,31 +748,6 @@ function parseHistory(value: unknown): AsStatusHistory {
 
 function parseCustomer(value: unknown): ReceptionCustomer {
   return parseCustomerSummary(value);
-}
-
-function parseCustomerSummary(value: unknown): CustomerSummary {
-  if (
-    !isRecord(value)
-    || !isId(value.id)
-    || typeof value.name !== "string"
-    || typeof value.phone !== "string"
-    || typeof value.email !== "string"
-    || !isNullableString(value.zipcode)
-    || !isNullableString(value.basicAddress)
-    || !isNullableString(value.detailAddress)
-  ) {
-    throw new Error("고객 응답이 올바르지 않습니다.");
-  }
-
-  return {
-    id: value.id,
-    name: value.name,
-    phone: value.phone,
-    email: value.email,
-    zipcode: value.zipcode,
-    basicAddress: value.basicAddress,
-    detailAddress: value.detailAddress,
-  };
 }
 
 function parseProduct(value: unknown): ReceptionProduct {
