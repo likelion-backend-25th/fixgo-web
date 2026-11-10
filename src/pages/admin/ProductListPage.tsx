@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { TextField } from "@/components/ui/Field";
@@ -7,6 +7,7 @@ import { Notice } from "@/components/ui/Panel";
 import { Pagination } from "@/components/ui/Pagination";
 import { isAbortError } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
+import { compareText } from "@/lib/guards";
 import {
   categoryToLabel,
   createProductModel,
@@ -26,6 +27,8 @@ export function ProductListPage() {
   const [appliedKeyword, setAppliedKeyword] = useState("");
   const [page, setPage] = useState(1);
   const [rows, setRows] = useState<ProductModel[]>([]);
+  const [sortKey, setSortKey] = useState("");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [pageCount, setPageCount] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -68,14 +71,25 @@ export function ProductListPage() {
     return () => controller.abort();
   }, [appliedKeyword, page, reloadKey]);
 
+  const visible = useMemo(() => {
+    if (sortKey === "") {
+      return rows;
+    }
+    return [...rows].sort((left, right) => {
+      const result = compareText(valueOf(left, sortKey), valueOf(right, sortKey));
+      return sortDir === "asc" ? result : -result;
+    });
+  }, [rows, sortDir, sortKey]);
+
   const columns: Column<ProductModel>[] = [
-    { key: "modelName", header: "모델명", render: (row) => row.modelName },
-    { key: "productName", header: "제품명", render: (row) => row.name },
-    { key: "group", header: "제품군", render: (row) => categoryToLabel(row.category) },
-    { key: "warranty", header: "보증", render: (row) => `${row.warrantyMonths}개월` },
+    { key: "modelName", header: "모델명", sortable: true, render: (row) => row.modelName },
+    { key: "productName", header: "제품명", sortable: true, render: (row) => row.name },
+    { key: "group", header: "제품군", sortable: true, render: (row) => categoryToLabel(row.category) },
+    { key: "warranty", header: "보증", sortable: true, render: (row) => `${row.warrantyMonths}개월` },
     {
       key: "status",
       header: "상태",
+      sortable: true,
       render: (row) => (
         <span className={cn(row.isActive ? "text-green-600" : "text-red-600")}>
           {productModelStatusLabel(row.isActive)}
@@ -127,9 +141,19 @@ export function ProductListPage() {
       </div>
       <DataTable
         columns={columns}
-        rows={rows}
+        rows={visible}
         rowKey={(row) => String(row.id)}
         emptyText={loading ? "지원 품목을 불러오는 중입니다." : "조회 결과가 없습니다."}
+        sortKey={sortKey === "" ? undefined : sortKey}
+        sortDir={sortDir}
+        onSort={(key) => {
+          if (sortKey === key) {
+            setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
+            return;
+          }
+          setSortKey(key);
+          setSortDir("asc");
+        }}
       />
       <Pagination page={page} pageCount={pageCount} onPageChange={setPage} />
       {(creating || editing !== null) && (
@@ -144,6 +168,14 @@ export function ProductListPage() {
       )}
     </div>
   );
+}
+
+function valueOf(row: ProductModel, key: string): string {
+  if (key === "productName") return row.name;
+  if (key === "group") return categoryToLabel(row.category);
+  if (key === "warranty") return String(row.warrantyMonths);
+  if (key === "status") return productModelStatusLabel(row.isActive);
+  return row.modelName;
 }
 
 function ModelModal({
@@ -164,7 +196,8 @@ function ModelModal({
   const [modelName, setModelName] = useState(initial?.modelName ?? "");
   const [productName, setProductName] = useState(initial?.name ?? "");
   const [category, setCategory] = useState<ProductCategory>(initial?.category ?? "PHONE");
-  const [warranty, setWarranty] = useState(initial?.warrantyMonths === 24 ? 24 : 12);
+  const [warranty, setWarranty] = useState(initial?.warrantyMonths ?? 12);
+  const warrantyChoices = warranty === 12 || warranty === 24 ? [12, 24] : [warranty, 12, 24];
   const [isActive, setIsActive] = useState(initial?.isActive ?? true);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
@@ -208,9 +241,9 @@ function ModelModal({
           <Radios
             label="보증"
             value={String(warranty)}
-            options={["12", "24"]}
-            labels={["12개월", "24개월"]}
-            onChange={(value) => setWarranty(value === "24" ? 24 : 12)}
+            options={warrantyChoices.map(String)}
+            labels={warrantyChoices.map((months) => `${months}개월`)}
+            onChange={(value) => setWarranty(Number(value))}
           />
           <Radios
             label="상태"

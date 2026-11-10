@@ -8,6 +8,7 @@ import { Notice, Panel } from "@/components/ui/Panel";
 import { Pagination } from "@/components/ui/Pagination";
 import { isAbortError } from "@/lib/apiClient";
 import { fetchReceptions, receptionStatusLabel } from "@/lib/asReceptionApi";
+import { repairStatusLabel } from "@/lib/repair";
 import { fetchCustomer, updateCustomer } from "@/lib/customerApi";
 import { categoryLabel, listProductsByCustomer } from "@/lib/productApi";
 import { formatDate } from "@/lib/format";
@@ -137,6 +138,11 @@ export function CustomerDetailPage() {
     { key: "date", header: "접수일", render: (row) => formatDate(row.createdAt) },
     { key: "model", header: "모델명", render: (row) => row.modelName ?? "-" },
     { key: "status", header: "접수상태", render: (row) => receptionStatusLabel(row.receptionStatus) },
+    {
+      key: "repair",
+      header: "수리 상태",
+      render: (row) => (row.repairStatus === null ? "-" : repairStatusLabel(row.repairStatus)),
+    },
     { key: "tech", header: "담당기사", render: (row) => row.technicianName ?? "-" },
   ];
 

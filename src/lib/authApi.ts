@@ -1,5 +1,6 @@
 import type { SessionUser, StaffRole } from "@/types/staff";
-import { isId, isRecord } from "@/lib/apiClient";
+import { apiFetch, isId, isRecord, readApiJson } from "@/lib/apiClient";
+import { useSessionStore } from "@/stores/useSessionStore";
 
 export interface ApiSession {
   user: SessionUser;
@@ -103,6 +104,27 @@ function toStaffRole(value: unknown): StaffRole {
     return "TECHNICIAN";
   }
   throw new Error("지원하지 않는 직원 권한입니다.");
+}
+
+export async function changeMyPassword(email: string, password: string): Promise<void> {
+  const response = await apiFetch("/api/v1/member/me/password", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  await readApiJson(response, "비밀번호를 변경하지 못했습니다.");
+}
+
+export async function logoutFromServer(): Promise<void> {
+  const token = useSessionStore.getState().accessToken;
+  if (typeof token === "string" && token !== "") {
+    try {
+      await apiFetch("/api/v1/auth/logout", { method: "POST" });
+    } catch {
+      // 서버 로그아웃이 실패해도 화면 세션은 끊는다.
+    }
+  }
+  useSessionStore.getState().logout();
 }
 
 async function readLoginError(response: Response): Promise<string> {

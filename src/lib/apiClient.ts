@@ -58,3 +58,54 @@ export function isId(value: unknown): value is number {
 export function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
+
+export interface SpringPage<T> {
+  content: T[];
+  number: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+}
+
+export async function readApiJson(response: Response, fallback: string): Promise<unknown> {
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, fallback));
+  }
+  if (response.status === 204) {
+    return null;
+  }
+  const text = await response.text();
+  if (text.trim() === "") {
+    return null;
+  }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new Error(fallback);
+  }
+}
+
+export function mapSpringPage<T>(
+  value: unknown,
+  mapItem: (item: unknown) => T,
+  invalidMessage: string,
+): SpringPage<T> {
+  if (
+    !isRecord(value)
+    || !Array.isArray(value.content)
+    || !Number.isInteger(value.number)
+    || !Number.isInteger(value.size)
+    || typeof value.totalElements !== "number"
+    || !Number.isFinite(value.totalElements)
+    || !Number.isInteger(value.totalPages)
+  ) {
+    throw new Error(invalidMessage);
+  }
+  return {
+    content: value.content.map(mapItem),
+    number: value.number,
+    size: value.size,
+    totalElements: value.totalElements,
+    totalPages: value.totalPages,
+  };
+}

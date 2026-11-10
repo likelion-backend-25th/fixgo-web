@@ -1,4 +1,6 @@
+import { isReceptionStatus } from "@/lib/asReceptionApi";
 import { apiFetch, isId, isRecord, readErrorMessage } from "@/lib/apiClient";
+import type { AsReceptionStatus } from "@/types/asReception";
 
 export type ShipmentStatus = "READY" | "SHIPPING" | "DELIVERED" | "PICKED_UP";
 export type ShipmentReturnMethod = "DELIVERY" | "PICKUP";
@@ -38,6 +40,45 @@ export interface CreateShipmentInput {
   asReceptionId: number;
   courierCode: string;
   trackingNumber: string;
+}
+
+export type ShipmentManagementStatus =
+  | "ALL"
+  | "AWAITING_SHIPMENT"
+  | "READY"
+  | "SHIPPING"
+  | "DELIVERED"
+  | "AWAITING_PICKUP"
+  | "PICKED_UP";
+
+export interface ShipmentManagementItem {
+  asReceptionId: number;
+  shipmentId: number | null;
+  receptionNumber: string;
+  customerName: string;
+  recipientPhone: string;
+  returnMethod: ShipmentReturnMethod;
+  asReceptionStatus: AsReceptionStatus;
+  shipmentStatus: ShipmentStatus | null;
+  courier: string | null;
+  trackingNumber: string | null;
+  shippedAt: string | null;
+}
+
+export interface ShipmentManagementQuery {
+  keyword: string;
+  status: ShipmentManagementStatus;
+  returnMethod: "ALL" | ShipmentReturnMethod;
+  page: number;
+  size: number;
+}
+
+export interface ShipmentManagementPage {
+  items: ShipmentManagementItem[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
 }
 
 const statuses: readonly ShipmentStatus[] = ["READY", "SHIPPING", "DELIVERED", "PICKED_UP"];
@@ -103,6 +144,25 @@ export async function fetchShipmentByReception(asReceptionId: number, signal: Ab
     throw new Error(await readErrorMessage(response, "배송 정보를 불러오지 못했습니다."));
   }
   return parseShipment(await readJson(response));
+}
+
+export async function fetchShipmentManagement(
+  query: ShipmentManagementQuery,
+  signal: AbortSignal,
+): Promise<ShipmentManagementPage> {
+  const params = new URLSearchParams();
+  if (query.keyword !== "") {
+    params.set("keyword", query.keyword);
+  }
+  params.set("status", query.status);
+  params.set("returnMethod", query.returnMethod);
+  params.set("page", String(query.page - 1));
+  params.set("size", String(query.size));
+  const response = await apiFetch(`/api/v1/shipments/management?${params.toString()}`, { signal });
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "배송 목록을 불러오지 못했습니다."));
+  }
+  return parseManagementPage(await readJson(response));
 }
 
 export async function getShipmentByReception(asReceptionId: number): Promise<Shipment> {
@@ -189,6 +249,50 @@ function parseShipment(value: unknown): Shipment {
     shippedAt: readDateTime(value.shippedAt),
     completedAt: readDateTime(value.completedAt),
   };
+}
+
+function parseManagementPage(value: unknown): ShipmentManagementPage {
+  if (!isRecord(value) || !Array.isArray(value.content) || !isCount(value.totalElements) || !isCount(value.totalPages) || !isCount(value.number) || !isCount(value.size)) {
+    throw new Error("배송 목록 응답이 올바르지 않습니다.");
+  }
+  return {
+    items: value.content.map(parseManagementItem),
+    totalElements: value.totalElements,
+    totalPages: value.totalPages,
+    number: value.number,
+    size: value.size,
+  };
+}
+
+function parseManagementItem(value: unknown): ShipmentManagementItem {
+  if (!isRecord(value) || !isId(value.asReceptionId) || typeof value.receptionNumber !== "string" || typeof value.customerName !== "string" || typeof value.recipientPhone !== "string") {
+    throw new Error("배송 목록 응답이 올바르지 않습니다.");
+  }
+  if (!isMethod(value.returnMethod) || !isReceptionStatus(value.asReceptionStatus)) {
+    throw new Error("배송 목록 응답이 올바르지 않습니다.");
+  }
+  const shipmentId = value.shipmentId === null ? null : value.shipmentId;
+  const shipmentStatus = value.shipmentStatus === null ? null : value.shipmentStatus;
+  if ((shipmentId !== null && !isId(shipmentId)) || (shipmentStatus !== null && !isStatus(shipmentStatus))) {
+    throw new Error("배송 목록 응답이 올바르지 않습니다.");
+  }
+  return {
+    asReceptionId: value.asReceptionId,
+    shipmentId,
+    receptionNumber: value.receptionNumber,
+    customerName: value.customerName,
+    recipientPhone: value.recipientPhone,
+    returnMethod: value.returnMethod,
+    asReceptionStatus: value.asReceptionStatus,
+    shipmentStatus,
+    courier: readNullableText(value.courier),
+    trackingNumber: readNullableText(value.trackingNumber),
+    shippedAt: readDateTime(value.shippedAt),
+  };
+}
+
+function isCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 
 function parseDetail(value: unknown): ShipmentDetail {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { FieldLabel, SelectBox, TextField } from "@/components/ui/Field";
@@ -8,12 +8,11 @@ import { Pagination } from "@/components/ui/Pagination";
 import { fetchReception, fetchReceptions, receptionStatusLabel } from "@/lib/asReceptionApi";
 import { isAbortError } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
-import { includesText } from "@/lib/format";
 import {
   createPickup,
   createShipment,
-  fetchShipmentByReception,
   fetchShipmentDetail,
+  fetchShipmentManagement,
   getShipmentByReception,
   markShipmentDelivered,
   markShipmentPickedUp,
@@ -25,10 +24,11 @@ import {
   updateShipmentTracking,
   type Shipment,
   type ShipmentDetail,
+  type ShipmentManagementItem,
+  type ShipmentManagementStatus,
   type ShipmentReturnMethod,
 } from "@/lib/shipmentApi";
 import { carrierLabel, sweetTrackerCarriers } from "@/lib/sweetTrackerCarriers";
-import { usePageSlice } from "@/lib/usePageSlice";
 import type { AsReceptionStatus } from "@/types/asReception";
 
 type ShipmentListStatus =
@@ -36,8 +36,8 @@ type ShipmentListStatus =
   | "배송 준비 완료"
   | "배송 중"
   | "배송 완료"
-  | "수령 대기"
-  | "수령 완료";
+  | "방문 수령 대기"
+  | "방문 수령 완료";
 
 interface ShipmentRow {
   no: number;
@@ -48,7 +48,6 @@ interface ShipmentRow {
   receiver: string;
   phone: string;
   carrier: string;
-  carrierCode: string;
   trackingNo: string;
   status: ShipmentListStatus;
   startedAt: string;
@@ -70,8 +69,8 @@ const statusFilters: { value: "전체" | ShipmentListStatus; label: string }[] =
   { value: "배송 준비 완료", label: "배송 준비 완료" },
   { value: "배송 중", label: "배송 중" },
   { value: "배송 완료", label: "배송 완료" },
-  { value: "수령 대기", label: "수령 대기" },
-  { value: "수령 완료", label: "수령 완료" },
+  { value: "방문 수령 대기", label: "방문 수령 대기" },
+  { value: "방문 수령 완료", label: "방문 수령 완료" },
 ];
 
 interface ReceptionPick {
@@ -82,18 +81,14 @@ interface ReceptionPick {
   status: AsReceptionStatus;
 }
 
-const listQuery = {
-  keyword: "",
-  technicianId: null,
-  page: 1,
-  size: 100,
-  sort: "createdAt,desc",
-} as const;
+const pageSize = 20;
 
 export function ShipmentListPage() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("전체");
   const [method, setMethod] = useState("전체");
+  const [page, setPage] = useState(1);
+  const [pageCount, setPageCount] = useState(1);
   const [rows, setRows] = useState<ShipmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -104,26 +99,12 @@ export function ShipmentListPage() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [actionNotice, setActionNotice] = useState("");
   const [actionError, setActionError] = useState("");
-  const filtered = useMemo(
-    () =>
-      rows.filter((row) => {
-        const matched = includesText(`${row.asId} ${row.receiver} ${row.trackingNo}`, query);
-        return matched && (status === "전체" || row.status === status) && (method === "전체" || row.method === method);
-      }),
-    [method, query, rows, status],
-  );
-  const table = usePageSlice(filtered);
-  const counts = {
-    wait: rows.filter((row) => row.status === "배송 등록 대기" || row.status === "배송 준비 완료").length,
-    ing: rows.filter((row) => row.status === "배송 중").length,
-    done: rows.filter((row) => row.status === "배송 완료").length,
-    visit: rows.filter((row) => row.method === "방문 수령").length,
-  };
+  const [counts, setCounts] = useState({ wait: 0, ing: 0, done: 0, visit: 0 });
 
   async function runRowAction(row: ShipmentRow) {
     setActionNotice("");
     setActionError("");
-    if (row.status === "배송 완료" || row.status === "수령 완료") {
+    if (row.status === "배송 완료" || row.status === "방문 수령 완료") {
       if (row.shipmentId !== null) {
         setSelectedId(row.shipmentId);
       }
@@ -161,10 +142,10 @@ export function ShipmentListPage() {
         await refreshShipmentTracking(row.shipmentId);
         setActionNotice("배송 이력을 갱신했습니다.");
         setSelectedId(row.shipmentId);
-      } else if (row.status === "수령 대기" && row.shipmentId === null) {
+      } else if (row.status === "방문 수령 대기" && row.shipmentId === null) {
         await createPickup(row.asReceptionId);
         setActionNotice("방문 수령을 등록했습니다.");
-      } else if (row.status === "수령 대기" && row.shipmentId !== null) {
+      } else if (row.status === "방문 수령 대기" && row.shipmentId !== null) {
         await markShipmentPickedUp(row.shipmentId);
         setActionNotice("수령 완료로 처리했습니다.");
       }
@@ -191,7 +172,7 @@ export function ShipmentListPage() {
       render: (row) => (
         <Button
           className="whitespace-nowrap"
-          variant={row.status === "배송 완료" || row.status === "수령 완료" || row.status === "배송 중" ? "outline" : "primary"}
+          variant={row.status === "배송 완료" || row.status === "방문 수령 완료" || row.status === "배송 중" ? "outline" : "primary"}
           disabled={busyId === row.asReceptionId}
           onClick={() => void runRowAction(row)}
         >
@@ -204,10 +185,19 @@ export function ShipmentListPage() {
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
-    // 배송 목록 API가 없어 접수 상태로 가져온 뒤, 화면 상태는 배송 등록 여부로 나눈다.
-    loadShipmentRows(controller.signal)
-      .then((next) => {
-        setRows(next);
+    fetchShipmentManagement({
+      keyword: query.trim(),
+      status: toManagementStatus(status),
+      returnMethod: toManagementMethod(method),
+      page,
+      size: pageSize,
+    }, controller.signal)
+      .then((result) => {
+        setRows(result.items.flatMap((item, index) => {
+          const row = toRow(item, result.number * result.size + index + 1);
+          return row === null ? [] : [row];
+        }));
+        setPageCount(Math.max(1, result.totalPages));
         setLoadError("");
       })
       .catch((error: unknown) => {
@@ -223,6 +213,32 @@ export function ShipmentListPage() {
         }
       });
     return () => controller.abort();
+  }, [method, page, query, reloadKey, status]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const empty = { keyword: "", returnMethod: "ALL" as const, page: 1, size: 1 };
+    Promise.all([
+      fetchShipmentManagement({ ...empty, status: "AWAITING_SHIPMENT" }, controller.signal),
+      fetchShipmentManagement({ ...empty, status: "READY" }, controller.signal),
+      fetchShipmentManagement({ ...empty, status: "SHIPPING" }, controller.signal),
+      fetchShipmentManagement({ ...empty, status: "DELIVERED" }, controller.signal),
+      fetchShipmentManagement({ ...empty, status: "ALL", returnMethod: "PICKUP" }, controller.signal),
+    ])
+      .then(([waiting, ready, shipping, delivered, pickup]) => {
+        setCounts({
+          wait: waiting.totalElements + ready.totalElements,
+          ing: shipping.totalElements,
+          done: delivered.totalElements,
+          visit: pickup.totalElements,
+        });
+      })
+      .catch((error: unknown) => {
+        if (!isAbortError(error)) {
+          setCounts({ wait: 0, ing: 0, done: 0, visit: 0 });
+        }
+      });
+    return () => controller.abort();
   }, [reloadKey]);
 
   return (
@@ -234,9 +250,9 @@ export function ShipmentListPage() {
         <Stat label="방문 수령" value={`${counts.visit}건`} />
       </div>
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <TextField value={query} onChange={setQuery} placeholder="접수번호, 수령인, 운송장번호 검색" className="w-72" />
-        <SelectBox value={status} onChange={setStatus} options={statusFilters} />
-        <SelectBox value={method} onChange={setMethod} options={[{ value: "전체", label: "수령 방법 전체" }, { value: "택배", label: "택배" }, { value: "방문 수령", label: "방문 수령" }]} />
+        <TextField value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="접수번호, 수령인, 운송장번호 검색" className="w-72" />
+        <SelectBox value={status} onChange={(value) => { setStatus(value); setPage(1); }} options={statusFilters} />
+        <SelectBox value={method} onChange={(value) => { setMethod(value); setPage(1); }} options={[{ value: "전체", label: "수령 방법 전체" }, { value: "택배", label: "택배" }, { value: "방문 수령", label: "방문 수령" }]} />
         <Button className="ml-auto" onClick={() => { setCreateInitial(null); setCreating(true); }}>등록</Button>
       </div>
       {loadError !== "" && <div className="mb-3"><Notice tone="error">{loadError}</Notice></div>}
@@ -244,12 +260,12 @@ export function ShipmentListPage() {
       {actionNotice !== "" && <div className="mb-3"><Notice>{actionNotice}</Notice></div>}
       <DataTable
         columns={columns}
-        rows={table.slice}
+        rows={rows}
         rowKey={(row) => String(row.asReceptionId)}
         selectedKey={selectedId === null ? undefined : String(rows.find((row) => row.shipmentId === selectedId)?.asReceptionId ?? "")}
         emptyText={loading ? "불러오는 중" : "배송 내역이 없습니다."}
       />
-      <Pagination page={table.page} pageCount={table.pageCount} onPageChange={table.setPage} />
+      <Pagination page={page} pageCount={pageCount} onPageChange={setPage} />
       {creating && (
         <CreateShipmentModal
           initial={createInitial}
@@ -271,85 +287,63 @@ export function ShipmentListPage() {
   );
 }
 
-async function loadShipmentRows(signal: AbortSignal): Promise<ShipmentRow[]> {
-  const [delivery, pickup, completed] = await Promise.all([
-    fetchReceptions({ ...listQuery, status: "AWAITING_SHIPMENT" }, signal),
-    fetchReceptions({ ...listQuery, status: "AWAITING_PICKUP" }, signal),
-    fetchReceptions({ ...listQuery, status: "COMPLETED" }, signal),
-  ]);
-  const pending = [...delivery.items, ...pickup.items];
-  const pendingShipments = await Promise.all(pending.map((item) => fetchShipmentByReception(item.id, signal)));
-  const completedShipments = await Promise.all(completed.items.map((item) => fetchShipmentByReception(item.id, signal)));
-  const rows = pending.map((item, index) => toRow(index + 1, item, pendingShipments[index] ?? null));
-  completed.items.forEach((item, index) => {
-    const shipment = completedShipments[index] ?? null;
-    if (shipment !== null) {
-      rows.push(toRow(rows.length + 1, item, shipment));
-    }
-  });
-  return rows;
+function toManagementStatus(value: string): ShipmentManagementStatus {
+  if (value === "배송 등록 대기") return "AWAITING_SHIPMENT";
+  if (value === "배송 준비 완료") return "READY";
+  if (value === "배송 중") return "SHIPPING";
+  if (value === "배송 완료") return "DELIVERED";
+  if (value === "방문 수령 대기") return "AWAITING_PICKUP";
+  if (value === "방문 수령 완료") return "PICKED_UP";
+  return "ALL";
+}
+
+function toManagementMethod(value: string): "ALL" | ShipmentReturnMethod {
+  if (value === "택배") return "DELIVERY";
+  if (value === "방문 수령") return "PICKUP";
+  return "ALL";
 }
 
 function rowActionLabel(row: ShipmentRow): string {
   if (row.status === "배송 등록 대기") return "배송 등록";
   if (row.status === "배송 준비 완료") return "배송 알림";
   if (row.status === "배송 중") return "배송 조회";
-  if (row.status === "수령 대기") return row.shipmentId === null ? "수령 등록" : "수령 완료";
+  if (row.status === "방문 수령 대기") return row.shipmentId === null ? "수령 등록" : "수령 완료";
   return "상세 보기";
 }
 
-function listStatus(
-  method: ShipmentReturnMethod,
-  receptionStatus: AsReceptionStatus,
-  shipment: Shipment | null,
-): ShipmentListStatus {
-  if (method === "PICKUP") {
-    return shipment === null || shipment.status === "READY" ? "수령 대기" : "수령 완료";
+function listStatus(item: ShipmentManagementItem): ShipmentListStatus | null {
+  if (item.returnMethod === "DELIVERY" && item.asReceptionStatus === "AWAITING_SHIPMENT" && item.shipmentId === null) {
+    return "배송 등록 대기";
   }
-  if (shipment?.status === "SHIPPING") return "배송 중";
-  if (shipment?.status === "DELIVERED") return "배송 완료";
-  if (isPreparedDelivery(receptionStatus, shipment)) return "배송 준비 완료";
-  if (isWaitingRegistration(method, receptionStatus, shipment) || shipment === null) return "배송 등록 대기";
-  return "배송 완료";
-}
-
-function isWaitingRegistration(
-  method: ShipmentReturnMethod,
-  receptionStatus: AsReceptionStatus,
-  shipment: Shipment | null,
-): boolean {
-  return method === "DELIVERY" && receptionStatus === "AWAITING_SHIPMENT" && shipment === null;
-}
-
-function isPreparedDelivery(receptionStatus: AsReceptionStatus, shipment: Shipment | null): boolean {
-  if (receptionStatus !== "AWAITING_SHIPMENT" || shipment === null) {
-    return false;
+  if (item.returnMethod === "DELIVERY" && item.shipmentStatus === "READY" && item.shipmentId !== null) {
+    return "배송 준비 완료";
   }
-  if (shipment.returnMethod !== "DELIVERY" || shipment.status !== "READY" || shipment.shippedAt !== null) {
-    return false;
+  if (item.returnMethod === "DELIVERY" && item.shipmentStatus === "SHIPPING") return "배송 중";
+  if (item.returnMethod === "DELIVERY" && item.shipmentStatus === "DELIVERED") return "배송 완료";
+  if (item.returnMethod === "PICKUP" && item.asReceptionStatus === "AWAITING_PICKUP" && (item.shipmentId === null || item.shipmentStatus === "READY")) {
+    return "방문 수령 대기";
   }
-  return hasText(shipment.courier) || hasText(shipment.courierCode) ? hasText(shipment.trackingNumber) : false;
+  if (item.returnMethod === "PICKUP" && item.shipmentStatus === "PICKED_UP") return "방문 수령 완료";
+  return null;
 }
 
-function hasText(value: string | null): boolean {
-  return value !== null && value.trim() !== "";
-}
-
-function toRow(no: number, item: { id: number; receptionNumber: string; customerName: string; customerPhone: string; receptionStatus: AsReceptionStatus }, shipment: Shipment | null): ShipmentRow {
-  const method: ShipmentReturnMethod = shipment?.returnMethod ?? (item.receptionStatus === "AWAITING_PICKUP" ? "PICKUP" : "DELIVERY");
+function toRow(item: ShipmentManagementItem, no: number): ShipmentRow | null {
+  const status = listStatus(item);
+  if (status === null) {
+    return null;
+  }
   return {
     no,
-    shipmentId: shipment?.id ?? null,
-    asReceptionId: item.id,
-    asId: shipment?.receptionNumber ?? item.receptionNumber,
-    method: shipmentMethodLabel(method),
-    receiver: shipment?.recipientName ?? item.customerName,
-    phone: shipment?.recipientPhone ?? item.customerPhone,
-    carrier: method === "PICKUP" ? "-" : carrierLabel(shipment?.courier ?? null, shipment?.courierCode ?? null),
-    carrierCode: shipment?.courierCode ?? "",
-    trackingNo: shipment?.trackingNumber && shipment.trackingNumber !== "" ? shipment.trackingNumber : "-",
-    status: listStatus(method, item.receptionStatus, shipment),
-    startedAt: formatShipmentTime(shipment?.shippedAt ?? null),
+    shipmentId: item.shipmentId,
+    asReceptionId: item.asReceptionId,
+    asId: item.receptionNumber,
+    method: shipmentMethodLabel(item.returnMethod),
+    receiver: item.customerName,
+    phone: item.recipientPhone,
+    carrier: item.returnMethod === "PICKUP" ? "-" : carrierLabel(item.courier, null),
+    trackingNo: item.trackingNumber !== null && item.trackingNumber !== "" ? item.trackingNumber : "-",
+    status,
+    startedAt: formatShipmentTime(item.shippedAt),
   };
 }
 
@@ -364,7 +358,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function StatusLabel({ value }: { value: string }) {
   return (
-    <span className={cn((value === "배송 중" || value === "배송중") && "text-blue-600", (value === "배송 완료" || value === "배송완료" || value === "수령 완료" || value === "수령완료") && "text-green-600")}>
+    <span className={cn((value === "배송 중" || value === "배송중") && "text-blue-600", (value === "배송 완료" || value === "배송완료" || value === "방문 수령 완료" || value === "수령완료") && "text-green-600")}>
       {value}
     </span>
   );
