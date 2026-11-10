@@ -36,6 +36,7 @@ function parseProductSummary(value: unknown): ProductSummary {
   ) {
     throw new Error("제품 응답이 올바르지 않습니다.");
   }
+
   return {
     id: value.id,
     serialNumber: value.serialNumber,
@@ -46,7 +47,6 @@ function parseProductSummary(value: unknown): ProductSummary {
     purchasedAt: value.purchasedAt,
   };
 }
-
 function isCategory(value: unknown): value is ProductCategory {
   return typeof value === "string" && categories.some((item) => item === value);
 }

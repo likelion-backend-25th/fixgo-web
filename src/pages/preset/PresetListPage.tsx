@@ -1,94 +1,220 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
-import { TextArea, TextField } from "@/components/ui/Field";
-import { Modal } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Panel";
 import { Pagination } from "@/components/ui/Pagination";
-import { cn } from "@/lib/cn";
-import { includesText } from "@/lib/format";
 import { usePageSlice } from "@/lib/usePageSlice";
-import { presets } from "@/mocks/screenData";
-import type { PresetRecord } from "@/types/screen";
+import {
+  createRepairPreset,
+  fetchRepairPresets,
+  searchRepairPresets,
+  fetchSymptomPresets,
+  searchSymptomPresets,
+} from "@/lib/repair";
+import type {
+  RepairPreset,
+  RepairPresetRequest,
+  SymptomPreset,
+} from "@/lib/repair";
+import { PresetFormModal } from "./PresetFormModal";
+import { TextField } from "@/components/ui/Field";
+
+type PresetTab = "symptom" | "repair";
 
 export function PresetListPage() {
-  const [kind, setKind] = useState<"증상" | "수리">("수리");
+  const [tab, setTab] = useState<PresetTab>("repair"); // 와이어프레임 기본: 수리 프리셋
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [notice, setNotice] = useState("");
-  const rows = useMemo(
-    () => presets.filter((row) => row.kind === kind && includesText(`${row.name} ${row.symptom} ${row.parts}`, query)),
-    [kind, query],
-  );
-  const table = usePageSlice(rows);
-  const columns: Column<PresetRecord>[] = [
-    { key: "name", header: kind === "수리" ? "작업명" : "증상명", render: (row) => row.name },
-    { key: "symptom", header: "증상", render: (row) => row.symptom },
-    { key: "minutes", header: "표준 시간", render: (row) => `${row.minutes}분` },
-    { key: "parts", header: "기본 부품", render: (row) => row.parts },
+  const [error, setError] = useState("");
+  const [repairPresets, setRepairPresets] = useState<RepairPreset[]>([]);
+  const [symptomPresets, setSymptomPresets] = useState<SymptomPreset[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0); // 등록 후 재조회용
+
+  // 탭별 프리셋 목록 조회 및 이름 검색
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const loadPresets = async () => {
+      try {
+        setLoading(true);
+        setError("");
+
+        const keyword = query.trim();
+
+        if (tab === "repair") {
+          const result = keyword
+            ? await searchRepairPresets(keyword, controller.signal)
+            : await fetchRepairPresets(controller.signal);
+          setRepairPresets(result);
+        } else {
+          const result = keyword
+            ? await searchSymptomPresets(keyword, controller.signal)
+            : await fetchSymptomPresets(controller.signal);
+          setSymptomPresets(result);
+        }
+      } catch (err) {
+        if (controller.signal.aborted) return;
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "프리셋 목록을 불러오지 못했습니다.",
+        );
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadPresets();
+
+    return () => controller.abort();
+  }, [tab, query, reloadKey]);
+
+  // 탭마다 페이지 상태를 따로 유지
+  const repairTable = usePageSlice(repairPresets);
+  const symptomTable = usePageSlice(symptomPresets);
+
+  const repairColumns: Column<RepairPreset>[] = [
+    {
+      key: "name",
+      header: "작업명",
+      render: (row) => row.name,
+    },
+    {
+      key: "description",
+      header: "작업 설명",
+      render: (row) => row.description || "-",
+    },
+    {
+      key: "estimatedMinutes",
+      header: "표준 작업시간",
+      render: (row) => `${row.estimatedMinutes}분`,
+    },
+    {
+      key: "basePrice",
+      header: "기본 부품 금액",
+      render: (row) => `${row.basePrice.toLocaleString("ko-KR")}원`,
+    },
+    {
+      key: "updatedAt",
+      header: "최종 수정일",
+      render: (row) =>
+        new Date(row.updatedAt).toLocaleDateString("ko-KR"),
+    },
   ];
+
+  const symptomColumns: Column<SymptomPreset>[] = [
+    {
+      key: "productCategory",
+      header: "제품군",
+      render: (row) => row.productCategory,
+    },
+    {
+      key: "name",
+      header: "증상명",
+      render: (row) => row.name,
+    },
+  ];
+
+  const handleTabChange = (next: PresetTab) => {
+    if (next === tab) return;
+
+    setTab(next);
+    setQuery(""); // 탭을 바꾸면 검색어 초기화
+    setNotice("");
+    setError("");
+  };
+
+  const handleCreate = async (request: RepairPresetRequest) => {
+    await createRepairPreset(request);
+
+    setOpen(false);
+    setNotice("수리 프리셋이 등록되었습니다.");
+    setReloadKey((key) => key + 1); // useEffect가 목록을 다시 조회
+  };
 
   return (
     <div>
       {notice !== "" && <Notice>{notice}</Notice>}
+
+      {error !== "" && <Notice tone="error">{error}</Notice>}
+
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <button type="button" className={cn("rounded border px-3 py-2 text-sm", kind === "증상" ? "border-blue-600 bg-blue-600 text-white" : "border-neutral-300")} onClick={() => setKind("증상")}>고장 증상 프리셋</button>
-        <button type="button" className={cn("rounded border px-3 py-2 text-sm", kind === "수리" ? "border-blue-600 bg-blue-600 text-white" : "border-neutral-300")} onClick={() => setKind("수리")}>수리 프리셋</button>
-        <TextField value={query} onChange={setQuery} placeholder="프리셋명, 증상, 기본 부품 검색" className="w-64" />
-        <Button className="ml-auto" onClick={() => setOpen(true)}>프리셋 등록</Button>
+        <Button
+          variant={tab === "symptom" ? undefined : "ghost"}
+          onClick={() => handleTabChange("symptom")}
+        >
+          고장 증상 프리셋
+        </Button>
+
+        <Button
+          variant={tab === "repair" ? undefined : "ghost"}
+          onClick={() => handleTabChange("repair")}
+        >
+          수리 프리셋
+        </Button>
+
+        <TextField
+          value={query}
+          onChange={setQuery}
+          placeholder={
+            tab === "repair" ? "프리셋명 검색" : "증상명, 제품군 검색"
+          }
+          className="w-64"
+        />
+
+        {/* 증상 프리셋 등록 API가 아직 없어서 수리 프리셋 탭에서만 노출 */}
+        {tab === "repair" && (
+          <Button className="ml-auto" onClick={() => setOpen(true)}>
+            프리셋 등록
+          </Button>
+        )}
       </div>
-      <DataTable columns={columns} rows={table.slice} rowKey={(row) => row.id} />
-      <Pagination page={table.page} pageCount={table.pageCount} onPageChange={table.setPage} />
+
+      {loading ? (
+        <div className="py-8 text-center text-sm text-neutral-500">
+          프리셋 목록을 불러오는 중입니다.
+        </div>
+      ) : tab === "repair" ? (
+        <>
+          <DataTable
+            columns={repairColumns}
+            rows={repairTable.slice}
+            rowKey={(row) => row.id.toString()}
+          />
+
+          <Pagination
+            page={repairTable.page}
+            pageCount={repairTable.pageCount}
+            onPageChange={repairTable.setPage}
+          />
+        </>
+      ) : (
+        <>
+          <DataTable
+            columns={symptomColumns}
+            rows={symptomTable.slice}
+            rowKey={(row) => row.id.toString()}
+          />
+
+          <Pagination
+            page={symptomTable.page}
+            pageCount={symptomTable.pageCount}
+            onPageChange={symptomTable.setPage}
+          />
+        </>
+      )}
+
       {open && (
         <PresetFormModal
           onClose={() => setOpen(false)}
-          onSave={() => {
-            setOpen(false);
-            setNotice("프리셋을 등록했습니다. 화면 구성용이라 목록에는 추가되지 않습니다.");
-          }}
+          onSave={handleCreate}
         />
       )}
     </div>
-  );
-}
-
-function PresetFormModal({ onClose, onSave }: { onClose: () => void; onSave: () => void }) {
-  const [name, setName] = useState("");
-  const [symptom, setSymptom] = useState("");
-  const [minutes, setMinutes] = useState("30");
-  const [enabled, setEnabled] = useState(true);
-  const [description, setDescription] = useState("");
-  const [partsText, setPartsText] = useState("");
-  const [error, setError] = useState("");
-
-  return (
-    <Modal title="프리셋 등록" onClose={onClose}>
-      <form
-        className="space-y-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (name.trim() === "" || symptom.trim() === "") {
-            setError("작업명과 증상을 입력해 주세요.");
-            return;
-          }
-          onSave();
-        }}
-      >
-        <TextField label="작업명" value={name} onChange={setName} />
-        <TextField label="증상" value={symptom} onChange={setSymptom} />
-        <TextField label="표준작업시간(분)" value={minutes} onChange={setMinutes} />
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
-          사용
-        </label>
-        <TextArea label="작업 설명" value={description} onChange={setDescription} />
-        <TextField label="기본 부품 및 수량" value={partsText} onChange={setPartsText} placeholder="USB 포트 1" />
-        {error !== "" && <Notice tone="error">{error}</Notice>}
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>취소</Button>
-          <Button type="submit">등록</Button>
-        </div>
-      </form>
-    </Modal>
   );
 }

@@ -68,7 +68,6 @@ function InspectionForm({
 }) {
   const [lines, setLines] = useState<RepairLine[]>([]);
   const [note, setNote] = useState(repair.diagnosis ?? "");
-  const [photos, setPhotos] = useState<string[]>([]);
   const [judgment, setJudgment] = useState<"무상" | "유상" | null>(
     repair.warrantyResult === "FREE" ? "무상" : repair.warrantyResult === "PAID" ? "유상" : null,
   );
@@ -80,27 +79,37 @@ function InspectionForm({
   const [submitting, setSubmitting] = useState(false);
   const diagnosing = repair.status === "DIAGNOSING";
 
-  const laborTotal = useMemo(() => lines.reduce((sum, line) => sum + line.amount, 0), [lines]);
-  const warranty = judgment === "무상" ? laborTotal : 0;
+  const laborTotal = useMemo(
+    () => lines.reduce((sum, line) => sum + line.amount, 0),
+    [lines],
+  );
+  
   const charge = judgment === "무상" ? 0 : laborTotal;
+  const warranty = judgment === "무상" ? laborTotal : 0;
 
   async function complete() {
     if (note.trim() === "") {
       setNotice("점검 내용을 입력해 주세요.");
       return;
     }
+  
     if (judgment === null) {
       setNotice("최종 판정을 선택해 주세요.");
       return;
     }
+  
     const technicianId = record.technician?.id;
+  
     if (technicianId === undefined) {
       setNotice("담당 기사를 확인할 수 없습니다.");
       return;
     }
+  
     setSubmitting(true);
     setNotice("");
+  
     try {
+      // 1. 점검 내용과 최종 보증 판정 저장
       await updateRepair(repair.id, {
         asReceptionId: record.id,
         technicianId,
@@ -115,24 +124,39 @@ function InspectionForm({
         status: "DIAGNOSING",
         reasonForRejection: rejectReason.trim(),
       });
+  
+      // 2. 선택한 수리 프리셋을 작업으로 등록
       for (const line of lines) {
         if (line.presetId === undefined) {
           continue;
         }
-        await createRepairWork({ repairId: repair.id, presetId: line.presetId, workName: line.name });
+  
+        await createRepairWork({
+          repairId: repair.id,
+          presetId: line.presetId,
+          workName: line.name,
+        });
       }
-      try {
-        await calculateRepairCost(repair.id);
-      } catch (cause: unknown) {
-        // 프리셋이 없으면 저장해 둔 0원으로 확정한다. 요금표가 없을 때의 계산 실패가 상태 전환을 막지 않게 한다.
-        if (lines.some((line) => line.presetId !== undefined)) {
-          throw cause;
-        }
-      }
+  
+      // 3. 백엔드에서 수리 비용 계산
+      // 무상(FREE): 부품비, 공임비, 최종 금액 모두 0원
+      // 유상(PAID): 등록된 작업 및 부품을 기준으로 비용 계산
+      await calculateRepairCost(repair.id);
+  
+      // 4. 수리 비용 확정
+      // 무상(FREE): APPROVED로 바로 전환
+      // 유상(PAID): REQUESTED로 전환하여 고객 견적 승인 대기
       await confirmRepairCost(repair.id);
+  
+      // 5. 최신 서버 데이터로 화면 갱신
       onCompleted();
     } catch (cause: unknown) {
-      setNotice(cause instanceof Error ? cause.message : "점검을 완료하지 못했습니다.");
+      setNotice(
+        cause instanceof Error
+          ? cause.message
+          : "점검을 완료하지 못했습니다.",
+      );
+  
       setSubmitting(false);
     }
   }
@@ -147,29 +171,6 @@ function InspectionForm({
       ) : (
         <Notice>{inspectionResultMessage(repair)}</Notice>
       )}
-      <section>
-        <p className="mb-2 text-sm font-medium">점검 사진</p>
-        <label className="grid h-28 w-full max-w-sm cursor-pointer place-items-center rounded-xl border border-dashed border-neutral-300 bg-white text-sm text-neutral-500">
-          사진 추가
-          <input
-            type="file"
-            accept="image/*"
-            className="sr-only"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file === undefined) return;
-              setPhotos((current) => [...current, URL.createObjectURL(file)]);
-            }}
-          />
-        </label>
-        {photos.length > 0 && (
-          <div className="mt-2 flex gap-2">
-            {photos.map((src) => (
-              <img key={src} src={src} alt="점검 사진" className="size-20 rounded-lg border border-neutral-200 object-cover" />
-            ))}
-          </div>
-        )}
-      </section>
       <section>
         <div className="mb-2 flex items-center justify-between">
           <p className="text-sm font-medium">점검 항목</p>
