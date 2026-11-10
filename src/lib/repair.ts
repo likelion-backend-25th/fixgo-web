@@ -334,17 +334,34 @@ export async function searchRepairPresets(
 
 // 최종 수리비 계산
 export async function calculateRepairCost(
-  repairId: number,
-): Promise<number> {
-  const response = await apiFetch(`${API_BASE}/${repairId}/cost`, {
-    method: "POST",
-  });
-
-  return handleResponse<number>(
-    response,
-    "수리 비용 계산에 실패했습니다.",
-  );
-}
+    repairId: number,
+  ): Promise<RepairCostResponse> {
+    const response = await apiFetch(`${API_BASE}/${repairId}/cost`, {
+      method: "POST",
+    });
+  
+    return handleResponse<RepairCostResponse>(
+      response,
+      "수리 비용 계산에 실패했습니다.",
+    );
+  }
+  
+  // 수리 비용 확정
+  export async function confirmRepairCost(
+    repairId: number,
+  ): Promise<{ message: string }> {
+    const response = await apiFetch(
+      `${API_BASE}/${repairId}/cost/confirm`,
+      {
+        method: "POST",
+      },
+    );
+  
+    return handleResponse<{ message: string }>(
+      response,
+      "수리 비용 확정에 실패했습니다.",
+    );
+  }
 
 export interface RepairUpdateRequest {
   asReceptionId: number;
@@ -371,22 +388,6 @@ export async function updateRepair(repairId: number, request: RepairUpdateReques
   await handleResponse<RepairDetail>(response, "점검 내용을 저장하지 못했습니다.");
 }
 
-// 수리 비용 확정
-export async function confirmRepairCost(
-  repairId: number,
-): Promise<{ message: string }> {
-  const response = await apiFetch(
-    `${API_BASE}/${repairId}/cost/confirm`,
-    {
-      method: "POST",
-    },
-  );
-
-  return handleResponse<{ message: string }>(
-    response,
-    "수리 비용 확정에 실패했습니다.",
-  );
-}
 
 // 고객이 견적을 승인한 뒤 담당 기사가 수리를 시작한다.
 export async function startRepair(repairId: number): Promise<void> {
@@ -443,3 +444,8 @@ export async function fetchMyRepairDetail(
     );
   }
   
+  export interface RepairCostResponse {
+    laborRate: number;
+    inspectionCost: number;
+    finalAmount: number;
+  }
