@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useParams } from "react-router";
 import { Notice } from "@/components/ui/Panel";
-import { fetchMyReception } from "@/lib/asReceptionApi";
+import { fetchMyReception, fetchStaffReception } from "@/lib/asReceptionApi";
+import { useSessionStore } from "@/stores/useSessionStore";
 import type { MyReceptionDetail } from "@/types/asReception";
 
 type RenderReception = (detail: MyReceptionDetail, reload: () => void) => ReactNode;
@@ -16,14 +17,16 @@ export function ReceptionProgress({ render }: { render: RenderReception }) {
 }
 
 function ReceptionProgressContent({ id, render }: { id: number; render: RenderReception }) {
+  const role = useSessionStore((state) => state.user?.role);
   const [record, setRecord] = useState<MyReceptionDetail | null>(null);
   const [revision, setRevision] = useState(0);
   const [error, setError] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
-    // 점검과 수리 탭은 같은 기사 전용 접수 상세를 조회한다.
-    fetchMyReception(id, controller.signal)
+    setError("");
+    const fetchProgress = role === "TECHNICIAN" ? fetchMyReception : fetchStaffReception;
+    fetchProgress(id, controller.signal)
       .then((detail) => {
         if (!controller.signal.aborted) setRecord(detail);
       })
@@ -33,7 +36,7 @@ function ReceptionProgressContent({ id, render }: { id: number; render: RenderRe
         }
       });
     return () => controller.abort();
-  }, [id, revision]);
+  }, [id, revision, role]);
 
   if (error !== "") return <Notice tone="error">{error}</Notice>;
   if (record === null) return <Notice>접수 정보를 불러오는 중입니다.</Notice>;

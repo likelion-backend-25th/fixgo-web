@@ -182,6 +182,7 @@ export interface ProductSummary {
   modelName: string;
   name: string;
   category: ProductCategory;
+  manufacturedAt: string | null;
   purchasedAt: string | null;
 }
 

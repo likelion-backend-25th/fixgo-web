@@ -52,10 +52,10 @@ export function AsListPage() {
 }
 
 // ==============================
-// 기사용 목록: GET /api/v1/as/repairs/my
+// 기사용 목록: 내 접수에 수리 기록을 연결한다.
 // ==============================
 
-type RepairStatusFilter = "ALL" | RepairStatus;
+type RepairStatusFilter = "ALL" | "RECEIVED" | RepairStatus;
 type TechSortKey =
   | "receptionNumber"
   | "customerName"
@@ -66,10 +66,8 @@ type TechSortKey =
   | "finalAmount"
   | "createdAt";
 
-type TechnicianRepairRow = RepairListItem & {
-  receptionNumber: string;
-  customerName: string;
-  modelName: string;
+type TechnicianRepairRow = AsReceptionListItem & {
+  repair: RepairListItem | undefined;
 };
 
 const REPAIR_STATUSES: RepairStatus[] = [
@@ -83,11 +81,12 @@ const REPAIR_STATUSES: RepairStatus[] = [
 
 const repairStatusOptions: { value: RepairStatusFilter; label: string }[] = [
   { value: "ALL", label: "상태 전체" },
+  { value: "RECEIVED", label: "접수" },
   ...REPAIR_STATUSES.map((value) => ({ value, label: repairStatusLabel(value) })),
 ];
 
 function isRepairStatusFilter(value: string): value is RepairStatusFilter {
-  return value === "ALL" || REPAIR_STATUSES.some((item) => item === value);
+  return value === "ALL" || value === "RECEIVED" || REPAIR_STATUSES.some((item) => item === value);
 }
 
 function isTechSortKey(value: string): value is TechSortKey {
@@ -103,6 +102,16 @@ function isTechSortKey(value: string): value is TechSortKey {
   );
 }
 
+function technicianStatusLabel(row: TechnicianRepairRow): string {
+  return row.repairStatus === null
+    ? receptionStatusLabel(row.receptionStatus)
+    : repairStatusLabel(row.repairStatus);
+}
+
+function technicianWarrantyLabel(row: TechnicianRepairRow): string {
+  return row.repair === undefined ? "-" : warrantyResultLabel(row.repair.warrantyResult);
+}
+
 function compareRepair(a: TechnicianRepairRow, b: TechnicianRepairRow, key: TechSortKey): number {
   switch (key) {
     case "receptionNumber":
@@ -110,15 +119,15 @@ function compareRepair(a: TechnicianRepairRow, b: TechnicianRepairRow, key: Tech
     case "customerName":
       return a.customerName.localeCompare(b.customerName, "ko");
     case "modelName":
-      return a.modelName.localeCompare(b.modelName, "ko");
+      return (a.modelName ?? "").localeCompare(b.modelName ?? "", "ko");
     case "diagnosis":
-      return (a.diagnosis ?? "").localeCompare(b.diagnosis ?? "", "ko");
+      return (a.repair?.diagnosis ?? "").localeCompare(b.repair?.diagnosis ?? "", "ko");
     case "warrantyResult":
-      return warrantyResultLabel(a.warrantyResult).localeCompare(warrantyResultLabel(b.warrantyResult), "ko");
+      return technicianWarrantyLabel(a).localeCompare(technicianWarrantyLabel(b), "ko");
     case "status":
-      return a.status.localeCompare(b.status);
+      return (a.repairStatus ?? a.receptionStatus).localeCompare(b.repairStatus ?? b.receptionStatus);
     case "finalAmount":
-      return a.finalAmount - b.finalAmount;
+      return (a.repair?.finalAmount ?? -1) - (b.repair?.finalAmount ?? -1);
     case "createdAt":
       return a.createdAt.localeCompare(b.createdAt);
   }
@@ -129,16 +138,11 @@ async function loadTechnicianRows(signal: AbortSignal): Promise<TechnicianRepair
     fetchMyRepairs(signal),
     fetchMyReceptionSummaries(signal),
   ]);
-  const byId = new Map(receptions.map((item) => [item.id, item]));
-  return repairs.map((repair) => {
-    const reception = byId.get(repair.asReceptionId);
-    return {
-      ...repair,
-      receptionNumber: reception?.receptionNumber ?? "-",
-      customerName: reception?.customerName ?? "-",
-      modelName: reception?.modelName ?? "-",
-    };
-  });
+  const repairsByReception = new Map(repairs.map((repair) => [repair.asReceptionId, repair]));
+  return receptions.map((reception) => ({
+    ...reception,
+    repair: repairsByReception.get(reception.id),
+  }));
 }
 
 async function fetchMyReceptionSummaries(signal: AbortSignal) {
@@ -167,7 +171,7 @@ function TechnicianAsListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // 본인에게 배정된 수리 건만 서버가 내려준다 (조건: ROLE_TECHNICIAN)
+  // 서버가 로그인한 기사에게 배정된 접수와 수리만 반환한다.
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -197,12 +201,13 @@ function TechnicianAsListPage() {
     return () => controller.abort();
   }, []);
 
-  // 검색 + 상태 필터 + 정렬 (현재 /my가 List만 반환하므로 화면에서 처리)
+  // 검색, 상태 필터, 정렬은 합쳐진 목록에 적용한다.
   const processed = useMemo(() => {
     const keyword = query.trim().toLowerCase();
 
     const filtered = items.filter((item) => {
-      if (status !== "ALL" && item.status !== status) {
+      const itemStatus = item.repairStatus ?? item.receptionStatus;
+      if (status !== "ALL" && itemStatus !== status) {
         return false;
       }
       if (keyword === "") {
@@ -211,9 +216,9 @@ function TechnicianAsListPage() {
       return (
         item.receptionNumber.toLowerCase().includes(keyword) ||
         item.customerName.toLowerCase().includes(keyword) ||
-        item.modelName.toLowerCase().includes(keyword) ||
-        (item.diagnosis ?? "").toLowerCase().includes(keyword) ||
-        (item.workNote ?? "").toLowerCase().includes(keyword)
+        (item.modelName ?? "").toLowerCase().includes(keyword) ||
+        (item.repair?.diagnosis ?? "").toLowerCase().includes(keyword) ||
+        (item.repair?.workNote ?? "").toLowerCase().includes(keyword)
       );
     });
 
@@ -255,37 +260,37 @@ function TechnicianAsListPage() {
       key: "modelName",
       header: "모델명",
       sortable: true,
-      render: (row) => row.modelName,
+      render: (row) => row.modelName ?? "-",
     },
     {
       key: "diagnosis",
       header: "진단 내용",
       sortable: true,
       render: (row) => (
-        <span className="line-clamp-1 max-w-xs">{row.diagnosis ?? "-"}</span>
+        <span className="line-clamp-1 max-w-xs">{row.repair?.diagnosis ?? "-"}</span>
       ),
     },
     {
       key: "warrantyResult",
       header: "보증",
       sortable: true,
-      render: (row) => warrantyResultLabel(row.warrantyResult),
+      render: technicianWarrantyLabel,
     },
     {
       key: "status",
       header: "진행 상태",
       sortable: true,
-      render: (row) => repairStatusLabel(row.status),
+      render: technicianStatusLabel,
     },
     {
       key: "finalAmount",
       header: "수리비",
       sortable: true,
-      render: (row) => won(row.finalAmount),
+      render: (row) => row.repair === undefined ? "-" : won(row.repair.finalAmount),
     },
     {
       key: "createdAt",
-      header: "배정일",
+      header: "접수일",
       sortable: true,
       render: (row) => formatDateTime(row.createdAt),
     },
@@ -335,9 +340,10 @@ function TechnicianAsListPage() {
         }
         onRowClick={(row) => {
           // 수리 진행 상태에 따라 점검 또는 수리 탭으로 이동한다. 주소의 id는 접수 ID다.
+          const status = row.repairStatus;
           const goRepair =
-            row.status === "APPROVED" || row.status === "REPAIRING" || row.status === "COMPLETED" || row.status === "REJECTED";
-          navigate(goRepair ? `/as/${row.asReceptionId}/repair` : `/as/${row.asReceptionId}/inspection`);
+            status === "APPROVED" || status === "REPAIRING" || status === "COMPLETED" || status === "REJECTED";
+          navigate(goRepair ? `/as/${row.id}/repair` : `/as/${row.id}/inspection`);
         }}
       />
       <Pagination page={currentPage} pageCount={pageCount} onPageChange={setPage} />

@@ -1,4 +1,4 @@
-import { useRef, type ReactNode, SelectHTMLAttributes } from "react";
+import { useRef, type ReactNode, type SelectHTMLAttributes } from "react";
 import { Calendar } from "lucide-react";
 import { cn } from "@/lib/cn";
 

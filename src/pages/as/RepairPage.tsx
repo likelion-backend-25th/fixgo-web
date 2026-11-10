@@ -4,6 +4,7 @@ import { Notice } from "@/components/ui/Panel";
 import { formatDateTime, won } from "@/lib/format";
 import { isAbortError } from "@/lib/apiClient";
 import {
+  completeRepair,
   fetchRepairDetail,
   fetchRepairWorks,
   repairDecisionLabel,
@@ -16,6 +17,7 @@ import {
 import { AsSummary } from "@/pages/as/AsSummary";
 import { ProgressTabs } from "@/pages/as/ProgressTabs";
 import { ReceptionProgress } from "@/pages/as/ReceptionProgress";
+import { useSessionStore } from "@/stores/useSessionStore";
 import type { AsReceptionDetail, ReceptionRepair } from "@/types/asReception";
 
 export function RepairPage() {
@@ -39,7 +41,8 @@ function RepairView({
   const [works, setWorks] = useState<RepairWork[]>([]);
   const [loading, setLoading] = useState(repair !== null);
   const [error, setError] = useState("");
-  const [starting, setStarting] = useState(false);
+  const [pending, setPending] = useState(false);
+  const role = useSessionStore((state) => state.user?.role);
 
   useEffect(() => {
     if (repair === null) {
@@ -90,25 +93,31 @@ function RepairView({
   const agreed = detail?.status === "REPAIRING" || detail?.status === "COMPLETED";
   const completed = detail?.status === "COMPLETED";
 
-  async function beginRepair() {
+  const needsReturnRecovery = completed && reception.status === "REPAIR_IN_PROGRESS"
+    && (detail.warrantyResult !== "PAID" || detail.finalAmount <= 0);
+  const canComplete = (role === "ADMIN" || role === "MANAGER")
+    && (detail?.status === "REPAIRING" || needsReturnRecovery);
+
+  async function runRepairAction(action: (repairId: number) => Promise<void>) {
     if (detail === null) {
       return;
     }
-    setStarting(true);
+    setPending(true);
     setError("");
     try {
-      await startRepair(detail.id);
+      await action(detail.id);
       onStarted();
     } catch (cause: unknown) {
-      setError(cause instanceof Error ? cause.message : "수리를 시작하지 못했습니다.");
-      setStarting(false);
+      setError(cause instanceof Error ? cause.message : "수리 상태를 변경하지 못했습니다.");
+    } finally {
+      setPending(false);
     }
   }
 
   return (
     <div className="space-y-4">
       <AsSummary record={reception} />
-      <ProgressTabs receptionId={reception.id} current="repair" />
+      {role === "TECHNICIAN" && <ProgressTabs receptionId={reception.id} current="repair" />}
       {repair === null && <Notice>수리 내역 조회는 아직 연결되지 않았습니다.</Notice>}
       {repair !== null && loading && <Notice>수리 정보를 불러오는 중입니다.</Notice>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
@@ -192,11 +201,11 @@ function RepairView({
             <Notice tone="error">수리가 반려된 건입니다. 수리 작업을 진행할 수 없습니다.</Notice>
           )}
 
-          {approved && (
+          {approved && role === "TECHNICIAN" && (
             <div className="flex items-center justify-between gap-3">
               <Notice>고객이 견적을 승인했습니다. 수리를 시작하면 수리 중으로 바뀝니다.</Notice>
-              <Button disabled={starting} onClick={() => void beginRepair()}>
-                {starting ? "수리 시작 중…" : "수리 시작"}
+              <Button disabled={pending} onClick={() => void runRepairAction(startRepair)}>
+                {pending ? "수리 시작 중…" : "수리 시작"}
               </Button>
             </div>
           )}
@@ -205,6 +214,11 @@ function RepairView({
             <Notice>현재 상태에서는 수리 작업을 진행할 수 없습니다. 수리 시작 처리가 필요합니다.</Notice>
           )}
 
+          {canComplete && (
+            <Button disabled={pending} onClick={() => void runRepairAction(completeRepair)}>
+              {pending ? "처리 중…" : needsReturnRecovery ? "배송·수령 대기로 전환" : "수리 완료"}
+            </Button>
+          )}
           {completed && <Notice>수리가 완료된 건입니다.</Notice>}
 
           {agreed && (

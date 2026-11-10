@@ -148,80 +148,53 @@ export async function fetchReception(
   return fetchReceptionDetail(`/api/v1/as-receptions/${id}`, signal);
 }
 
-/**
- * 접수 ID로 로그인한 기사의 수리 목록을 조회하고
- * 해당 접수에 연결된 수리 정보를 찾는다.
- */
-export async function fetchMyReception(
-  receptionId: number,
-  signal: AbortSignal,
-): Promise<MyReceptionDetail> {
-  const response = await apiFetch(
-    "/api/v1/as/repairs/my",
-    { signal },
-  );
-
+export async function fetchMyReception(receptionId: number, signal: AbortSignal): Promise<MyReceptionDetail> {
+  const response = await apiFetch(`/api/v1/as-receptions/my/${receptionId}`, { signal });
   if (!response.ok) {
-    throw new Error(
-      await readErrorMessage(response, "담당 수리 목록을 불러오지 못했습니다."),
-    );
+    throw new Error(await readErrorMessage(response, "담당 접수를 불러오지 못했습니다."));
   }
-
-  const body = await readJson(
-    response,
-    "담당 수리 목록 응답이 올바르지 않습니다.",
-  );
-
-  if (!Array.isArray(body)) {
-    throw new Error("담당 수리 목록 응답이 올바르지 않습니다.");
+  const body = await readJson(response, "담당 접수 응답이 올바르지 않습니다.");
+  if (!isRecord(body)) {
+    throw new Error("담당 접수 응답이 올바르지 않습니다.");
   }
-
-  const repairs = body.map(parseRepairResponse);
-
-  const matchedRepair = repairs.find(
-    (repair) => repair.asReceptionId === receptionId,
-  );
-
-  const reception = await fetchReceptionDetail(
-    `/api/v1/as-receptions/${receptionId}`,
-    signal,
-  );
-
-  if (!matchedRepair) {
-    return {
-      reception,
-      repair: null,
-    };
-  }
-
   return {
-    reception,
-    repair: {
-      id: matchedRepair.id,
-      status: matchedRepair.status,
-      diagnosis: matchedRepair.diagnosis,
-      warrantyResult: validateWarrantyResult(matchedRepair.warrantyResult),
-      reason: matchedRepair.reason,
-      reasonForRejection: matchedRepair.reasonForRejection,
-    },
+    reception: parseDetail(body.reception),
+    repair: body.repair === null ? null : toReceptionRepair(parseRepairResponse(body.repair)),
   };
 }
 
-/**
- * 수리 ID를 사용하여 수리를 시작한다.
- */
-export async function startMyInspection(repairId: number): Promise<void> {
-  const response = await apiFetch(
-    `/api/v1/as/repairs/${repairId}/start`,
-    {
-      method: "PATCH",
-    },
-  );
-
+export async function fetchStaffReception(receptionId: number, signal: AbortSignal): Promise<MyReceptionDetail> {
+  const reception = await fetchReception(receptionId, signal);
+  const number = encodeURIComponent(reception.receptionNumber);
+  const response = await apiFetch(`/api/v1/as/repairs/reception/${number}`, { signal });
   if (!response.ok) {
-    throw new Error(
-      await readErrorMessage(response, "수리를 시작하지 못했습니다."),
-    );
+    const message = await readErrorMessage(response, "수리 정보를 불러오지 못했습니다.");
+    if (response.status === 400 && message === "해당 접수번호의 수리 정보를 찾을 수 없습니다.") {
+      return { reception, repair: null };
+    }
+    throw new Error(message);
+  }
+  const body = await readJson(response, "수리 응답이 올바르지 않습니다.");
+  return { reception, repair: toReceptionRepair(parseRepairResponse(body)) };
+}
+
+function toReceptionRepair(repair: RepairResponseData): NonNullable<MyReceptionDetail["repair"]> {
+  return {
+    id: repair.id,
+    status: repair.status,
+    diagnosis: repair.diagnosis,
+    warrantyResult: validateWarrantyResult(repair.warrantyResult),
+    reason: repair.reason,
+    reasonForRejection: repair.reasonForRejection,
+  };
+}
+
+export async function startMyInspection(receptionId: number): Promise<void> {
+  const response = await apiFetch(`/api/v1/as-receptions/my/${receptionId}/inspection/start`, {
+    method: "POST",
+  });
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "점검을 시작하지 못했습니다."));
   }
 }
 
@@ -499,6 +472,7 @@ export async function createCustomer(
 }
 
 export async function searchProductsBySerial(
+  customerId: number,
   serialNumber: string,
   signal: AbortSignal,
 ): Promise<ProductSummary[]> {
@@ -508,12 +482,7 @@ export async function searchProductsBySerial(
     return [];
   }
 
-  const params = new URLSearchParams({ serialNumber: serial });
-
-  const response = await apiFetch(
-    `/api/v1/products?${params.toString()}`,
-    { signal },
-  );
+  const response = await apiFetch(`/api/v1/products/by-customer/${customerId}`, { signal });
 
   if (!response.ok) {
     throw new Error(
@@ -527,15 +496,8 @@ export async function searchProductsBySerial(
     throw new Error("제품 조회 응답이 올바르지 않습니다.");
   }
 
-  return body.map(parseProductSummary);
-}
-
-export async function searchProductBySerial(
-  serialNumber: string,
-  signal: AbortSignal,
-): Promise<ProductSummary | null> {
-  const items = await searchProductsBySerial(serialNumber, signal);
-  return items[0] ?? null;
+  const keyword = serial.toLowerCase();
+  return body.map(parseProductSummary).filter((product) => product.serialNumber.toLowerCase().includes(keyword));
 }
 
 export async function fetchProduct(
@@ -877,6 +839,7 @@ function parseProductSummary(value: unknown): ProductSummary {
     || typeof value.modelName !== "string"
     || typeof value.name !== "string"
     || !isCategory(value.category)
+    || !isNullableString(value.manufacturedAt)
     || !isNullableString(value.purchasedAt)
   ) {
     throw new Error("제품 응답이 올바르지 않습니다.");
@@ -888,6 +851,7 @@ function parseProductSummary(value: unknown): ProductSummary {
     modelName: value.modelName,
     name: value.name,
     category: value.category,
+    manufacturedAt: value.manufacturedAt,
     purchasedAt: value.purchasedAt,
   };
 }

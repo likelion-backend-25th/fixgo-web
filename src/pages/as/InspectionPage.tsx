@@ -10,9 +10,13 @@ import type { AsReceptionDetail, ReceptionRepair } from "@/types/asReception";
 import { AsSummary } from "@/pages/as/AsSummary";
 import { PresetPickerModal } from "@/pages/as/PresetPickerModal";
 import { ProgressTabs } from "@/pages/as/ProgressTabs";
+import { useSessionStore } from "@/stores/useSessionStore";
 import type { RepairLine } from "@/types/screen";
 
 export function InspectionPage() {
+  const isTechnician = useSessionStore((state) => state.user?.role === "TECHNICIAN");
+  if (!isTechnician) return <Notice>점검은 담당 기사가 진행할 수 있습니다.</Notice>;
+
   return (
     <ReceptionProgress render={({ reception, repair }, reload) => (
       repair === null

@@ -389,6 +389,15 @@ export async function updateRepair(repairId: number, request: RepairUpdateReques
 
 
 // 고객이 견적을 승인한 뒤 담당 기사가 수리를 시작한다.
+export async function completeRepair(repairId: number): Promise<void> {
+  const response = await apiFetch(`${API_BASE}/${repairId}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "COMPLETED" }),
+  });
+  await handleResponse<{ message: string }>(response, "수리를 완료하지 못했습니다.");
+}
+
 export async function startRepair(repairId: number): Promise<void> {
   const response = await apiFetch(`${API_BASE}/${repairId}/start`, {
     method: "PATCH",

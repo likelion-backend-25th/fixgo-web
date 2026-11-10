@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { useLocation, useParams } from "react-router";
+import { Link, useLocation, useParams } from "react-router";
 import { Button } from "@/components/ui/Button";
-import { SelectBox, TextField } from "@/components/ui/Field";
+import { TextField } from "@/components/ui/Field";
 import { Notice, Panel } from "@/components/ui/Panel";
 import { isAbortError } from "@/lib/apiClient";
 import {
@@ -9,11 +9,11 @@ import {
   changeReceptionStatus,
   customerPortalUrl,
   fetchCustomerPortalLink,
+  fetchMyReception,
   fetchProduct,
   fetchReception,
   fetchReceptionHistory,
   historyStatusLabel,
-  isReceptionStatus,
   receptionStatusLabel,
   returnMethodLabel,
 } from "@/lib/asReceptionApi";
@@ -24,7 +24,7 @@ import { useSessionStore } from "@/stores/useSessionStore";
 import { DocumentModal, type DocumentKind } from "@/pages/as/DocumentModal";
 import { ReceptionEditPanel } from "@/pages/as/ReceptionEditPanel";
 import { TechnicianAssignPanel } from "@/pages/as/TechnicianAssignPanel";
-import { AS_RECEPTION_STATUSES, type AsReceptionDetail, type AsReceptionStatus, type AsStatusHistory, type CustomerPortalLink, type ProductSummary } from "@/types/asReception";
+import type { AsReceptionDetail, AsStatusHistory, CustomerPortalLink, ProductSummary } from "@/types/asReception";
 import type { AsRecord } from "@/types/screen";
 
 export function AsDetailPage() {
@@ -39,7 +39,9 @@ export function AsDetailPage() {
   const [error, setError] = useState(validId ? "" : "접수 정보를 찾을 수 없습니다.");
   const [notice, setNotice] = useState(readNotice(location.state) ?? "");
   const [version, setVersion] = useState(0);
-  const isTechnician = useSessionStore((state) => state.user?.role === "TECHNICIAN");
+  const role = useSessionStore((state) => state.user?.role);
+  const memberId = useSessionStore((state) => state.memberId);
+  const isTechnician = role === "TECHNICIAN";
   useHeadingMeta(detail?.receptionNumber);
 
   useEffect(() => {
@@ -52,7 +54,9 @@ export function AsDetailPage() {
 
     // 상세와 이력을 같이 읽고, 모델명은 제품 API로 보완한다. 기사 화면은 이력을 쓰지 않는다.
     Promise.all([
-      fetchReception(receptionId, controller.signal),
+      isTechnician
+        ? fetchMyReception(receptionId, controller.signal).then((record) => record.reception)
+        : fetchReception(receptionId, controller.signal),
       isTechnician ? Promise.resolve([]) : fetchReceptionHistory(receptionId, controller.signal),
     ])
       .then(async ([nextDetail, nextHistory]) => {
@@ -153,8 +157,14 @@ export function AsDetailPage() {
       />
       {!isTechnician && (
         <>
+          {(role === "ADMIN" || role === "MANAGER") && (
+            <Link className="text-sm font-medium text-blue-600 hover:underline" to={`/as/${detail.id}/repair`}>
+              수리 진행 보기
+            </Link>
+          )}
           <StatusPanel
             detail={detail}
+            canChange={role === "ADMIN" || (role === "RECEPTIONIST" && detail.receptionist?.id === memberId)}
             onChanged={(message) => {
               setNotice(message);
               setError("");
@@ -190,27 +200,24 @@ export function AsDetailPage() {
 
 function StatusPanel({
   detail,
+  canChange,
   onChanged,
   onError,
 }: {
   detail: AsReceptionDetail;
+  canChange: boolean;
   onChanged: (message: string) => void;
   onError: (message: string) => void;
 }) {
-  const [nextStatus, setNextStatus] = useState<AsReceptionStatus>(detail.status);
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState(false);
-
-  useEffect(() => {
-    setNextStatus(detail.status);
-  }, [detail.status]);
 
   async function save() {
     setPending(true);
     try {
-      await changeReceptionStatus(detail.id, nextStatus, reason);
+      await changeReceptionStatus(detail.id, "WARRANTY_REVIEW", reason);
       setReason("");
-      onChanged(`${receptionStatusLabel(nextStatus)} 상태로 변경했습니다.`);
+      onChanged("보증 판정 상태로 변경했습니다.");
     } catch (cause: unknown) {
       onError(cause instanceof Error ? cause.message : "접수 상태를 변경하지 못했습니다.");
     } finally {
@@ -219,19 +226,14 @@ function StatusPanel({
   }
 
   return (
-    <Panel title="접수 상태" action={<Button onClick={() => void save()} disabled={pending}>상태 변경</Button>}>
-      <div className="flex flex-wrap items-end gap-2">
-        <SelectBox
-          value={nextStatus}
-          onChange={(value) => {
-            if (isReceptionStatus(value)) {
-              setNextStatus(value);
-            }
-          }}
-          options={AS_RECEPTION_STATUSES.map((status) => ({ value: status, label: receptionStatusLabel(status) }))}
-        />
-        <TextField className="w-72" value={reason} onChange={setReason} placeholder="변경 사유" />
-      </div>
+    <Panel title="접수 상태">
+      <p className="text-sm">현재 상태 {receptionStatusLabel(detail.status)}</p>
+      {canChange && detail.status === "INSPECTION" && (
+        <div className="mt-3 flex flex-wrap items-end gap-2">
+          <TextField className="w-72" value={reason} onChange={setReason} placeholder="변경 사유" />
+          <Button onClick={() => void save()} disabled={pending}>보증 판정으로 변경</Button>
+        </div>
+      )}
     </Panel>
   );
 }

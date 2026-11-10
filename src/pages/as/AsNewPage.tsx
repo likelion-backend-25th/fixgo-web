@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { DateField, TextArea, TextField } from "@/components/ui/Field";
 import { Notice, Panel } from "@/components/ui/Panel";
-import { categoryLabel, createCustomer, createReception, searchCustomers, searchProductBySerial, searchTechnicians } from "@/lib/asReceptionApi";
+import { categoryLabel, createCustomer, createReception, searchCustomers, searchProductsBySerial, searchTechnicians } from "@/lib/asReceptionApi";
 import { CustomerNameField } from "@/pages/as/CustomerNameField";
 import { SerialNumberField } from "@/pages/as/SerialNumberField";
 import { AsLookupModals, type LookupKind } from "@/pages/as/AsLookupModals";
@@ -61,7 +61,14 @@ export function AsNewPage() {
   const [pending, setPending] = useState(false);
 
   function patch(partial: Partial<AsForm>) {
-    setForm((current) => ({ ...current, ...partial }));
+    setForm((current) => {
+      const customerChanged = partial.customerId !== undefined && partial.customerId !== current.customerId;
+      return {
+        ...current,
+        ...(customerChanged ? { productId: null, serial: "", productGroup: "", modelName: "", purchasedAt: "" } : {}),
+        ...partial,
+      };
+    });
   }
 
   function applyProduct(product: ProductSummary) {
@@ -120,7 +127,7 @@ export function AsNewPage() {
     try {
       // 조회 후 이름을 고치면 id가 지워지므로, 접수 시점에 연락처·시리얼·기사명으로 다시 맞춘다.
       const customerId = await resolveCustomerId(form, signal);
-      const productId = await resolveProductId(form, signal);
+      const productId = customerId === null ? null : await resolveProductId(form, customerId, signal);
       const technicianId = await resolveTechnicianId(form, signal);
       const returnMethod = toReturnMethod(form.receiveMethod);
       if (customerId !== form.customerId || productId !== form.productId || technicianId !== form.technicianId) {
@@ -193,15 +200,20 @@ export function AsNewPage() {
       </Panel>
 
       <Panel title="제품/접수 정보">
+        {form.customerId === null && (
+          <p className="mb-3 text-sm text-neutral-500">고객을 먼저 조회하거나 등록한 뒤 보유 제품을 선택해 주세요.</p>
+        )}
         <div className="grid gap-3 md:grid-cols-4">
           <SerialNumberField
+            key={form.customerId}
+            customerId={form.customerId}
             value={form.serial}
             invalid={tried && form.productId === null}
             onChange={(serial) => patch({ serial, productId: null, productGroup: "", modelName: "" })}
             onPick={applyProduct}
           />
           <div className="flex items-end">
-            <Button variant="outline" onClick={() => setLookup("serial")}>
+            <Button variant="outline" disabled={form.customerId === null} onClick={() => setLookup("serial")}>
               시리얼번호 조회
             </Button>
           </div>
@@ -251,7 +263,7 @@ export function AsNewPage() {
         </Button>
         <Button onClick={() => void submit()} disabled={pending}>접수</Button>
       </div>
-      <AsLookupModals kind={lookup} onClose={() => setLookup(null)} onApply={patch} />
+      <AsLookupModals kind={lookup} customerId={form.customerId} onClose={() => setLookup(null)} onApply={patch} />
     </div>
   );
 }
@@ -309,7 +321,7 @@ async function resolveCustomerId(form: AsForm, signal: AbortSignal): Promise<num
   return created.id;
 }
 
-async function resolveProductId(form: AsForm, signal: AbortSignal): Promise<number | null> {
+async function resolveProductId(form: AsForm, customerId: number, signal: AbortSignal): Promise<number | null> {
   if (form.productId !== null) {
     return form.productId;
   }
@@ -317,7 +329,8 @@ async function resolveProductId(form: AsForm, signal: AbortSignal): Promise<numb
   if (serial === "") {
     return null;
   }
-  const product = await searchProductBySerial(serial, signal);
+  const products = await searchProductsBySerial(customerId, serial, signal);
+  const product = products.find((item) => item.serialNumber.toLowerCase() === serial.toLowerCase());
   return product?.id ?? null;
 }
 

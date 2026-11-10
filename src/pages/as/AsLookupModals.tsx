@@ -6,6 +6,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Panel";
 import { isAbortError } from "@/lib/apiClient";
 import { categoryLabel, searchCustomers, searchProductsBySerial, searchTechnicians } from "@/lib/asReceptionApi";
+import { formatYearMonthDay } from "@/lib/format";
 import { loadDaumPostcode, selectedAddress } from "@/lib/daumPostcode";
 import type { CustomerSummary, ProductSummary, TechnicianSummary } from "@/types/asReception";
 
@@ -29,11 +30,12 @@ interface ApplyPatch {
 
 interface AsLookupModalsProps {
   kind: LookupKind;
+  customerId: number | null;
   onClose: () => void;
   onApply: (patch: ApplyPatch) => void;
 }
 
-export function AsLookupModals({ kind, onClose, onApply }: AsLookupModalsProps) {
+export function AsLookupModals({ kind, customerId, onClose, onApply }: AsLookupModalsProps) {
   if (kind === null) {
     return null;
   }
@@ -41,7 +43,7 @@ export function AsLookupModals({ kind, onClose, onApply }: AsLookupModalsProps) 
     return <CustomerLookup onClose={onClose} onApply={onApply} />;
   }
   if (kind === "serial") {
-    return <SerialLookup onClose={onClose} onApply={onApply} />;
+    return customerId === null ? null : <SerialLookup customerId={customerId} onClose={onClose} onApply={onApply} />;
   }
   if (kind === "tech") {
     return <TechnicianLookup onClose={onClose} onApply={onApply} />;
@@ -49,7 +51,7 @@ export function AsLookupModals({ kind, onClose, onApply }: AsLookupModalsProps) 
   return <PostLookup onClose={onClose} onApply={onApply} />;
 }
 
-function CustomerLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
+function CustomerLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClose" | "onApply">) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<number | null>(null);
   const [rows, setRows] = useState<CustomerSummary[]>([]);
@@ -136,7 +138,7 @@ function CustomerLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">)
   );
 }
 
-function SerialLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
+function SerialLookup({ customerId, onClose, onApply }: Pick<AsLookupModalsProps, "onClose" | "onApply"> & { customerId: number }) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<number | null>(null);
   const [rows, setRows] = useState<ProductSummary[]>([]);
@@ -146,6 +148,7 @@ function SerialLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
     { key: "serial", header: "시리얼번호", render: (row) => row.serialNumber },
     { key: "group", header: "제품군", render: (row) => categoryLabel(row.category) },
     { key: "model", header: "모델명", render: (row) => row.modelName },
+    { key: "manufacturedAt", header: "생산일", render: (row) => formatYearMonthDay(row.manufacturedAt) },
   ];
 
   useEffect(() => {
@@ -160,8 +163,7 @@ function SerialLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
     const timer = window.setTimeout(() => {
       setLoading(true);
       setError("");
-      // 시리얼번호 일부만 넘겨도 포함된 제품을 모두 보여 준다.
-      searchProductsBySerial(serial, controller.signal)
+      searchProductsBySerial(customerId, serial, controller.signal)
         .then((items) => {
           if (!controller.signal.aborted) {
             setRows(items);
@@ -184,7 +186,7 @@ function SerialLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [query]);
+  }, [customerId, query]);
 
   return (
     <Modal title="시리얼번호 조회" wide onClose={onClose}>
@@ -196,7 +198,7 @@ function SerialLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
         rowKey={(row) => String(row.id)}
         selectedKey={selected === null ? undefined : String(selected)}
         onRowClick={(row) => setSelected(row.id)}
-        emptyText={query.trim() === "" ? "시리얼번호 일부를 입력해 주세요." : loading ? "제품을 조회하는 중입니다." : "조회 결과가 없습니다."}
+        emptyText={query.trim() === "" ? "시리얼번호 일부를 입력해 주세요." : loading ? "제품을 조회하는 중입니다." : "이 고객의 보유 제품 중 조회 결과가 없습니다."}
       />
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>취소</Button>
@@ -220,7 +222,7 @@ function SerialLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
   );
 }
 
-function TechnicianLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
+function TechnicianLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClose" | "onApply">) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<number | null>(null);
   const [rows, setRows] = useState<TechnicianSummary[]>([]);
@@ -291,7 +293,7 @@ function TechnicianLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind"
   );
 }
 
-function PostLookup({ onClose, onApply }: Omit<AsLookupModalsProps, "kind">) {
+function PostLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClose" | "onApply">) {
   const frameRef = useRef<HTMLDivElement>(null);
   const onApplyRef = useRef(onApply);
   const onCloseRef = useRef(onClose);
