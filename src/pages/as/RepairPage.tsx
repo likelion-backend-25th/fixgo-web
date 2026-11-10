@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Panel";
 import { formatDateTime, won } from "@/lib/format";
 import { isAbortError } from "@/lib/apiClient";
@@ -7,6 +8,7 @@ import {
   fetchRepairWorks,
   repairDecisionLabel,
   repairStatusLabel,
+  startRepair,
   warrantyResultLabel,
   type RepairDetail,
   type RepairWork,
@@ -18,17 +20,26 @@ import type { AsReceptionDetail, ReceptionRepair } from "@/types/asReception";
 
 export function RepairPage() {
   return (
-    <ReceptionProgress render={({ reception, repair }) => (
-      <RepairView reception={reception} repair={repair} />
+    <ReceptionProgress render={({ reception, repair }, reload) => (
+      <RepairView reception={reception} repair={repair} onStarted={reload} />
     )} />
   );
 }
 
-function RepairView({ reception, repair }: { reception: AsReceptionDetail; repair: ReceptionRepair | null }) {
+function RepairView({
+  reception,
+  repair,
+  onStarted,
+}: {
+  reception: AsReceptionDetail;
+  repair: ReceptionRepair | null;
+  onStarted: () => void;
+}) {
   const [detail, setDetail] = useState<RepairDetail | null>(null);
   const [works, setWorks] = useState<RepairWork[]>([]);
   const [loading, setLoading] = useState(repair !== null);
   const [error, setError] = useState("");
+  const [starting, setStarting] = useState(false);
 
   useEffect(() => {
     if (repair === null) {
@@ -75,8 +86,24 @@ function RepairView({ reception, repair }: { reception: AsReceptionDetail; repai
   }, [repair]);
 
   const rejected = detail?.status === "REJECTED";
+  const approved = detail?.status === "APPROVED";
   const agreed = detail?.status === "REPAIRING" || detail?.status === "COMPLETED";
   const completed = detail?.status === "COMPLETED";
+
+  async function beginRepair() {
+    if (detail === null) {
+      return;
+    }
+    setStarting(true);
+    setError("");
+    try {
+      await startRepair(detail.id);
+      onStarted();
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : "수리를 시작하지 못했습니다.");
+      setStarting(false);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -165,7 +192,16 @@ function RepairView({ reception, repair }: { reception: AsReceptionDetail; repai
             <Notice tone="error">수리가 반려된 건입니다. 수리 작업을 진행할 수 없습니다.</Notice>
           )}
 
-          {!rejected && !agreed && (
+          {approved && (
+            <div className="flex items-center justify-between gap-3">
+              <Notice>고객이 견적을 승인했습니다. 수리를 시작하면 수리 중으로 바뀝니다.</Notice>
+              <Button disabled={starting} onClick={() => void beginRepair()}>
+                {starting ? "수리 시작 중…" : "수리 시작"}
+              </Button>
+            </div>
+          )}
+
+          {!rejected && !agreed && !approved && (
             <Notice>현재 상태에서는 수리 작업을 진행할 수 없습니다. 수리 시작 처리가 필요합니다.</Notice>
           )}
 

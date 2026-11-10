@@ -55,7 +55,21 @@ export function AsListPage() {
 // ==============================
 
 type RepairStatusFilter = "ALL" | RepairStatus;
-type TechSortKey = "asReceptionId" | "status" | "finalAmount" | "createdAt";
+type TechSortKey =
+  | "receptionNumber"
+  | "customerName"
+  | "modelName"
+  | "diagnosis"
+  | "warrantyResult"
+  | "status"
+  | "finalAmount"
+  | "createdAt";
+
+type TechnicianRepairRow = RepairListItem & {
+  receptionNumber: string;
+  customerName: string;
+  modelName: string;
+};
 
 const REPAIR_STATUSES: RepairStatus[] = [
   "REQUESTED",
@@ -77,17 +91,29 @@ function isRepairStatusFilter(value: string): value is RepairStatusFilter {
 
 function isTechSortKey(value: string): value is TechSortKey {
   return (
-    value === "asReceptionId" ||
+    value === "receptionNumber" ||
+    value === "customerName" ||
+    value === "modelName" ||
+    value === "diagnosis" ||
+    value === "warrantyResult" ||
     value === "status" ||
     value === "finalAmount" ||
     value === "createdAt"
   );
 }
 
-function compareRepair(a: RepairListItem, b: RepairListItem, key: TechSortKey): number {
+function compareRepair(a: TechnicianRepairRow, b: TechnicianRepairRow, key: TechSortKey): number {
   switch (key) {
-    case "asReceptionId":
-      return a.asReceptionId - b.asReceptionId;
+    case "receptionNumber":
+      return a.receptionNumber.localeCompare(b.receptionNumber);
+    case "customerName":
+      return a.customerName.localeCompare(b.customerName, "ko");
+    case "modelName":
+      return a.modelName.localeCompare(b.modelName, "ko");
+    case "diagnosis":
+      return (a.diagnosis ?? "").localeCompare(b.diagnosis ?? "", "ko");
+    case "warrantyResult":
+      return warrantyResultLabel(a.warrantyResult).localeCompare(warrantyResultLabel(b.warrantyResult), "ko");
     case "status":
       return a.status.localeCompare(b.status);
     case "finalAmount":
@@ -97,12 +123,41 @@ function compareRepair(a: RepairListItem, b: RepairListItem, key: TechSortKey): 
   }
 }
 
+async function loadTechnicianRows(signal: AbortSignal): Promise<TechnicianRepairRow[]> {
+  const [repairs, receptions] = await Promise.all([
+    fetchMyRepairs(signal),
+    fetchMyReceptionSummaries(signal),
+  ]);
+  const byId = new Map(receptions.map((item) => [item.id, item]));
+  return repairs.map((repair) => {
+    const reception = byId.get(repair.asReceptionId);
+    return {
+      ...repair,
+      receptionNumber: reception?.receptionNumber ?? "-",
+      customerName: reception?.customerName ?? "-",
+      modelName: reception?.modelName ?? "-",
+    };
+  });
+}
+
+async function fetchMyReceptionSummaries(signal: AbortSignal) {
+  const size = 100;
+  const query = { keyword: "", status: null, technicianId: null, page: 1, size, sort: "createdAt,desc" };
+  const first = await fetchReceptions(query, signal, true);
+  const items = [...first.items];
+  for (let page = 2; page <= first.totalPages; page += 1) {
+    const next = await fetchReceptions({ ...query, page }, signal, true);
+    items.push(...next.items);
+  }
+  return items;
+}
+
 function TechnicianAsListPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const notice = readNotice(location.state);
 
-  const [items, setItems] = useState<RepairListItem[]>([]);
+  const [items, setItems] = useState<TechnicianRepairRow[]>([]);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<RepairStatusFilter>("ALL");
   const [sortKey, setSortKey] = useState<TechSortKey>("createdAt");
@@ -117,7 +172,7 @@ function TechnicianAsListPage() {
     setLoading(true);
     setError("");
 
-    fetchMyRepairs(controller.signal)
+    loadTechnicianRows(controller.signal)
       .then((result) => {
         if (!controller.signal.aborted) {
           setItems(result);
@@ -153,7 +208,9 @@ function TechnicianAsListPage() {
         return true;
       }
       return (
-        String(item.asReceptionId).includes(keyword) ||
+        item.receptionNumber.toLowerCase().includes(keyword) ||
+        item.customerName.toLowerCase().includes(keyword) ||
+        item.modelName.toLowerCase().includes(keyword) ||
         (item.diagnosis ?? "").toLowerCase().includes(keyword) ||
         (item.workNote ?? "").toLowerCase().includes(keyword)
       );
@@ -180,16 +237,29 @@ function TechnicianAsListPage() {
     setSortDir("asc");
   }
 
-  const columns: Column<RepairListItem>[] = [
+  const columns: Column<TechnicianRepairRow>[] = [
     {
-      key: "asReceptionId",
-      header: "접수 ID",
+      key: "receptionNumber",
+      header: "접수번호",
       sortable: true,
-      render: (row) => `#${row.asReceptionId}`,
+      render: (row) => row.receptionNumber,
+    },
+    {
+      key: "customerName",
+      header: "고객",
+      sortable: true,
+      render: (row) => row.customerName,
+    },
+    {
+      key: "modelName",
+      header: "모델명",
+      sortable: true,
+      render: (row) => row.modelName,
     },
     {
       key: "diagnosis",
       header: "진단 내용",
+      sortable: true,
       render: (row) => (
         <span className="line-clamp-1 max-w-xs">{row.diagnosis ?? "-"}</span>
       ),
@@ -197,6 +267,7 @@ function TechnicianAsListPage() {
     {
       key: "warrantyResult",
       header: "보증",
+      sortable: true,
       render: (row) => warrantyResultLabel(row.warrantyResult),
     },
     {
@@ -231,7 +302,7 @@ function TechnicianAsListPage() {
             setQuery(value);
             setPage(1);
           }}
-          placeholder="접수 ID, 진단 내용 검색"
+          placeholder="접수번호, 고객, 진단 내용 검색"
           className="w-64"
         />
         <SelectBox
@@ -264,7 +335,7 @@ function TechnicianAsListPage() {
         onRowClick={(row) => {
           // 수리 진행 상태에 따라 점검 또는 수리 탭으로 이동한다. 주소의 id는 접수 ID다.
           const goRepair =
-            row.status === "REPAIRING" || row.status === "COMPLETED" || row.status === "REJECTED";
+            row.status === "APPROVED" || row.status === "REPAIRING" || row.status === "COMPLETED" || row.status === "REJECTED";
           navigate(goRepair ? `/as/${row.asReceptionId}/repair` : `/as/${row.asReceptionId}/inspection`);
         }}
       />

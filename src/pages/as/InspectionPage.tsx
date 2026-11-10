@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/Button";
 import { TextArea } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Panel";
 import { startMyInspection } from "@/lib/asReceptionApi";
+import { calculateRepairCost, confirmRepairCost, createRepairWork, updateRepair } from "@/lib/repair";
 import { formatDate, won } from "@/lib/format";
 import { ReceptionProgress } from "@/pages/as/ReceptionProgress";
 import type { AsReceptionDetail, ReceptionRepair } from "@/types/asReception";
@@ -16,7 +17,7 @@ export function InspectionPage() {
     <ReceptionProgress render={({ reception, repair }, reload) => (
       repair === null
         ? <InspectionStart record={reception} onStarted={reload} />
-        : <InspectionForm key={repair.id} record={reception} repair={repair} />
+        : <InspectionForm key={repair.id} record={reception} repair={repair} onCompleted={reload} />
     )} />
   );
 }
@@ -52,7 +53,15 @@ function InspectionStart({ record, onStarted }: { record: AsReceptionDetail; onS
   );
 }
 
-function InspectionForm({ record, repair }: { record: AsReceptionDetail; repair: ReceptionRepair }) {
+function InspectionForm({
+  record,
+  repair,
+  onCompleted,
+}: {
+  record: AsReceptionDetail;
+  repair: ReceptionRepair;
+  onCompleted: () => void;
+}) {
   const [lines, setLines] = useState<RepairLine[]>([]);
   const [note, setNote] = useState(repair.diagnosis ?? "");
   const [photos, setPhotos] = useState<string[]>([]);
@@ -64,17 +73,76 @@ function InspectionForm({ record, repair }: { record: AsReceptionDetail; repair:
   const [rejectReason, setRejectReason] = useState(repair.reasonForRejection ?? "");
   const [presetOpen, setPresetOpen] = useState(false);
   const [notice, setNotice] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const diagnosing = repair.status === "DIAGNOSING";
 
   const laborTotal = useMemo(() => lines.reduce((sum, line) => sum + line.amount, 0), [lines]);
   const warranty = judgment === "무상" ? laborTotal : 0;
   const charge = judgment === "무상" ? 0 : laborTotal;
+
+  async function complete() {
+    if (note.trim() === "") {
+      setNotice("점검 내용을 입력해 주세요.");
+      return;
+    }
+    if (judgment === null) {
+      setNotice("최종 판정을 선택해 주세요.");
+      return;
+    }
+    const technicianId = record.technician?.id;
+    if (technicianId === undefined) {
+      setNotice("담당 기사를 확인할 수 없습니다.");
+      return;
+    }
+    setSubmitting(true);
+    setNotice("");
+    try {
+      await updateRepair(repair.id, {
+        asReceptionId: record.id,
+        technicianId,
+        diagnosis: note.trim(),
+        workNote: "",
+        repairDecision: "REPAIRABLE",
+        warrantyResult: judgment === "무상" ? "FREE" : "PAID",
+        reason: reason.trim(),
+        laborRate: 0,
+        inspectionCost: 0,
+        finalAmount: 0,
+        status: "DIAGNOSING",
+        reasonForRejection: rejectReason.trim(),
+      });
+      for (const line of lines) {
+        if (line.presetId === undefined) {
+          continue;
+        }
+        await createRepairWork({ repairId: repair.id, presetId: line.presetId, workName: line.name });
+      }
+      try {
+        await calculateRepairCost(repair.id);
+      } catch (cause: unknown) {
+        // 프리셋이 없으면 저장해 둔 0원으로 확정한다. 요금표가 없을 때의 계산 실패가 상태 전환을 막지 않게 한다.
+        if (lines.some((line) => line.presetId !== undefined)) {
+          throw cause;
+        }
+      }
+      await confirmRepairCost(repair.id);
+      onCompleted();
+    } catch (cause: unknown) {
+      setNotice(cause instanceof Error ? cause.message : "점검을 완료하지 못했습니다.");
+      setSubmitting(false);
+    }
+  }
 
   return (
     <div className="space-y-4">
       {notice !== "" && <Notice>{notice}</Notice>}
       <AsSummary record={record} />
       <ProgressTabs receptionId={record.id} current="inspection" />
-      <Notice>점검 입력은 화면에서 미리 확인할 수 있습니다.</Notice>
+      {diagnosing ? (
+        <Notice>점검 내용을 저장하면 견적 승인 대기로 바뀌고, 이 화면에 그대로 남습니다.</Notice>
+      ) : (
+        <Notice>{inspectionResultMessage(repair.status)}</Notice>
+      )}
       <section>
         <p className="mb-2 text-sm font-medium">점검 사진</p>
         <label className="grid h-28 w-full max-w-sm cursor-pointer place-items-center rounded-xl border border-dashed border-neutral-300 bg-white text-sm text-neutral-500">
@@ -153,19 +221,13 @@ function InspectionForm({ record, repair }: { record: AsReceptionDetail; repair:
         <div className="flex justify-between text-blue-700"><span>보증 무상</span><span>-{won(warranty)}</span></div>
         <div className="mt-2 flex justify-between border-t border-blue-200 pt-2 font-semibold"><span>청구 금액</span><span>{judgment === null ? "미판정" : won(charge)}</span></div>
       </div>
-      <div className="flex justify-end">
-        <Button
-          onClick={() => {
-            if (note.trim() === "") {
-              setNotice("점검 내용을 입력해 주세요.");
-              return;
-            }
-            setNotice("점검 입력 내용을 확인했습니다.");
-          }}
-        >
-          점검 완료
-        </Button>
-      </div>
+      {diagnosing && (
+        <div className="flex justify-end">
+          <Button disabled={submitting} onClick={() => void complete()}>
+            {submitting ? "점검 완료 처리 중…" : "점검 완료"}
+          </Button>
+        </div>
+      )}
       {presetOpen && (
   <PresetPickerModal
     onClose={() => setPresetOpen(false)}
@@ -177,6 +239,7 @@ function InspectionForm({ record, repair }: { record: AsReceptionDetail; repair:
         quantityLabel: "1회",
         unitPriceLabel: won(preset.basePrice),
         amount: preset.basePrice,
+        presetId: preset.id,
       };
 
       setLines((current) => [...current, newLine]);
@@ -187,6 +250,19 @@ function InspectionForm({ record, repair }: { record: AsReceptionDetail; repair:
 )}
     </div>
   );
+}
+
+function inspectionResultMessage(status: ReceptionRepair["status"]): string {
+  if (status === "REQUESTED") {
+    return "견적 승인 대기입니다. 고객이 승인하면 수리 페이지에서 수리를 시작할 수 있습니다.";
+  }
+  if (status === "APPROVED" || status === "REPAIRING" || status === "COMPLETED") {
+    return "고객이 견적을 승인했습니다. 수리 페이지에서 진행합니다.";
+  }
+  if (status === "REJECTED") {
+    return "고객이 견적을 거부했습니다.";
+  }
+  return "점검이 완료된 건입니다.";
 }
 
 function LineTable({ lines, onRemove }: { lines: RepairLine[]; onRemove: (id: string) => void }) {

@@ -346,6 +346,31 @@ export async function calculateRepairCost(
   );
 }
 
+export interface RepairUpdateRequest {
+  asReceptionId: number;
+  technicianId: number;
+  diagnosis: string;
+  workNote: string;
+  repairDecision: RepairDecision;
+  warrantyResult: WarrantyResult;
+  reason: string;
+  laborRate: number;
+  inspectionCost: number;
+  finalAmount: number;
+  status: RepairStatus;
+  reasonForRejection: string;
+}
+
+// 점검 내용과 보증 판정을 저장한다. 상태 전이는 수리비 확정에서 한다.
+export async function updateRepair(repairId: number, request: RepairUpdateRequest): Promise<void> {
+  const response = await apiFetch(`${API_BASE}/${repairId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  await handleResponse<RepairDetail>(response, "점검 내용을 저장하지 못했습니다.");
+}
+
 // 수리 비용 확정
 export async function confirmRepairCost(
   repairId: number,
@@ -361,6 +386,14 @@ export async function confirmRepairCost(
     response,
     "수리 비용 확정에 실패했습니다.",
   );
+}
+
+// 고객이 견적을 승인한 뒤 담당 기사가 수리를 시작한다.
+export async function startRepair(repairId: number): Promise<void> {
+  const response = await apiFetch(`${API_BASE}/${repairId}/start`, {
+    method: "PATCH",
+  });
+  await handleResponse<{ message: string }>(response, "수리를 시작하지 못했습니다.");
 }
 
 

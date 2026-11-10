@@ -30,6 +30,7 @@ export interface RepairLine {
   unitPriceLabel: string;
   amount: number;
   indent?: boolean;
+  presetId?: number;
 }
 
 export interface CustomerRecord {
