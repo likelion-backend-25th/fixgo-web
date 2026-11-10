@@ -36,6 +36,27 @@ import {
 const returnMethods: readonly ReturnMethod[] = ["DELIVERY", "PICKUP"];
 const categories: readonly ProductCategory[] = ["LAPTOP", "PHONE"];
 
+interface RepairResponseData {
+  id: number;
+  asReceptionId: number;
+  technicianId: number;
+  diagnosis: string | null;
+  workNote: string | null;
+  repairDecision: string | null;
+  warrantyResult: string;
+  reason: string | null;
+  laborRate: number;
+  inspectionCost: number;
+  finalAmount: number;
+  status: RepairStatus;
+  reasonForRejection: string | null;
+  confirmedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: number | null;
+  updatedBy: number | null;
+}
+
 export function receptionStatusLabel(status: AsReceptionStatus): string {
   if (status === "RECEIVED") return "접수";
   if (status === "INSPECTION") return "점검 중";
@@ -94,9 +115,10 @@ export async function fetchReceptions(
   params.set("size", String(query.size));
   params.set("sort", query.sort);
 
-  // 내 담당 목록은 서버가 로그인한 기사 ID로 필터링한다.
-  const path = mineOnly ? "/api/v1/as-receptions/my" : "/api/v1/as-receptions";
-  const response = await apiFetch(`${path}?${params.toString()}`, { signal });
+  const response = await apiFetch(
+    `/api/v1/as-receptions?${params.toString()}`,
+    { signal },
+  );
 
   if (!response.ok) {
     throw new Error(
@@ -119,49 +141,87 @@ export async function fetchReceptions(
   };
 }
 
-export async function fetchReception(id: number, signal: AbortSignal): Promise<AsReceptionDetail> {
+export async function fetchReception(
+  id: number,
+  signal: AbortSignal,
+): Promise<AsReceptionDetail> {
   return fetchReceptionDetail(`/api/v1/as-receptions/${id}`, signal);
 }
 
-export async function fetchMyReception(id: number, signal: AbortSignal): Promise<MyReceptionDetail> {
-  // 기사 상세 응답에는 접수 정보와 저장된 수리 기록이 함께 들어온다.
-  const response = await apiFetch(`/api/v1/as-receptions/my/${id}`, { signal });
+/**
+ * 접수 ID로 로그인한 기사의 수리 목록을 조회하고
+ * 해당 접수에 연결된 수리 정보를 찾는다.
+ */
+export async function fetchMyReception(
+  receptionId: number,
+  signal: AbortSignal,
+): Promise<MyReceptionDetail> {
+  const response = await apiFetch(
+    "/api/v1/as/repairs/my",
+    { signal },
+  );
+
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "접수 정보를 불러오지 못했습니다."));
+    throw new Error(
+      await readErrorMessage(response, "담당 수리 목록을 불러오지 못했습니다."),
+    );
   }
-  const body = await readJson(response, "기사 접수 상세 응답이 올바르지 않습니다.");
-  if (!isRecord(body)) {
-    throw new Error("기사 접수 상세 응답이 올바르지 않습니다.");
+
+  const body = await readJson(
+    response,
+    "담당 수리 목록 응답이 올바르지 않습니다.",
+  );
+
+  if (!Array.isArray(body)) {
+    throw new Error("담당 수리 목록 응답이 올바르지 않습니다.");
   }
-  const reception = parseDetail(body.reception);
-  const repair = body.repair;
-  if (repair === null) return { reception, repair: null };
-  if (!isRecord(repair)
-    || !isId(repair.id)
-    || repair.status === null || !isRepairStatus(repair.status)
-    || !isNullableString(repair.diagnosis)
-    || !isNullableString(repair.reason)
-    || !isNullableString(repair.reasonForRejection)
-    || (repair.warrantyResult !== "FREE" && repair.warrantyResult !== "PAID" && repair.warrantyResult !== "UNDECIDED")) {
-    throw new Error("수리 기록 응답이 올바르지 않습니다.");
+
+  const repairs = body.map(parseRepairResponse);
+
+  const matchedRepair = repairs.find(
+    (repair) => repair.asReceptionId === receptionId,
+  );
+
+  const reception = await fetchReceptionDetail(
+    `/api/v1/as-receptions/${receptionId}`,
+    signal,
+  );
+
+  if (!matchedRepair) {
+    return {
+      reception,
+      repair: null,
+    };
   }
+
   return {
     reception,
     repair: {
-      id: repair.id,
-      status: repair.status,
-      diagnosis: repair.diagnosis,
-      warrantyResult: repair.warrantyResult,
-      reason: repair.reason,
-      reasonForRejection: repair.reasonForRejection,
+      id: matchedRepair.id,
+      status: matchedRepair.status,
+      diagnosis: matchedRepair.diagnosis,
+      warrantyResult: validateWarrantyResult(matchedRepair.warrantyResult),
+      reason: matchedRepair.reason,
+      reasonForRejection: matchedRepair.reasonForRejection,
     },
   };
 }
 
-export async function startMyInspection(receptionId: number): Promise<void> {
-  const response = await apiFetch(`/api/v1/as-receptions/my/${receptionId}/inspection/start`, { method: "POST" });
+/**
+ * 수리 ID를 사용하여 수리를 시작한다.
+ */
+export async function startMyInspection(repairId: number): Promise<void> {
+  const response = await apiFetch(
+    `/api/v1/as/repairs/${repairId}/start`,
+    {
+      method: "PATCH",
+    },
+  );
+
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "점검을 시작하지 못했습니다."));
+    throw new Error(
+      await readErrorMessage(response, "수리를 시작하지 못했습니다."),
+    );
   }
 }
 
@@ -596,8 +656,68 @@ export async function searchTechnicians(
 }
 
 // --------------------
+// Utility functions
+// --------------------
+
+function validateWarrantyResult(value: string): "FREE" | "PAID" | "UNDECIDED" {
+  if (value === "FREE" || value === "PAID" || value === "UNDECIDED") {
+    return value;
+  }
+  throw new Error(`Invalid warranty result: ${value}`);
+}
+
+// --------------------
 // Response parsers
 // --------------------
+
+function parseRepairResponse(value: unknown): RepairResponseData {
+  if (
+    !isRecord(value)
+    || !isId(value.id)
+    || !isId(value.asReceptionId)
+    || !isId(value.technicianId)
+    || !isNullableString(value.diagnosis)
+    || !isNullableString(value.workNote)
+    || !isNullableString(value.repairDecision)
+    || typeof value.warrantyResult !== "string"
+    || !isNullableString(value.reason)
+    || !isWholeNumber(value.laborRate)
+    || !isWholeNumber(value.inspectionCost)
+    || !isWholeNumber(value.finalAmount)
+    || typeof value.status !== "string"
+    || !isRepairStatus(value.status)
+    || value.status === null
+    || !isNullableString(value.reasonForRejection)
+    || !isNullableString(value.confirmedAt)
+    || typeof value.createdAt !== "string"
+    || typeof value.updatedAt !== "string"
+    || !isNullableId(value.createdBy)
+    || !isNullableId(value.updatedBy)
+  ) {
+    throw new Error("수리 응답이 올바르지 않습니다.");
+  }
+
+  return {
+    id: value.id,
+    asReceptionId: value.asReceptionId,
+    technicianId: value.technicianId,
+    diagnosis: value.diagnosis,
+    workNote: value.workNote,
+    repairDecision: value.repairDecision,
+    warrantyResult: value.warrantyResult,
+    reason: value.reason,
+    laborRate: value.laborRate,
+    inspectionCost: value.inspectionCost,
+    finalAmount: value.finalAmount,
+    status: value.status,
+    reasonForRejection: value.reasonForRejection,
+    confirmedAt: value.confirmedAt,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+    createdBy: value.createdBy,
+    updatedBy: value.updatedBy,
+  };
+}
 
 function parseListItem(value: unknown): AsReceptionListItem {
   if (
@@ -1032,6 +1152,10 @@ function isCategory(value: unknown): value is ProductCategory {
 
 function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
+}
+
+function isNullableId(value: unknown): value is number | null {
+  return value === null || isId(value);
 }
 
 function isWholeNumber(value: unknown): value is number {
