@@ -31,20 +31,22 @@ function parseProductSummary(value: unknown): ProductSummary {
     || typeof value.modelName !== "string"
     || typeof value.name !== "string"
     || !isCategory(value.category)
+    || !isNullableString(value.manufacturedAt)
     || !isNullableString(value.purchasedAt)
   ) {
     throw new Error("제품 응답이 올바르지 않습니다.");
   }
+
   return {
     id: value.id,
     serialNumber: value.serialNumber,
     modelName: value.modelName,
     name: value.name,
     category: value.category,
+    manufacturedAt: value.manufacturedAt,
     purchasedAt: value.purchasedAt,
   };
 }
-
 function isCategory(value: unknown): value is ProductCategory {
   return typeof value === "string" && categories.some((item) => item === value);
 }
