@@ -157,24 +157,10 @@ export interface CreateReceptionResult {
   createdAt: string;
 }
 
-export interface CustomerSummary {
-  id: number;
-  name: string;
-  phone: string;
-  email: string;
-  zipcode: string | null;
-  basicAddress: string | null;
-  detailAddress: string | null;
-}
-
-export interface CreateCustomerInput {
-  name: string;
-  phone: string;
-  email: string;
-  zipcode: string;
-  basicAddress: string;
-  detailAddress: string;
-}
+export type {
+  CreateCustomerInput,
+  CustomerSummary,
+} from "@/types/customer";
 
 export interface ProductSummary {
   id: number;
