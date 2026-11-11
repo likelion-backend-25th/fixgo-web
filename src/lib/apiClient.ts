@@ -85,6 +85,10 @@ export async function readApiJson(response: Response, fallback: string): Promise
   }
 }
 
+function isInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value);
+}
+
 export function mapSpringPage<T>(
   value: unknown,
   mapItem: (item: unknown) => T,
@@ -93,11 +97,11 @@ export function mapSpringPage<T>(
   if (
     !isRecord(value)
     || !Array.isArray(value.content)
-    || !Number.isInteger(value.number)
-    || !Number.isInteger(value.size)
+    || !isInteger(value.number)
+    || !isInteger(value.size)
     || typeof value.totalElements !== "number"
     || !Number.isFinite(value.totalElements)
-    || !Number.isInteger(value.totalPages)
+    || !isInteger(value.totalPages)
   ) {
     throw new Error(invalidMessage);
   }

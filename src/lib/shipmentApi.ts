@@ -268,7 +268,11 @@ function parseManagementItem(value: unknown): ShipmentManagementItem {
   if (!isRecord(value) || !isId(value.asReceptionId) || typeof value.receptionNumber !== "string" || typeof value.customerName !== "string" || typeof value.recipientPhone !== "string") {
     throw new Error("배송 목록 응답이 올바르지 않습니다.");
   }
-  if (!isMethod(value.returnMethod) || !isReceptionStatus(value.asReceptionStatus)) {
+  if (
+    !isMethod(value.returnMethod)
+    || typeof value.asReceptionStatus !== "string"
+    || !isReceptionStatus(value.asReceptionStatus)
+  ) {
     throw new Error("배송 목록 응답이 올바르지 않습니다.");
   }
   const shipmentId = value.shipmentId === null ? null : value.shipmentId;
