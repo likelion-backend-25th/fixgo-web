@@ -88,7 +88,7 @@ function redirectToLogin(): void {
   }
 }
 
-function resolveApiUrl(path: string): string {
+export function resolveApiUrl(path: string): string {
   if (path.startsWith("http")) {
     return path;
   }

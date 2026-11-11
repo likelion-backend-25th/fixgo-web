@@ -1,3 +1,4 @@
+import { resolveApiUrl } from "@/lib/apiClient";
 import { AS_RECEPTION_STATUSES, type AsReceptionStatus } from "@/types/asReception";
 
 export type PaymentSummaryStatus = "NOT_ISSUED" | "UNPAID" | "IN_PROGRESS" | "WAITING_FOR_DEPOSIT" | "PAID" | "REFUNDED";
@@ -88,7 +89,7 @@ export async function fetchPortal(token: string, signal: AbortSignal): Promise<P
 
   let response: Response;
   try {
-    response = await fetch(`/api/v1/portal/${encodeURIComponent(token)}`, {
+    response = await fetch(resolveApiUrl(`/api/v1/portal/${encodeURIComponent(token)}`), {
       signal,
       headers: { Accept: "application/json" },
     });
@@ -123,7 +124,7 @@ export async function fetchPortal(token: string, signal: AbortSignal): Promise<P
 export async function startPortalPayment(token: string): Promise<StartPaymentResponse> {
   let response: Response;
   try {
-    response = await fetch(`/api/v1/portal/${encodeURIComponent(token)}/payments/start`, {
+    response = await fetch(resolveApiUrl(`/api/v1/portal/${encodeURIComponent(token)}/payments/start`), {
       method: "POST",
       redirect: "manual",
       headers: { Accept: "application/json" },
@@ -155,7 +156,7 @@ export async function decidePortalQuote(token: string, decision: "approve" | "re
     : "견적을 거부하지 못했습니다. 다시 시도해 주세요.";
   let response: Response;
   try {
-    response = await fetch(`/api/v1/portal/${encodeURIComponent(token)}/quote/${decision}`, {
+    response = await fetch(resolveApiUrl(`/api/v1/portal/${encodeURIComponent(token)}/quote/${decision}`), {
       method: "POST",
       redirect: "manual",
       headers: { Accept: "application/json" },
@@ -174,7 +175,7 @@ export async function decidePortalQuote(token: string, decision: "approve" | "re
 export async function cancelPortalPayment(token: string): Promise<void> {
   let response: Response;
   try {
-    response = await fetch(`/api/v1/portal/${encodeURIComponent(token)}/payments/cancel`, {
+    response = await fetch(resolveApiUrl(`/api/v1/portal/${encodeURIComponent(token)}/payments/cancel`), {
       method: "POST",
       redirect: "manual",
       headers: { Accept: "application/json" },
@@ -220,7 +221,7 @@ export function parseAmountParam(raw: string | null): number | null {
 async function postConfirm(request: ConfirmPaymentRequest): Promise<void> {
   let response: Response;
   try {
-    response = await fetch("/api/v1/payments/confirm", {
+    response = await fetch(resolveApiUrl("/api/v1/payments/confirm"), {
       method: "POST",
       redirect: "manual",
       headers: {

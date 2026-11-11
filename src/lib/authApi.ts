@@ -1,5 +1,5 @@
 import type { SessionUser, StaffRole } from "@/types/staff";
-import { apiFetch, isId, isRecord, readApiJson } from "@/lib/apiClient";
+import { apiFetch, isId, isRecord, readApiJson, resolveApiUrl } from "@/lib/apiClient";
 import { useSessionStore } from "@/stores/useSessionStore";
 
 export interface ApiSession {
@@ -47,7 +47,7 @@ export async function confirmCurrentPassword(email: string, password: string): P
 
 async function postLogin(email: string, password: string): Promise<Response> {
   try {
-    return await fetch("/api/v1/auth/login", {
+    return await fetch(resolveApiUrl("/api/v1/auth/login"), {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
@@ -87,7 +87,7 @@ async function fetchProfile(accessToken: string): Promise<{
 }> {
   let response: Response;
   try {
-    response = await fetch("/api/v1/member/me", {
+    response = await fetch(resolveApiUrl("/api/v1/member/me"), {
       headers: { Accept: "application/json", Authorization: `Bearer ${accessToken}` },
     });
   } catch {
@@ -166,7 +166,7 @@ async function revokeIssuedTokens(accessToken: string | null, refreshToken: stri
 }
 
 async function requestLogout(accessToken: string): Promise<Response> {
-  return fetch("/api/v1/auth/logout", {
+  return fetch(resolveApiUrl("/api/v1/auth/logout"), {
     method: "POST",
     headers: { Accept: "application/json", Authorization: `Bearer ${accessToken}` },
   });
@@ -175,7 +175,7 @@ async function requestLogout(accessToken: string): Promise<Response> {
 async function refreshAccessToken(refreshToken: string): Promise<string> {
   let response: Response;
   try {
-    response = await fetch("/api/v1/auth/refresh", {
+    response = await fetch(resolveApiUrl("/api/v1/auth/refresh"), {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken }),
