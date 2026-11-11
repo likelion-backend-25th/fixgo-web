@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { receptionStatusLabel } from "@/lib/asReceptionApi";
 import { won } from "@/lib/format";
+import { tossBankName } from "@/lib/tossBank";
 import type { AsReceptionStatus } from "@/types/asReception";
 import {
   cancelPortalPayment,
@@ -470,6 +471,9 @@ function stageLines(
   if (payment === null || payment.status === "NOT_ISSUED") {
     return ["결제 전입니다."];
   }
+  if (payment.status === "IN_PROGRESS") {
+    return ["결제 결과를 확인하고 있습니다."];
+  }
   if (payment.status === "WAITING_FOR_DEPOSIT") {
     return ["가상계좌 입금을 기다리고 있습니다."];
   }
@@ -491,6 +495,10 @@ function PaymentBody({
   payment: PaymentSummary;
   onRefresh: () => void;
 }) {
+  if (payment.status === "IN_PROGRESS") {
+    return <PaymentInProgress payment={payment} />;
+  }
+
   if (payment.status === "UNPAID") {
     return <UnpaidPayment token={token} payment={payment} />;
   }
@@ -548,7 +556,7 @@ function WaitingDeposit({
   return (
     <section>
       <dl>
-        <Field label="은행명" value={account?.bankName ?? null} />
+        <Field label="은행명" value={tossBankName(account?.bankName)} />
         <Field label="계좌번호" value={account?.accountNumber ?? null} />
         <Field label="입금 기한" value={formatDateTime(account?.dueAt)} />
       </dl>
@@ -566,6 +574,20 @@ function WaitingDeposit({
           onClose={() => setAsking(false)}
         />
       )}
+    </section>
+  );
+}
+
+function PaymentInProgress({ payment }: { payment: PaymentSummary }) {
+  return (
+    <section>
+      <dl>
+        <Field label="항목명" value={payment.orderName} />
+        <Field label="금액" value={money(payment.amount)} emphasize />
+      </dl>
+      <p className="mt-3 text-sm text-neutral-600">
+        결제 결과를 확인하고 있습니다. 확인이 끝날 때까지 다시 결제할 수 없습니다.
+      </p>
     </section>
   );
 }
@@ -644,6 +666,9 @@ function formatDateTime(value: string | null | undefined): string | null {
 function methodLabel(method: PaymentSummary["paymentMethod"]): string | null {
   if (method === "CARD") {
     return "카드";
+  }
+  if (method === "EASY_PAY") {
+    return "간편결제";
   }
   if (method === "VIRTUAL_ACCOUNT") {
     return "가상계좌";

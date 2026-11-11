@@ -100,6 +100,7 @@ export function PaymentListPage() {
     { key: "amount", header: "금액", render: (row) => won(row.amount) },
     { key: "status", header: "상태", render: (row) => paymentBillStatusLabel(row.status) },
     { key: "method", header: "수단", render: (row) => paymentMethodLabel(row.paymentMethod) },
+    { key: "approvedAt", header: "승인시각", render: (row) => formatApprovedAt(row.approvedAt) },
     {
       key: "detail",
       header: "",
@@ -138,6 +139,17 @@ export function PaymentListPage() {
       <Pagination page={page} pageCount={pageCount} onPageChange={setPage} />
     </div>
   );
+}
+
+function formatApprovedAt(value: string | null): string {
+  if (value === null || value.trim() === "") {
+    return "-";
+  }
+  const matched = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/.exec(value);
+  if (matched === null) {
+    return value;
+  }
+  return `${matched[1]} ${matched[2]}`;
 }
 
 function tableMessage(loading: boolean, error: string): string {

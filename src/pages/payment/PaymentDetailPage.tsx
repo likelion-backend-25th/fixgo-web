@@ -5,14 +5,13 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { SelectBox, TextArea, TextField } from "@/components/ui/Field";
 import { InfoField, Notice, Panel } from "@/components/ui/Panel";
 import { won } from "@/lib/format";
+import { tossBankName } from "@/lib/tossBank";
 import {
   fetchPaymentDetail,
-  paymentAttemptStatusLabel,
   paymentBillStatusLabel,
   payByCash,
   paymentMethodLabel,
   refundPayment,
-  type PaymentBillStatus,
   type PaymentDetail,
   type PaymentRefundStatus,
 } from "@/lib/paymentApi";
@@ -114,34 +113,19 @@ export function PaymentDetailPage() {
   return (
     <div className="space-y-4">
       <section className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs text-neutral-500">청구 금액</p>
-            <p className="mt-1 text-2xl font-semibold text-neutral-900">{won(detail.amount)}</p>
-            <p className="mt-1 text-sm text-neutral-500">청구번호 {detail.billId}</p>
-          </div>
-          <span className={`shrink-0 rounded-md px-2 py-1 text-xs font-medium ${statusClass(detail.status)}`}>
-            {paymentBillStatusLabel(detail.status)}
-          </span>
-        </div>
-        <dl className="mt-5 grid gap-4 sm:grid-cols-3">
-          <InfoField label="결제 수단" value={paymentMethodLabel(detail.paymentMethod)} />
-          <InfoField label="결제 진행" value={paymentAttemptStatusLabel(detail.paymentStatus)} />
-          <InfoField label="승인 시각" value={formatDateTime(history?.approvedAt ?? null)} />
+        <dl className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <InfoField label="고객명" value={text(reception.customerName)} />
+          <InfoField label="접수번호" value={receptionLink(reception.asReceptionNumber)} />
+          <InfoField label="제품" value={text(reception.productName)} />
+          <InfoField label="증상" value={text(reception.symptom)} />
+          <InfoField label="청구금액" value={won(detail.amount)} />
+          <InfoField
+            label="결제상태"
+            value={<span className={`rounded-md px-2 py-1 text-xs font-medium ${statusClass(detail)}`}>{headlineStatus(detail)}</span>}
+          />
+          <InfoField label="승인시각" value={formatDateTime(history?.approvedAt ?? null)} />
         </dl>
       </section>
-
-      <Panel title="접수">
-        <dl className="grid gap-4 sm:grid-cols-2">
-          <InfoField label="접수번호" value={receptionLink(reception.asReceptionNumber)} />
-          <InfoField label="고객명" value={text(reception.customerName)} />
-          <InfoField label="제품명" value={text(reception.productName)} />
-          <InfoField label="고장 증상" value={text(reception.symptom)} />
-          <div className="sm:col-span-2">
-            <InfoField label="증상 상세" value={text(reception.symptomDetail)} />
-          </div>
-        </dl>
-      </Panel>
 
       {history !== null && (
         <Panel title="결제">
@@ -157,7 +141,7 @@ export function PaymentDetailPage() {
       {account !== null && (
         <Panel title="가상계좌">
           <dl className="grid gap-4 sm:grid-cols-3">
-            <InfoField label="은행" value={text(account.bankCode)} />
+            <InfoField label="은행" value={text(tossBankName(account.bankCode))} />
             <InfoField label="계좌번호" value={text(account.accountNumber)} />
             <InfoField label="입금 기한" value={formatDateTime(account.dueAt)} />
           </dl>
@@ -183,10 +167,12 @@ export function PaymentDetailPage() {
         />
       )}
 
-      {detail.status === "UNPAID" && !canPayByCash(detail) && (
-        <Notice>
-          진행 중인 결제나 발급된 가상계좌가 있어 현금으로 받을 수 없습니다. 가상계좌는 먼저 취소해 주세요.
-        </Notice>
+      {detail.status === "UNPAID" && detail.paymentStatus === "IN_PROGRESS" && (
+        <Notice>결제 결과를 확인하고 있습니다. 확인이 끝날 때까지 다시 결제할 수 없습니다.</Notice>
+      )}
+
+      {detail.status === "UNPAID" && detail.paymentStatus !== "IN_PROGRESS" && !canPayByCash(detail) && (
+        <Notice>발급된 가상계좌가 있어 현금으로 받을 수 없습니다. 가상계좌는 먼저 취소해 주세요.</Notice>
       )}
 
       {detail.refundable && (
@@ -359,11 +345,21 @@ function RefundForm({
   );
 }
 
-function statusClass(status: PaymentBillStatus): string {
-  if (status === "PAID") {
+function headlineStatus(detail: PaymentDetail): string {
+  if (detail.status === "UNPAID" && detail.paymentStatus === "IN_PROGRESS") {
+    return "결제 진행 중";
+  }
+  return paymentBillStatusLabel(detail.status);
+}
+
+function statusClass(detail: PaymentDetail): string {
+  if (detail.status === "UNPAID" && detail.paymentStatus === "IN_PROGRESS") {
+    return "bg-amber-50 text-amber-700";
+  }
+  if (detail.status === "PAID") {
     return "bg-green-50 text-green-600";
   }
-  if (status === "UNPAID") {
+  if (detail.status === "UNPAID") {
     return "bg-blue-50 text-blue-600";
   }
   return "bg-red-50 text-red-600";

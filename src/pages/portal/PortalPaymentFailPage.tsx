@@ -9,7 +9,7 @@ export function PortalPaymentFailPage() {
   const code = params.get("code") ?? "";
   const message = params.get("message") ?? "";
 
-  if (code === "PAY_PROCESS_CANCELED") {
+  if (code === "PAY_PROCESS_CANCELED" || code === "USER_CANCEL" || message.includes("취소되었습니다") || message.includes("결제를 취소")) {
     return <Navigate to={`/portal/${token}`} replace />;
   }
 
