@@ -10,8 +10,12 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
     headers.set("Authorization", `Bearer ${token}`);
   }
 
+  // 환경변수에 설정된 백엔드 URL을 적용하고, 설정이 없거나 이미 절대경로인 경우 원래 경로 유지
+  const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
+  const requestUrl = path.startsWith("http") ? path : `${baseUrl}${path}`;
+
   try {
-    return await fetch(path, { ...init, headers });
+    return await fetch(requestUrl, { ...init, headers });
   } catch (error: unknown) {
     if (isAbortError(error)) {
       throw error;
