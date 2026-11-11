@@ -9,6 +9,7 @@ interface SessionState {
   memberId: number | null;
   login: (user: SessionUser) => void;
   loginWithApi: (user: SessionUser, accessToken: string, refreshToken: string, memberId: number) => void;
+  setTokens: (accessToken: string, refreshToken: string) => void;
   logout: () => void;
 }
 
@@ -102,6 +103,7 @@ export const useSessionStore = create<SessionState>()(
         refreshToken,
         memberId,
       }),
+      setTokens: (accessToken, refreshToken) => set({ accessToken, refreshToken }),
       logout: () => set({ user: null, accessToken: null, refreshToken: null, memberId: null }),
     }),
     {

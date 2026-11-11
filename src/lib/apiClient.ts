@@ -1,28 +1,101 @@
 import { useSessionStore } from "@/stores/useSessionStore";
 
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  return request(path, init, true);
+}
+
+async function request(path: string, init: RequestInit, canRenew: boolean): Promise<Response> {
   const headers = new Headers(init.headers);
   if (!headers.has("Accept")) {
     headers.set("Accept", "application/json");
   }
   const token = useSessionStore.getState().accessToken;
-  if (typeof token === "string" && token !== "") {
+  const sentToken = typeof token === "string" && token !== "";
+  if (sentToken) {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  // 개발 서버는 Vite 프록시(/api → 8080)를 쓰고, 배포 빌드만 환경변수 주소를 붙인다.
-  const configured = import.meta.env.VITE_API_BASE_URL ?? "";
-  const baseUrl = import.meta.env.DEV ? "" : configured;
-  const requestUrl = path.startsWith("http") ? path : `${baseUrl}${path}`;
-
+  let response: Response;
   try {
-    return await fetch(requestUrl, { ...init, headers });
+    response = await fetch(resolveApiUrl(path), { ...init, headers });
   } catch (error: unknown) {
     if (isAbortError(error)) {
       throw error;
     }
     throw new Error("서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.");
   }
+
+  if (response.status !== 401 || !sentToken || init.signal?.aborted) {
+    return response;
+  }
+  // 액세스 토큰이 만료됐으면 리프레시로 한 번 다시 시도한다. 그것도 실패하면 로그인으로 보낸다.
+  if (canRenew) {
+    const renewed = await renewAccessToken();
+    if (renewed !== null) {
+      return request(path, init, false);
+    }
+  }
+  redirectToLogin();
+  return response;
+}
+
+let pendingRenewal: Promise<string | null> | null = null;
+
+function renewAccessToken(): Promise<string | null> {
+  if (pendingRenewal === null) {
+    pendingRenewal = renewAccessTokenOnce().finally(() => {
+      pendingRenewal = null;
+    });
+  }
+  return pendingRenewal;
+}
+
+async function renewAccessTokenOnce(): Promise<string | null> {
+  const refreshToken = useSessionStore.getState().refreshToken;
+  if (refreshToken === null || refreshToken === "") {
+    return null;
+  }
+  try {
+    const response = await fetch(resolveApiUrl("/api/v1/auth/refresh"), {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const body: unknown = await response.json();
+    if (
+      !isRecord(body)
+      || typeof body.accessToken !== "string"
+      || body.accessToken === ""
+      || typeof body.refreshToken !== "string"
+      || body.refreshToken === ""
+    ) {
+      return null;
+    }
+    useSessionStore.getState().setTokens(body.accessToken, body.refreshToken);
+    return body.accessToken;
+  } catch {
+    return null;
+  }
+}
+
+function redirectToLogin(): void {
+  useSessionStore.getState().logout();
+  if (window.location.pathname !== "/login") {
+    window.location.assign("/login");
+  }
+}
+
+function resolveApiUrl(path: string): string {
+  if (path.startsWith("http")) {
+    return path;
+  }
+  // 개발 서버는 Vite 프록시(/api → 8080)를 쓰고, 배포 빌드만 환경변수 주소를 붙인다.
+  const configured = import.meta.env.VITE_API_BASE_URL ?? "";
+  const baseUrl = import.meta.env.DEV ? "" : configured;
+  return `${baseUrl}${path}`;
 }
 
 export async function readErrorMessage(response: Response, fallback: string): Promise<string> {
