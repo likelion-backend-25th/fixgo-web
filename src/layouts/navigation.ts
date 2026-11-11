@@ -46,7 +46,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "통계/리포트", to: "/admin/statistics", roles: ["ADMIN"] },
       { label: "부품 관리", to: "/admin/parts/list", roles: ["ADMIN"] },
-      { label: "비용 관리", to: "/admin/costs", roles: ["ADMIN"] },
+      { label: "공임비·점검비", to: "/admin/costs", roles: ["ADMIN"] },
       { label: "프리셋 관리", to: "/preset/list", roles: floor },
       { label: "기사 배정 이력", to: "/admin/allocation_history", roles: ["ADMIN"] },
       { label: "A/S 상태 변경 이력", to: "/admin/status_change_history", roles: ["ADMIN"] },
@@ -104,7 +104,7 @@ export function resolveHeading(pathname: string, role: StaffRole): { title: stri
   if (pathname === "/notification/list") return { title: "이메일 발송 내역" };
   if (pathname.startsWith("/admin/products")) return { title: "지원 품목" };
   if (pathname.startsWith("/admin/parts")) return { title: "부품 관리" };
-  if (pathname === "/admin/costs") return { title: "비용 관리" };
+  if (pathname === "/admin/costs") return { title: "공임비·점검비" };
   if (pathname === "/admin/statistics") return { title: "통계/리포트" };
   if (pathname === "/admin/statistics/deposits/waiting") return { title: "입금 대기 내역" };
   if (pathname === "/admin/statistics/technicians") return { title: "기사별 수리 현황" };
