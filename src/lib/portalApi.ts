@@ -1,6 +1,6 @@
 import { AS_RECEPTION_STATUSES, type AsReceptionStatus } from "@/types/asReception";
 
-export type PaymentSummaryStatus = "NOT_ISSUED" | "UNPAID" | "WAITING_FOR_DEPOSIT" | "PAID" | "REFUNDED";
+export type PaymentSummaryStatus = "NOT_ISSUED" | "UNPAID" | "IN_PROGRESS" | "WAITING_FOR_DEPOSIT" | "PAID" | "REFUNDED";
 
 export interface VirtualAccountInfo {
   bankName: string | null;
@@ -12,7 +12,7 @@ export interface PaymentSummary {
   status: PaymentSummaryStatus;
   orderName: string | null;
   amount: number | null;
-  paymentMethod: "CARD" | "VIRTUAL_ACCOUNT" | "CASH" | null;
+  paymentMethod: "CARD" | "EASY_PAY" | "VIRTUAL_ACCOUNT" | "CASH" | null;
   paidAt: string | null;
   virtualAccount?: VirtualAccountInfo | null;
 }
@@ -79,7 +79,7 @@ export class InvalidPortalLinkError extends Error {
   }
 }
 
-const statuses: readonly PaymentSummaryStatus[] = ["NOT_ISSUED", "UNPAID", "WAITING_FOR_DEPOSIT", "PAID", "REFUNDED"];
+const statuses: readonly PaymentSummaryStatus[] = ["NOT_ISSUED", "UNPAID", "IN_PROGRESS", "WAITING_FOR_DEPOSIT", "PAID", "REFUNDED"];
 
 export async function fetchPortal(token: string, signal: AbortSignal): Promise<PortalResponse> {
   if (token === "") {
@@ -376,7 +376,7 @@ function readNullableString(value: unknown): string | null {
 }
 
 function readPaymentMethod(value: unknown): PaymentSummary["paymentMethod"] {
-  if (value === "CARD" || value === "VIRTUAL_ACCOUNT" || value === "CASH") {
+  if (value === "CARD" || value === "EASY_PAY" || value === "VIRTUAL_ACCOUNT" || value === "CASH") {
     return value;
   }
   return null;

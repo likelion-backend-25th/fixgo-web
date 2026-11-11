@@ -2,7 +2,7 @@ import { apiFetch } from "@/lib/apiClient";
 
 export type PaymentBillStatus = "UNPAID" | "PAID" | "REFUNDED" | "PARTIALLY_REFUNDED";
 
-export type PaymentMethod = "CARD" | "VIRTUAL_ACCOUNT" | "CASH";
+export type PaymentMethod = "CARD" | "EASY_PAY" | "VIRTUAL_ACCOUNT" | "CASH";
 
 export type PaymentAttemptStatus = "READY" | "IN_PROGRESS" | "WAITING_FOR_DEPOSIT" | "DONE" | "FAILED";
 
@@ -15,6 +15,7 @@ export interface PaymentListItem {
   amount: number;
   status: PaymentBillStatus;
   paymentMethod: PaymentMethod | null;
+  approvedAt: string | null;
   modelName: string | null;
   billedAt: string | null;
 }
@@ -78,7 +79,7 @@ export interface PaymentDetail {
 }
 
 const billStatuses: readonly PaymentBillStatus[] = ["UNPAID", "PAID", "REFUNDED", "PARTIALLY_REFUNDED"];
-const paymentMethods: readonly PaymentMethod[] = ["CARD", "VIRTUAL_ACCOUNT", "CASH"];
+const paymentMethods: readonly PaymentMethod[] = ["CARD", "EASY_PAY", "VIRTUAL_ACCOUNT", "CASH"];
 const attemptStatuses: readonly PaymentAttemptStatus[] = ["READY", "IN_PROGRESS", "WAITING_FOR_DEPOSIT", "DONE", "FAILED"];
 const refundStatuses: readonly PaymentRefundStatus[] = ["IN_PROGRESS", "DONE", "FAILED"];
 
@@ -99,6 +100,9 @@ export function paymentMethodLabel(method: PaymentMethod | null): string {
   if (method === "CARD") {
     return "카드";
   }
+  if (method === "EASY_PAY") {
+    return "간편결제";
+  }
   if (method === "VIRTUAL_ACCOUNT") {
     return "가상계좌";
   }
@@ -113,7 +117,7 @@ export function paymentAttemptStatusLabel(status: PaymentAttemptStatus | null): 
     return "결제 준비";
   }
   if (status === "IN_PROGRESS") {
-    return "결제 진행";
+    return "결제 진행 중";
   }
   if (status === "WAITING_FOR_DEPOSIT") {
     return "입금 대기";
@@ -286,6 +290,7 @@ function parsePaymentListItem(value: unknown): PaymentListItem {
     amount: value.amount,
     status: value.status,
     paymentMethod: value.paymentMethod,
+    approvedAt: typeof value.approvedAt === "string" && value.approvedAt !== "" ? value.approvedAt : null,
     modelName: typeof value.modelName === "string" && value.modelName !== "" ? value.modelName : null,
     billedAt: typeof value.billedAt === "string" && value.billedAt !== "" ? value.billedAt : null,
   };
@@ -340,6 +345,7 @@ function parseDepositBill(value: unknown): PaymentListItem {
     amount: value.amount,
     status: value.status,
     paymentMethod: null,
+    approvedAt: null,
     modelName: value.modelName === "" ? null : value.modelName,
     billedAt: value.billedAt === "" ? null : value.billedAt,
   };
