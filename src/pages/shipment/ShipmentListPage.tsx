@@ -22,7 +22,6 @@ import {
   shipmentMethodLabel,
   shipmentStatusLabel,
   updateShipmentTracking,
-  type Shipment,
   type ShipmentDetail,
   type ShipmentManagementItem,
   type ShipmentManagementStatus,
