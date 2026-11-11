@@ -1,19 +1,16 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
-import { TextArea, TextField } from "@/components/ui/Field";
-import { Modal } from "@/components/ui/Modal";
+import { TextField } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Panel";
 import { Pagination } from "@/components/ui/Pagination";
 import { usePageSlice } from "@/lib/usePageSlice";
 import {
   createRepairPreset,
-  deleteRepairPreset,
   fetchRepairPresets,
   searchRepairPresets,
   fetchSymptomPresets,
   searchSymptomPresets,
-  updateRepairPreset,
 } from "@/lib/repair";
 import type {
   RepairPreset,
@@ -28,7 +25,6 @@ export function PresetListPage() {
   const [tab, setTab] = useState<PresetTab>("repair"); // 와이어프레임 기본: 수리 프리셋
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<RepairPreset | null>(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [repairPresets, setRepairPresets] = useState<RepairPreset[]>([]);
@@ -109,22 +105,6 @@ export function PresetListPage() {
       render: (row) =>
         new Date(row.updatedAt).toLocaleDateString("ko-KR"),
     },
-    {
-      key: "manage",
-      header: "관리",
-      render: (row) => (
-        <span className="flex gap-2">
-          <Button variant="outline" onClick={() => setEditing(row)}>수정</Button>
-          <Button
-            variant="outline"
-            className="border-red-600 text-red-600 hover:bg-red-50"
-            onClick={() => void remove(row.id)}
-          >
-            삭제
-          </Button>
-        </span>
-      ),
-    },
   ];
 
   const symptomColumns: Column<SymptomPreset>[] = [
@@ -156,17 +136,6 @@ export function PresetListPage() {
     setNotice("수리 프리셋이 등록되었습니다.");
     setReloadKey((key) => key + 1); // useEffect가 목록을 다시 조회
   };
-
-  async function remove(id: number) {
-    setError("");
-    try {
-      await deleteRepairPreset(id);
-      setNotice("수리 프리셋을 삭제했습니다.");
-      setReloadKey((key) => key + 1);
-    } catch (cause: unknown) {
-      setError(cause instanceof Error ? cause.message : "수리 프리셋을 삭제하지 못했습니다.");
-    }
-  }
 
   return (
     <div>
@@ -246,68 +215,6 @@ export function PresetListPage() {
           onSave={handleCreate}
         />
       )}
-      {editing !== null && (
-        <PresetEditModal
-          preset={editing}
-          onClose={() => setEditing(null)}
-          onSaved={() => {
-            setEditing(null);
-            setNotice("수리 프리셋을 수정했습니다.");
-            setError("");
-            setReloadKey((key) => key + 1);
-          }}
-        />
-      )}
     </div>
-  );
-}
-
-function PresetEditModal({
-  preset,
-  onClose,
-  onSaved,
-}: {
-  preset: RepairPreset;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [name, setName] = useState(preset.name);
-  const [description, setDescription] = useState(preset.description ?? "");
-  const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  async function submit() {
-    if (name.trim() === "") {
-      setError("작업명을 입력해 주세요.");
-      return;
-    }
-    setSaving(true);
-    try {
-      await updateRepairPreset(preset.id, { name: name.trim(), description: description.trim() });
-      onSaved();
-    } catch (cause: unknown) {
-      setError(cause instanceof Error ? cause.message : "수리 프리셋을 수정하지 못했습니다.");
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Modal title="프리셋 수정" onClose={onClose}>
-      <form
-        className="space-y-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submit();
-        }}
-      >
-        <TextField label="작업명" value={name} onChange={setName} />
-        <TextArea label="작업 설명" value={description} onChange={setDescription} />
-        {error !== "" && <Notice tone="error">{error}</Notice>}
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose} disabled={saving}>취소</Button>
-          <Button type="submit" disabled={saving}>수정</Button>
-        </div>
-      </form>
-    </Modal>
   );
 }
