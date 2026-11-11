@@ -36,16 +36,10 @@ export async function searchCustomers(
     return [];
   }
 
-  const response = await apiFetch(`/api/v1/customers?${params.toString()}`, { signal });
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "고객을 조회하지 못했습니다."));
-  }
-
-  const body = await readJson(response, "고객 조회 응답이 올바르지 않습니다.");
-  if (!Array.isArray(body)) {
-    throw new Error("고객 조회 응답이 올바르지 않습니다.");
-  }
-  return body.map(parseCustomerSummary);
+  params.set("page", "0");
+  params.set("size", "50");
+  const page = await fetchCustomerPage(params, signal, "고객을 조회하지 못했습니다.", "고객 조회 응답이 올바르지 않습니다.");
+  return page.content.map(parseCustomerSummary);
 }
 
 export async function searchCustomersPage(
@@ -56,7 +50,7 @@ export async function searchCustomersPage(
   params.set("page", String(query.page - 1));
   params.set("size", String(query.size));
 
-  // 검색어가 없으면 백엔드가 빈 페이지를 돌려주므로 요청을 생략한다.
+  // 검색어가 없으면 고객 목록 화면은 전체를 불러오지 않는다.
   if ([...params.keys()].length === 2) {
     return {
       items: [],
@@ -67,23 +61,38 @@ export async function searchCustomersPage(
     };
   }
 
-  const response = await apiFetch(`/api/v1/customers/search?${params.toString()}`, { signal });
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response, "고객 목록을 불러오지 못했습니다."));
-  }
-
-  const body = await readJson(response, "고객 목록 응답이 올바르지 않습니다.");
-  if (!isPage(body)) {
-    throw new Error("고객 목록 응답이 올바르지 않습니다.");
-  }
-
+  const page = await fetchCustomerPage(params, signal, "고객 목록을 불러오지 못했습니다.", "고객 목록 응답이 올바르지 않습니다.");
   return {
-    items: body.content.map(parseCustomerDetail),
-    number: body.number,
-    size: body.size,
-    totalElements: body.totalElements,
-    totalPages: body.totalPages,
+    items: page.content.map(parseCustomerDetail),
+    number: page.number,
+    size: page.size,
+    totalElements: page.totalElements,
+    totalPages: page.totalPages,
   };
+}
+
+// 고객 목록은 배열이 아니라 페이지로 온다.
+async function fetchCustomerPage(
+  params: URLSearchParams,
+  signal: AbortSignal,
+  fallback: string,
+  invalid: string,
+): Promise<{
+  content: unknown[];
+  number: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+}> {
+  const response = await apiFetch(`/api/v1/customers?${params.toString()}`, { signal });
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, fallback));
+  }
+  const body = await readJson(response, invalid);
+  if (!isPage(body)) {
+    throw new Error(invalid);
+  }
+  return body;
 }
 
 export async function fetchCustomer(id: number, signal: AbortSignal): Promise<CustomerDetail> {
