@@ -17,6 +17,20 @@ import {
   type PaymentRefundStatus,
 } from "@/lib/paymentApi";
 
+// 새 접수번호 AS-yyMMdd-순번은 끝자리가 접수 ID다.
+function receptionLink(receptionNumber: string) {
+  const matched = /^AS-\d{6}-(\d+)$/.exec(receptionNumber);
+  const id = matched === null ? Number.NaN : Number(matched[1]);
+  if (!Number.isInteger(id) || id <= 0) {
+    return receptionNumber;
+  }
+  return (
+    <Link className="text-blue-600" to={`/as/details/${id}`}>
+      {receptionNumber}
+    </Link>
+  );
+}
+
 type LoadState =
   | { kind: "loading" }
   | { kind: "invalid" }
@@ -119,14 +133,7 @@ export function PaymentDetailPage() {
 
       <Panel title="접수">
         <dl className="grid gap-4 sm:grid-cols-2">
-          <InfoField
-            label="접수번호"
-            value={
-              <Link className="text-blue-600" to={`/as/details/${reception.asReceptionNumber}`}>
-                {reception.asReceptionNumber}
-              </Link>
-            }
-          />
+          <InfoField label="접수번호" value={receptionLink(reception.asReceptionNumber)} />
           <InfoField label="고객명" value={text(reception.customerName)} />
           <InfoField label="제품명" value={text(reception.productName)} />
           <InfoField label="고장 증상" value={text(reception.symptom)} />

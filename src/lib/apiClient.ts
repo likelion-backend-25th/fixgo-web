@@ -10,8 +10,9 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  // 환경변수에 설정된 백엔드 URL을 적용하고, 설정이 없거나 이미 절대경로인 경우 원래 경로 유지
-  const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
+  // 개발 서버는 Vite 프록시(/api → 8080)를 쓰고, 배포 빌드만 환경변수 주소를 붙인다.
+  const configured = import.meta.env.VITE_API_BASE_URL ?? "";
+  const baseUrl = import.meta.env.DEV ? "" : configured;
   const requestUrl = path.startsWith("http") ? path : `${baseUrl}${path}`;
 
   try {

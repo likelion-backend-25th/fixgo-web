@@ -111,7 +111,7 @@ export function AsDetailPage() {
           <div className="space-y-4">
             <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-[max-content_max-content_minmax(0,1.3fr)_max-content_minmax(0,1.8fr)]">
               <Field label="고객명" value={detail.customer.name} />
-              <Field label="연락처" value={detail.customer.phone} />
+              <Field label="연락처" value={detail.customer.phone} nowrap />
               <Field label="이메일" value={detail.customer.email} />
               <Field label="우편번호" value={detail.customer.zipcode ?? "-"} />
               <Field label="주소" value={`${detail.customer.basicAddress ?? ""} ${detail.customer.detailAddress ?? ""}`.trim() || "-"} />
@@ -352,7 +352,7 @@ function TechnicianSummary({ detail, productName }: { detail: AsReceptionDetail;
       <div className="space-y-4">
         <div className="grid grid-cols-4 gap-x-6">
           <Field label="고객명" value={detail.customer.name} />
-          <Field label="연락처" value={detail.customer.phone} />
+          <Field label="연락처" value={detail.customer.phone} nowrap />
           <Field label="제품" value={productName} />
           <Field label="시리얼번호" value={detail.product.serialNumber} />
         </div>
@@ -380,11 +380,11 @@ function Note({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function Field({ label, value, nowrap = false }: { label: string; value: string; nowrap?: boolean }) {
   return (
     <div className="min-w-0">
       <p className="text-xs text-neutral-500">{label}</p>
-      <p className="mt-1 break-words text-sm">{value || "-"}</p>
+      <p className={nowrap ? "mt-1 text-sm whitespace-nowrap" : "mt-1 text-sm break-words"}>{value || "-"}</p>
     </div>
   );
 }

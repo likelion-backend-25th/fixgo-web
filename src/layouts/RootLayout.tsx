@@ -66,7 +66,7 @@ export function RootLayout() {
             <div className="flex min-w-0 items-baseline gap-3">
               <h1 className="shrink-0 text-base font-semibold tracking-tight">{heading.title}</h1>
               {meta !== undefined && meta !== "" && (
-                <p className="truncate text-sm text-neutral-500">{meta}</p>
+                <p className="min-w-0 truncate text-sm text-neutral-500">{meta}</p>
               )}
             </div>
           </div>

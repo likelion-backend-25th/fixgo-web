@@ -30,7 +30,7 @@ export async function fetchProductModels(
     params.set("keyword", query.keyword.trim());
   }
 
-  const response = await apiFetch(`/api/v1/products/list?${params.toString()}`, { signal });
+  const response = await apiFetch(`/api/v1/product-models/list?${params.toString()}`, { signal });
   if (!response.ok) {
     throw new Error(await readErrorMessage(response, "지원 품목 목록을 불러오지 못했습니다."));
   }
@@ -50,7 +50,7 @@ export async function fetchProductModels(
 }
 
 export async function createProductModel(input: CreateProductModelInput): Promise<ProductModel> {
-  const response = await apiFetch("/api/v1/admin/products", {
+  const response = await apiFetch("/api/v1/product-models", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -65,7 +65,7 @@ export async function updateProductModel(
   id: number,
   input: UpdateProductModelInput,
 ): Promise<ProductModel> {
-  const response = await apiFetch(`/api/v1/admin/products/${id}`, {
+  const response = await apiFetch(`/api/v1/product-models/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
