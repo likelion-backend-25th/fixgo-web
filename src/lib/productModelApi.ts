@@ -30,7 +30,7 @@ export async function fetchProductModels(
     params.set("keyword", query.keyword.trim());
   }
 
-  const response = await apiFetch(`/api/v1/admin/products/list?${params.toString()}`, { signal });
+  const response = await apiFetch(`/api/v1/products/list?${params.toString()}`, { signal });
   if (!response.ok) {
     throw new Error(await readErrorMessage(response, "지원 품목 목록을 불러오지 못했습니다."));
   }

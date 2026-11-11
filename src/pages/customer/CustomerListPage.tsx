@@ -47,14 +47,6 @@ export function CustomerListPage() {
   }, [query]);
 
   useEffect(() => {
-    if (appliedKeyword === "") {
-      setRows([]);
-      setPageCount(1);
-      setLoading(false);
-      setError("");
-      return;
-    }
-
     const controller = new AbortController();
     setLoading(true);
     setError("");
@@ -98,13 +90,7 @@ export function CustomerListPage() {
         rows={rows}
         rowKey={(row) => String(row.id)}
         onRowClick={(row) => navigate(`/customer/${row.id}`)}
-        emptyText={
-          appliedKeyword === ""
-            ? "고객명, 연락처, 이메일을 검색해 주세요."
-            : loading
-              ? "고객을 조회하는 중입니다."
-              : "조회 결과가 없습니다."
-        }
+        emptyText={loading ? "고객을 조회하는 중입니다." : "조회 결과가 없습니다."}
       />
       <Pagination page={page} pageCount={pageCount} onPageChange={setPage} />
       {open && (
