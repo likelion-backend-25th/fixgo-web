@@ -1,4 +1,5 @@
-import type { ReactNode, SelectHTMLAttributes } from "react";
+import { useRef, type ReactNode, type SelectHTMLAttributes } from "react";
+import { Calendar } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 const controlClass =
@@ -105,6 +106,89 @@ export function SelectBox({ value, onChange, options, className, ...props }: Sel
       ))}
     </select>
   );
+}
+
+interface DateFieldProps {
+  label?: string;
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+}
+
+export function DateField({ label, value, onChange, className }: DateFieldProps) {
+  const pickerRef = useRef<HTMLInputElement>(null);
+  const iso = toIsoDate(value);
+
+  return (
+    <label className={cn("block text-sm", className)}>
+      {label !== undefined && <span className="mb-1.5 block text-xs font-medium text-neutral-600">{label}</span>}
+      <div className="relative">
+        <input
+          type="text"
+          inputMode="numeric"
+          placeholder="YYYY/MM/DD"
+          value={formatDateInput(value)}
+          onChange={(event) => onChange(commitDateInput(event.target.value))}
+          className={cn(controlClass, "pr-10")}
+        />
+        <button
+          type="button"
+          aria-label="달력에서 날짜 선택"
+          className="absolute top-1/2 right-2 -translate-y-1/2 text-neutral-500"
+          onClick={() => openDatePicker(pickerRef.current)}
+        >
+          <Calendar className="size-4" />
+        </button>
+        <input
+          ref={pickerRef}
+          type="date"
+          tabIndex={-1}
+          aria-hidden
+          value={iso}
+          onChange={(event) => onChange(event.target.value)}
+          className="pointer-events-none absolute size-0 opacity-0"
+        />
+      </div>
+    </label>
+  );
+}
+
+function formatDateInput(value: string): string {
+  return joinYearMonthDay(value.replace(/\D/g, "").slice(0, 8));
+}
+
+function commitDateInput(raw: string): string {
+  const digits = raw.replace(/\D/g, "").slice(0, 8);
+  if (digits.length === 8) {
+    return toIsoDate(digits);
+  }
+  return joinYearMonthDay(digits);
+}
+
+function toIsoDate(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length < 8) {
+    return "";
+  }
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+}
+
+function joinYearMonthDay(digits: string): string {
+  const year = digits.slice(0, 4);
+  const month = digits.slice(4, 6);
+  const day = digits.slice(6, 8);
+  return [year, month, day].filter((part) => part.length > 0).join("/");
+}
+
+function openDatePicker(input: HTMLInputElement | null) {
+  if (input === null) {
+    return;
+  }
+  try {
+    input.showPicker();
+  } catch {
+    input.click();
+  }
 }
 
 export function FieldLabel({ children }: { children: ReactNode }) {

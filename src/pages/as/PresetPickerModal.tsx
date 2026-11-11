@@ -1,169 +1,346 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
-import { TextField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
-import { includesText, won } from "@/lib/format";
-import { parts, presets } from "@/mocks/screenData";
-import type { RepairLine } from "@/types/screen";
+import { categoryLabel, fetchProduct } from "@/lib/asReceptionApi";
+import { won } from "@/lib/format";
+import {
+  fetchRepairPresetParts,
+  fetchRepairPresetsBySymptom,
+  fetchSymptomPresets,
+  type RepairPreset,
+  type RepairPresetPart,
+  type SymptomPreset,
+} from "@/lib/repair";
 
-interface PartPick {
-  name: string;
-  code: string;
-  qty: number;
-  price: number;
+export interface InspectionPresetChoice {
+  preset: RepairPreset;
+  parts: RepairPresetPart[];
 }
 
-export function PresetPickerModal({
-  onClose,
-  onApply,
-}: {
+export interface InspectionPresetSelection {
+  symptom: SymptomPreset;
+  presets: InspectionPresetChoice[];
+}
+
+interface Props {
+  productId: number;
   onClose: () => void;
-  onApply: (lines: RepairLine[]) => void;
-}) {
-  const symptoms = presets.filter((row) => row.kind === "증상");
-  const [query, setQuery] = useState("");
-  const [symptom, setSymptom] = useState("충전 안됨");
-  const [presetId, setPresetId] = useState("pr-charge");
-  const [picked, setPicked] = useState<PartPick[]>([
-    { name: "USB 포트", code: "P-USB", qty: 1, price: 15000 },
-    { name: "충전 보드", code: "P-CHG", qty: 1, price: 25000 },
-  ]);
-  const [workName, setWorkName] = useState("");
-  const [partName, setPartName] = useState("");
-  const [price, setPrice] = useState("");
-  const [qty, setQty] = useState("1");
+  onApply: (selection: InspectionPresetSelection) => void | Promise<void>;
+}
 
-  const visibleSymptoms = symptoms.filter((row) => includesText(row.name, query));
-  const repairPresets = useMemo(
-    () => presets.filter((row) => row.kind === "수리" && row.symptom === symptom),
-    [symptom],
-  );
-  const selected = repairPresets.find((row) => row.id === presetId) ?? repairPresets[0];
-  const total = picked.reduce((sum, row) => sum + row.price * row.qty, 0) + (selected === undefined ? 0 : Math.round(selected.minutes / 10) * 6000);
+export function PresetPickerModal({ productId, onClose, onApply }: Props) {
+  const [symptoms, setSymptoms] = useState<SymptomPreset[]>([]);
+  const [symptomsLoading, setSymptomsLoading] = useState(true);
+  const [productCategory, setProductCategory] = useState<string | null>(null);
+  const [categoryReady, setCategoryReady] = useState(false);
+  const [symptomQuery, setSymptomQuery] = useState("");
+  const [selectedSymptomId, setSelectedSymptomId] = useState<number | null>(null);
 
-  function chooseSymptom(name: string) {
-    setSymptom(name);
-    const next = presets.find((row) => row.kind === "수리" && row.symptom === name);
-    setPresetId(next?.id ?? "");
-    if (name === "충전 안됨") {
-      setPicked([
-        { name: "USB 포트", code: "P-USB-001", qty: 1, price: 15000 },
-        { name: "충전 보드", code: "P-CHG-002", qty: 1, price: 25000 },
-      ]);
+  const [presets, setPresets] = useState<RepairPreset[]>([]);
+  const [presetsLoading, setPresetsLoading] = useState(false);
+  const [presetQuery, setPresetQuery] = useState("");
+  const [selectedPresetIds, setSelectedPresetIds] = useState<number[]>([]);
+  const [partsByPresetId, setPartsByPresetId] = useState<Map<number, RepairPresetPart[]>>(new Map());
+  const [partsLoadingIds, setPartsLoadingIds] = useState<number[]>([]);
+  const [applying, setApplying] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetchProduct(productId, controller.signal)
+      .then((product) => setProductCategory(categoryLabel(product.category)))
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted) return;
+        setError(cause instanceof Error ? cause.message : "제품군을 확인하지 못했습니다.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setCategoryReady(true);
+      });
+
+    return () => controller.abort();
+  }, [productId]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetchSymptomPresets(controller.signal)
+      .then(setSymptoms)
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted) return;
+        setError(cause instanceof Error ? cause.message : "고장 증상을 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setSymptomsLoading(false);
+      });
+
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (selectedSymptomId === null) {
+      setPresets([]);
       return;
     }
-    const linked = parts.find((part) => next?.parts.includes(part.name));
-    setPicked(linked === undefined ? [] : [{ name: linked.name, code: linked.code, qty: 1, price: linked.price ?? 0 }]);
+
+    const controller = new AbortController();
+    setPresetsLoading(true);
+    setPresets([]);
+    setSelectedPresetIds([]);
+    setPartsByPresetId(new Map());
+    setPartsLoadingIds([]);
+
+    fetchRepairPresetsBySymptom(selectedSymptomId, controller.signal)
+      .then((result) => {
+        if (!controller.signal.aborted) setPresets(result);
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted) return;
+        setError(cause instanceof Error ? cause.message : "수리 프리셋을 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setPresetsLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [selectedSymptomId]);
+
+  const visibleSymptoms = useMemo(() => {
+    const keyword = symptomQuery.trim().toLowerCase();
+    return symptoms.filter(
+      (symptom) =>
+        (productCategory === null || symptom.productCategory === productCategory) &&
+        symptom.name.toLowerCase().includes(keyword),
+    );
+  }, [productCategory, symptomQuery, symptoms]);
+
+  const visiblePresets = useMemo(() => {
+    const keyword = presetQuery.trim().toLowerCase();
+    return presets.filter(
+      (preset) =>
+        preset.name.toLowerCase().includes(keyword) ||
+        (preset.description ?? "").toLowerCase().includes(keyword),
+    );
+  }, [presetQuery, presets]);
+
+  const selectedSymptom = symptoms.find((symptom) => symptom.id === selectedSymptomId);
+  const selectedPresets = selectedPresetIds
+    .map((id) => presets.find((preset) => preset.id === id))
+    .filter((preset): preset is RepairPreset => preset !== undefined);
+  const partsLoading = selectedPresetIds.some((id) => partsLoadingIds.includes(id));
+  const partsTotal = selectedPresets.reduce((sum, preset) => {
+    const parts = partsByPresetId.get(preset.id) ?? [];
+    return sum + parts.reduce((partSum, part) => partSum + part.unitPrice * part.quantity, 0);
+  }, 0);
+
+  async function togglePreset(preset: RepairPreset) {
+    setError("");
+    if (selectedPresetIds.includes(preset.id)) {
+      setSelectedPresetIds((current) => current.filter((id) => id !== preset.id));
+      return;
+    }
+
+    setSelectedPresetIds((current) => [...current, preset.id]);
+    if (partsByPresetId.has(preset.id)) return;
+
+    setPartsLoadingIds((current) => [...current, preset.id]);
+    try {
+      const parts = await fetchRepairPresetParts(preset.id);
+      setPartsByPresetId((current) => {
+        const next = new Map(current);
+        next.set(preset.id, parts);
+        return next;
+      });
+    } catch (cause: unknown) {
+      setSelectedPresetIds((current) => current.filter((id) => id !== preset.id));
+      setError(cause instanceof Error ? cause.message : "소모 부품을 불러오지 못했습니다.");
+    } finally {
+      setPartsLoadingIds((current) => current.filter((id) => id !== preset.id));
+    }
+  }
+
+  async function apply() {
+    if (selectedSymptom === undefined || selectedPresets.length === 0) {
+      setError("고장 증상과 수리 프리셋을 선택해 주세요.");
+      return;
+    }
+    if (partsLoading) return;
+
+    const choices = selectedPresets.map((preset) => ({
+      preset,
+      parts: partsByPresetId.get(preset.id) ?? [],
+    }));
+
+    setApplying(true);
+    setError("");
+    try {
+      await onApply({ symptom: selectedSymptom, presets: choices });
+      onClose();
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : "점검 항목을 반영하지 못했습니다.");
+    } finally {
+      setApplying(false);
+    }
   }
 
   return (
     <Modal title="수리 프리셋 불러오기" wide onClose={onClose}>
-      <div className="grid gap-4 lg:grid-cols-3">
-        <section>
-          <TextField value={query} onChange={setQuery} placeholder="증상 검색" className="mb-2" />
-          <ul className="max-h-52 overflow-auto rounded border border-neutral-300">
-            {visibleSymptoms.map((row) => (
-              <li key={row.id}>
-                <button type="button" className={`w-full px-3 py-2 text-left text-sm ${symptom === row.name ? "bg-blue-50 text-blue-700" : ""}`} onClick={() => chooseSymptom(row.name)}>
-                  {row.name}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-        <section>
-          <p className="mb-2 text-sm font-medium">수리 프리셋</p>
-          {repairPresets.length === 0 ? (
-            <p className="rounded border border-dashed border-neutral-300 p-4 text-sm text-neutral-500">연결된 수리 프리셋이 없습니다. 직접 입력해 주세요.</p>
+      <p className="mb-3 text-sm text-neutral-500">
+        {`${productCategory === null ? "고장 증상" : `${productCategory} 고장 증상`}을 고른 뒤, 그 증상의 수리 프리셋을 여러 개 선택할 수 있습니다.`}
+      </p>
+      <div className="grid gap-3 lg:grid-cols-3">
+        <PickerColumn
+          title="1. 고장 증상"
+          search={<SearchBox value={symptomQuery} onChange={setSymptomQuery} placeholder="증상명 검색" />}
+        >
+          {symptomsLoading || !categoryReady ? (
+            <EmptyText>불러오는 중입니다.</EmptyText>
+          ) : visibleSymptoms.length === 0 ? (
+            <EmptyText>이 제품군에 등록된 고장 증상이 없습니다.</EmptyText>
           ) : (
-            <ul className="space-y-2">
-              {repairPresets.map((row) => (
-                <li key={row.id}>
-                  <button type="button" className={`w-full rounded border px-3 py-2 text-left text-sm ${selected?.id === row.id ? "border-blue-500" : "border-neutral-300"}`} onClick={() => setPresetId(row.id)}>
-                    <span className="block font-medium">{row.name}</span>
-                    <span className="text-neutral-500">{row.description}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            visibleSymptoms.map((symptom) => (
+              <ChoiceButton
+                key={symptom.id}
+                selected={symptom.id === selectedSymptomId}
+                title={symptom.name}
+                onClick={() => {
+                  setError("");
+                  setSelectedSymptomId(symptom.id);
+                }}
+              />
+            ))
           )}
-        </section>
-        <section>
-          <p className="mb-2 text-sm font-medium">부품 및 비용</p>
-          <ul className="space-y-2 text-sm">
-            {picked.map((row) => (
-              <li key={row.code} className="flex items-center justify-between gap-2">
-                <span>{row.name}</span>
-                <input
-                  type="number"
-                  min={1}
-                  value={row.qty}
-                  className="w-16 rounded border border-neutral-300 px-2 py-1"
-                  onChange={(event) => {
-                    const nextQty = Number(event.target.value);
-                    setPicked((current) => current.map((item) => (item.code === row.code ? { ...item, qty: nextQty } : item)));
-                  }}
-                />
-                <span>{won(row.price * row.qty)}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-3 text-right text-sm font-medium">예상 수리비 {won(total)}</p>
-        </section>
+        </PickerColumn>
+        <PickerColumn
+          title="2. 수리 프리셋 (여러 개 선택)"
+          search={<SearchBox value={presetQuery} onChange={setPresetQuery} placeholder="프리셋명 검색" />}
+        >
+          {selectedSymptomId === null ? (
+            <EmptyText>고장 증상을 먼저 선택해 주세요.</EmptyText>
+          ) : presetsLoading ? (
+            <EmptyText>불러오는 중입니다.</EmptyText>
+          ) : visiblePresets.length === 0 ? (
+            <EmptyText>이 증상에 연결된 수리 프리셋이 없습니다.</EmptyText>
+          ) : (
+            visiblePresets.map((preset) => (
+              <ChoiceButton
+                key={preset.id}
+                selected={selectedPresetIds.includes(preset.id)}
+                title={preset.name}
+                detail={preset.description || "설명 없음"}
+                onClick={() => void togglePreset(preset)}
+              />
+            ))
+          )}
+        </PickerColumn>
+        <PickerColumn title="3. 소모 부품">
+          {selectedPresets.length === 0 ? (
+            <EmptyText>수리 프리셋을 선택하면 부품이 표시됩니다.</EmptyText>
+          ) : (
+            <>
+              {selectedPresets.map((preset) => {
+                const parts = partsByPresetId.get(preset.id);
+                return (
+                  <div key={preset.id} className="space-y-2">
+                    <p className="text-sm font-medium">{preset.name}</p>
+                    {parts === undefined ? (
+                      <EmptyText>불러오는 중입니다.</EmptyText>
+                    ) : parts.length === 0 ? (
+                      <EmptyText>이 프리셋에 등록된 부품이 없습니다.</EmptyText>
+                    ) : (
+                      parts.map((part) => (
+                        <div key={part.partId} className="rounded-lg border border-neutral-200 px-3 py-2 text-sm">
+                          <p className="font-medium">{part.partName}</p>
+                          <p className="mt-1 text-neutral-500">
+                            {part.quantity}개 · {won(part.unitPrice)} · {part.standardMinutes}분
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                );
+              })}
+              <p className="px-1 text-right text-sm font-semibold text-blue-700">부품 합계 {won(partsTotal)}</p>
+            </>
+          )}
+        </PickerColumn>
       </div>
-      <div className="mt-4 grid gap-2 border-t border-neutral-200 pt-4 md:grid-cols-5">
-        <TextField label="작업명" value={workName} onChange={setWorkName} />
-        <TextField label="부품명" value={partName} onChange={setPartName} />
-        <TextField label="단가" value={price} onChange={setPrice} />
-        <TextField label="수량" value={qty} onChange={setQty} />
-        <div className="flex items-end">
-          <Button
-            variant="outline"
-            onClick={() => {
-              const amount = Number(price);
-              if (partName.trim() === "" || Number.isNaN(amount)) return;
-              setPicked((current) => [...current, { name: partName, code: `custom-${current.length}`, qty: Number(qty) || 1, price: amount }]);
-              setPartName("");
-              setPrice("");
-            }}
-          >
-            추가
-          </Button>
-        </div>
-      </div>
+      {error !== "" && <p className="mt-3 text-sm text-red-600">{error}</p>}
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>취소</Button>
         <Button
-          onClick={() => {
-            const lines: RepairLine[] = [];
-            if (selected !== undefined) {
-              lines.push({
-                id: `work-${selected.id}`,
-                kind: "작업",
-                name: workName.trim() === "" ? selected.name : workName,
-                quantityLabel: `${selected.minutes}분`,
-                unitPriceLabel: "6,000/10분",
-                amount: Math.round(selected.minutes / 10) * 6000,
-              });
-            }
-            picked.forEach((row) => {
-              lines.push({
-                id: row.code,
-                kind: "부품",
-                name: row.name,
-                quantityLabel: String(row.qty),
-                unitPriceLabel: row.price.toLocaleString("ko-KR"),
-                amount: row.price * row.qty,
-                indent: true,
-              });
-            });
-            onApply(lines);
-            onClose();
-          }}
+          onClick={() => void apply()}
+          disabled={applying || partsLoading || selectedSymptom === undefined || selectedPresets.length === 0}
         >
-          적용하기
+          {applying ? "반영 중…" : `점검 항목에 추가${selectedPresets.length > 1 ? ` (${selectedPresets.length})` : ""}`}
         </Button>
       </div>
     </Modal>
   );
+}
+
+function PickerColumn({
+  title,
+  search,
+  children,
+}: {
+  title: string;
+  search?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="flex h-96 flex-col rounded-xl border border-neutral-200 p-3">
+      <h3 className="mb-2 text-sm font-semibold">{title}</h3>
+      {search}
+      <div className="mt-2 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">{children}</div>
+    </section>
+  );
+}
+
+function SearchBox({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <input
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
+    />
+  );
+}
+
+function ChoiceButton({
+  selected,
+  title,
+  detail,
+  onClick,
+}: {
+  selected: boolean;
+  title: string;
+  detail?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg border px-3 py-2 text-left text-sm ${
+        selected ? "border-blue-500 bg-blue-50" : "border-neutral-200 bg-white hover:border-blue-300"
+      }`}
+    >
+      <span className="block font-medium">{title}</span>
+      {detail !== undefined && <span className="mt-1 block text-xs text-neutral-500">{detail}</span>}
+    </button>
+  );
+}
+
+function EmptyText({ children }: { children: string }) {
+  return <p className="py-8 text-center text-sm text-neutral-500">{children}</p>;
 }

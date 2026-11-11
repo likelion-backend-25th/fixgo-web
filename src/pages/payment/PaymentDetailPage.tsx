@@ -1,162 +1,394 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { Button } from "@/components/ui/Button";
-import { TextArea, TextField } from "@/components/ui/Field";
-import { Notice, Panel } from "@/components/ui/Panel";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { SelectBox, TextArea, TextField } from "@/components/ui/Field";
+import { InfoField, Notice, Panel } from "@/components/ui/Panel";
 import { won } from "@/lib/format";
-import { payments } from "@/mocks/screenData";
+import { tossBankName } from "@/lib/tossBank";
+import {
+  fetchPaymentDetail,
+  paymentBillStatusLabel,
+  payByCash,
+  paymentMethodLabel,
+  refundPayment,
+  type PaymentDetail,
+  type PaymentRefundStatus,
+} from "@/lib/paymentApi";
+
+// 새 접수번호 AS-yyMMdd-순번은 끝자리가 접수 ID다.
+function receptionLink(receptionNumber: string) {
+  const matched = /^AS-\d{6}-(\d+)$/.exec(receptionNumber);
+  const id = matched === null ? Number.NaN : Number(matched[1]);
+  if (!Number.isInteger(id) || id <= 0) {
+    return receptionNumber;
+  }
+  return (
+    <Link className="text-blue-600" to={`/as/details/${id}`}>
+      {receptionNumber}
+    </Link>
+  );
+}
+
+type LoadState =
+  | { kind: "loading" }
+  | { kind: "invalid" }
+  | { kind: "error"; message: string }
+  | { kind: "ready"; detail: PaymentDetail };
+
+const bankOptions = [
+  { value: "", label: "은행 선택" },
+  { value: "06", label: "KB국민은행" },
+  { value: "88", label: "신한은행" },
+  { value: "20", label: "우리은행" },
+  { value: "81", label: "하나은행" },
+  { value: "11", label: "NH농협은행" },
+  { value: "03", label: "IBK기업은행" },
+  { value: "90", label: "카카오뱅크" },
+  { value: "89", label: "케이뱅크" },
+  { value: "92", label: "토스뱅크" },
+  { value: "31", label: "iM뱅크(대구)" },
+  { value: "32", label: "부산은행" },
+  { value: "39", label: "경남은행" },
+  { value: "34", label: "광주은행" },
+  { value: "37", label: "전북은행" },
+  { value: "35", label: "제주은행" },
+  { value: "71", label: "우체국" },
+  { value: "23", label: "SC제일은행" },
+  { value: "07", label: "Sh수협은행" },
+  { value: "45", label: "새마을금고" },
+  { value: "48", label: "신협" },
+];
 
 export function PaymentDetailPage() {
-  const { orderId } = useParams();
-  const payment = payments.find((row) => row.orderId === orderId);
-  const [status, setStatus] = useState(payment?.status ?? "결제 대기");
-  const [method, setMethod] = useState<"카드" | "현금">("카드");
-  const [paidAmount, setPaidAmount] = useState(String(payment?.amount ?? 0));
-  const [refunded, setRefunded] = useState(0);
-  const [refundAmount, setRefundAmount] = useState("");
-  const [reason, setReason] = useState("");
-  const [notice, setNotice] = useState("");
-  const [error, setError] = useState("");
+  const { billId = "" } = useParams();
+  const [reloadKey, setReloadKey] = useState(0);
+  const [load, setLoad] = useState<LoadState>({ kind: "loading" });
 
-  if (payment === undefined) {
+  useEffect(() => {
+    if (!/^\d+$/.test(billId)) {
+      setLoad({ kind: "invalid" });
+      return;
+    }
+
+    const controller = new AbortController();
+    setLoad({ kind: "loading" });
+    fetchPaymentDetail(Number(billId), controller.signal)
+      .then((detail) => {
+        if (!controller.signal.aborted) {
+          setLoad({ kind: "ready", detail });
+        }
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || (cause instanceof DOMException && cause.name === "AbortError")) {
+          return;
+        }
+        const message = cause instanceof Error ? cause.message : "결제 정보를 불러오지 못했습니다.";
+        if (message === "결제 정보를 찾을 수 없습니다." || message === "결제 데이터가 없습니다.") {
+          setLoad({ kind: "invalid" });
+          return;
+        }
+        setLoad({ kind: "error", message });
+      });
+
+    return () => controller.abort();
+  }, [billId, reloadKey]);
+
+  if (load.kind === "loading") {
+    return <p className="text-sm text-neutral-600">결제 정보를 불러오는 중입니다.</p>;
+  }
+  if (load.kind === "invalid") {
     return <Notice tone="error">결제 정보를 찾을 수 없습니다.</Notice>;
   }
+  if (load.kind === "error") {
+    return <Notice tone="error">{load.message}</Notice>;
+  }
 
-  const remaining = payment.amount - refunded;
+  const detail = load.detail;
+  const reception = detail.reception;
+  const account = detail.virtualAccount;
+  const history = detail.paymentHistory;
+  const refund = detail.refundHistory;
 
   return (
     <div className="space-y-4">
-      {notice !== "" && <Notice>{notice}</Notice>}
-      {error !== "" && <Notice tone="error">{error}</Notice>}
-      <Panel title="결제 기본 정보">
-        <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-          <p>청구번호 {payment.orderId}</p>
-          <p>접수번호 <Link className="text-blue-600" to={`/as/details/${payment.asId}`}>{payment.asId}</Link></p>
-          <p>고객명 {payment.customerName}</p>
-          <p>제품명 {payment.productName}</p>
-          <p>고장 증상 {payment.symptom}</p>
-          <p>청구 금액 {won(payment.amount)}</p>
-          <p>상태 {status}</p>
-          <p>결제 수단 {status === "결제 완료" ? method : payment.method}</p>
-        </div>
-      </Panel>
-      {status === "결제 대기" ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Panel title="가상 계좌">
-            <p className="text-sm">계좌번호 {payment.virtualAccount ?? "발급 전"}</p>
-            <p className="mt-1 text-sm">입금 기한 {payment.dueAt ?? "-"}</p>
-            <Button className="mt-4 border border-black" variant="ghost" onClick={() => setNotice("가상계좌를 취소했습니다.")}>가상계좌 취소</Button>
-          </Panel>
-          <Panel title="현장 결제">
-            <div className="mb-3 flex gap-4 text-sm">
-              {(["카드", "현금"] as const).map((item) => (
-                <label key={item} className="flex items-center gap-2">
-                  <input type="radio" checked={method === item} onChange={() => setMethod(item)} />
-                  {item}
-                </label>
-              ))}
-            </div>
-            <TextField label="결제 금액" value={paidAmount} onChange={setPaidAmount} />
-            <Button
-              className="mt-4"
-              onClick={() => {
-                if (Number(paidAmount) !== payment.amount) {
-                  setError("결제 금액이 청구 금액과 다릅니다.");
-                  return;
-                }
-                setError("");
-                setStatus("결제 완료");
-                setNotice("현장 결제를 등록하고 결제 완료로 변경했습니다.");
-              }}
-            >
-              현장 결제 등록
-            </Button>
-          </Panel>
-        </div>
-      ) : (
-        <PaidPanel
-          remaining={remaining}
-          refunded={refunded}
-          refundAmount={refundAmount}
-          reason={reason}
-          paidAt={payment.paidAt ?? "2026-10-30"}
-          method={status === "결제 완료" ? method : payment.method}
-          cardNumber={payment.cardNumber ?? "-"}
-          onRefundAmount={setRefundAmount}
-          onReason={setReason}
-          onFull={() => {
-            if (reason.trim() === "") {
-              setError("환불 사유를 입력해 주세요.");
-              return;
-            }
-            setRefunded(payment.amount);
-            setError("");
-            setNotice("전액 환불을 요청했습니다.");
-          }}
-          onPartial={() => {
-            const amount = Number(refundAmount);
-            if (reason.trim() === "" || Number.isNaN(amount) || amount <= 0) {
-              setError("환불 금액과 사유를 입력해 주세요.");
-              return;
-            }
-            if (amount > remaining) {
-              setError("부분 환불 금액은 잔여 환불 가능 금액을 초과할 수 없습니다.");
-              return;
-            }
-            setRefunded((current) => current + amount);
-            setRefundAmount("");
-            setError("");
-            setNotice("부분 환불을 요청했습니다.");
-          }}
+      <section className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
+        <dl className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <InfoField label="고객명" value={text(reception.customerName)} />
+          <InfoField label="접수번호" value={receptionLink(reception.asReceptionNumber)} />
+          <InfoField label="제품" value={text(reception.productName)} />
+          <InfoField label="증상" value={text(reception.symptom)} />
+          <InfoField label="청구금액" value={won(detail.amount)} />
+          <InfoField
+            label="결제상태"
+            value={<span className={`rounded-md px-2 py-1 text-xs font-medium ${statusClass(detail)}`}>{headlineStatus(detail)}</span>}
+          />
+          <InfoField label="승인시각" value={formatDateTime(history?.approvedAt ?? null)} />
+        </dl>
+      </section>
+
+      {history !== null && (
+        <Panel title="결제">
+          <dl className="grid gap-4 sm:grid-cols-2">
+            <InfoField label="주문번호" value={history.orderId} />
+            <InfoField label="결제 금액" value={won(history.amount)} />
+            <InfoField label="결제 수단" value={paymentMethodLabel(history.paymentMethod)} />
+            <InfoField label="승인 시각" value={formatDateTime(history.approvedAt)} />
+          </dl>
+        </Panel>
+      )}
+
+      {account !== null && (
+        <Panel title="가상계좌">
+          <dl className="grid gap-4 sm:grid-cols-3">
+            <InfoField label="은행" value={text(tossBankName(account.bankCode))} />
+            <InfoField label="계좌번호" value={text(account.accountNumber)} />
+            <InfoField label="입금 기한" value={formatDateTime(account.dueAt)} />
+          </dl>
+        </Panel>
+      )}
+
+      {refund !== null && (
+        <Panel title="환불">
+          <dl className="grid gap-4 sm:grid-cols-2">
+            <InfoField label="환불 금액" value={refund.amount === null ? "-" : won(refund.amount)} />
+            <InfoField label="환불 상태" value={refundStatusLabel(refund.status)} />
+            <InfoField label="환불 사유" value={text(refund.cancelReason)} />
+            <InfoField label="환불 시각" value={formatDateTime(refund.canceledAt)} />
+          </dl>
+        </Panel>
+      )}
+
+      {canPayByCash(detail) && (
+        <CashPaymentForm
+          billId={detail.billId}
+          amount={detail.amount}
+          onDone={() => setReloadKey((current) => current + 1)}
+        />
+      )}
+
+      {detail.status === "UNPAID" && detail.paymentStatus === "IN_PROGRESS" && (
+        <Notice>결제 결과를 확인하고 있습니다. 확인이 끝날 때까지 다시 결제할 수 없습니다.</Notice>
+      )}
+
+      {detail.status === "UNPAID" && detail.paymentStatus !== "IN_PROGRESS" && !canPayByCash(detail) && (
+        <Notice>발급된 가상계좌가 있어 현금으로 받을 수 없습니다. 가상계좌는 먼저 취소해 주세요.</Notice>
+      )}
+
+      {detail.refundable && (
+        <RefundForm
+          billId={detail.billId}
+          method={detail.paymentMethod}
+          onDone={() => setReloadKey((current) => current + 1)}
         />
       )}
     </div>
   );
 }
 
-function PaidPanel({
-  remaining,
-  refunded,
-  refundAmount,
-  reason,
-  paidAt,
-  method,
-  cardNumber,
-  onRefundAmount,
-  onReason,
-  onFull,
-  onPartial,
+// 백엔드는 미결제이고 진행 중·입금 대기·완료 시도가 없을 때만 현금 결제를 받는다. 금액은 청구서 금액이다.
+function canPayByCash(detail: PaymentDetail): boolean {
+  if (detail.status !== "UNPAID" || detail.virtualAccount !== null) {
+    return false;
+  }
+  const status = detail.paymentStatus;
+  return status !== "IN_PROGRESS" && status !== "WAITING_FOR_DEPOSIT" && status !== "DONE";
+}
+
+function CashPaymentForm({
+  billId,
+  amount,
+  onDone,
 }: {
-  remaining: number;
-  refunded: number;
-  refundAmount: string;
-  reason: string;
-  paidAt: string;
-  method: string;
-  cardNumber: string;
-  onRefundAmount: (value: string) => void;
-  onReason: (value: string) => void;
-  onFull: () => void;
-  onPartial: () => void;
+  billId: number;
+  amount: number;
+  onDone: () => void;
 }) {
+  const [pending, setPending] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [error, setError] = useState("");
+  const pendingRef = useRef(false);
+
+  async function submit() {
+    if (pendingRef.current) {
+      return;
+    }
+    setAsking(false);
+    setError("");
+    pendingRef.current = true;
+    setPending(true);
+    try {
+      await payByCash(billId);
+      onDone();
+    } catch (caught) {
+      pendingRef.current = false;
+      setPending(false);
+      setError(caught instanceof Error ? caught.message : "현금 결제하지 못했습니다. 다시 시도해 주세요.");
+    }
+  }
+
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <Panel title="결제 이력">
-        <p className="text-sm">결제일 {paidAt}</p>
-        <p className="text-sm">결제 수단 {method}</p>
-        <p className="text-sm">카드번호 {cardNumber}</p>
-        <p className="mt-2 text-sm">환불 완료 {won(refunded)} · 환불 가능 {won(remaining)}</p>
-      </Panel>
-      <Panel title="환불">
-        <TextArea label="환불 사유" value={reason} onChange={onReason} rows={3} />
-        <div className="mt-3 flex justify-end">
-          <Button variant="outline" onClick={onFull} disabled={remaining === 0}>전액 환불</Button>
-        </div>
-        <div className="mt-4 flex items-end gap-2">
-          <TextField className="flex-1" label="부분 환불 금액" value={refundAmount} onChange={onRefundAmount} />
-          <Button onClick={onPartial} disabled={remaining === 0}>부분 환불</Button>
-        </div>
-      </Panel>
-    </div>
+    <Panel title="현금 결제">
+      <p className="text-sm text-neutral-600">현장에서 받은 현금을 청구 금액 그대로 결제 처리합니다.</p>
+      <dl className="mt-4">
+        <InfoField label="결제 금액" value={won(amount)} />
+      </dl>
+      {error !== "" && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      <Button className="mt-4" disabled={pending} onClick={() => setAsking(true)}>
+        현금 결제
+      </Button>
+      {asking && (
+        <ConfirmModal
+          title="현금 결제"
+          message={`청구 금액 ${won(amount)}을 현금으로 결제 처리하시겠습니까?`}
+          confirmLabel="현금 결제"
+          onConfirm={() => void submit()}
+          onClose={() => setAsking(false)}
+        />
+      )}
+    </Panel>
   );
+}
+
+function RefundForm({
+  billId,
+  method,
+  onDone,
+}: {
+  billId: number;
+  method: PaymentDetail["paymentMethod"];
+  onDone: () => void;
+}) {
+  const needsAccount = method === "VIRTUAL_ACCOUNT";
+  const [reason, setReason] = useState("");
+  const [bank, setBank] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [holderName, setHolderName] = useState("");
+  const [pending, setPending] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [error, setError] = useState("");
+  const pendingRef = useRef(false);
+
+  function ask() {
+    if (pendingRef.current) {
+      return;
+    }
+    const cancelReason = reason.trim();
+    if (cancelReason === "") {
+      setError("환불 사유를 입력해 주세요.");
+      return;
+    }
+    if (needsAccount && (bank === "" || accountNumber.trim() === "" || holderName.trim() === "")) {
+      setError("가상계좌 환불은 은행, 계좌번호, 예금주가 필요합니다.");
+      return;
+    }
+    setError("");
+    setAsking(true);
+  }
+
+  async function submit() {
+    if (pendingRef.current) {
+      return;
+    }
+    const cancelReason = reason.trim();
+    setAsking(false);
+    pendingRef.current = true;
+    setPending(true);
+    try {
+      await refundPayment(
+        billId,
+        cancelReason,
+        needsAccount
+          ? { bank, accountNumber: accountNumber.trim(), holderName: holderName.trim() }
+          : null,
+      );
+      onDone();
+    } catch (caught) {
+      pendingRef.current = false;
+      setPending(false);
+      setError(caught instanceof Error ? caught.message : "환불하지 못했습니다. 다시 시도해 주세요.");
+    }
+  }
+
+  return (
+    <Panel title="환불">
+      <p className="text-sm text-neutral-600">
+        {needsAccount ? "가상계좌로 받은 결제입니다. 환불받을 계좌를 입력해 주세요." : "결제 완료된 금액을 전액 환불합니다."}
+      </p>
+      <div className="mt-4 grid gap-3">
+        <TextArea label="환불 사유" value={reason} onChange={setReason} rows={3} placeholder="환불 사유" />
+        {needsAccount && (
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="block text-sm">
+              <span className="mb-1.5 block text-xs font-medium text-neutral-600">은행</span>
+              <SelectBox className="w-full" value={bank} onChange={setBank} options={bankOptions} />
+            </label>
+            <TextField label="계좌번호" value={accountNumber} onChange={setAccountNumber} placeholder="숫자만 입력" />
+            <TextField label="예금주" value={holderName} onChange={setHolderName} />
+          </div>
+        )}
+      </div>
+      {error !== "" && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      <Button className="mt-4" disabled={pending} onClick={ask}>
+        환불
+      </Button>
+      {asking && (
+        <ConfirmModal
+          title="환불"
+          message="이 결제를 환불하시겠습니까?"
+          confirmLabel="환불"
+          onConfirm={() => void submit()}
+          onClose={() => setAsking(false)}
+        />
+      )}
+    </Panel>
+  );
+}
+
+function headlineStatus(detail: PaymentDetail): string {
+  if (detail.status === "UNPAID" && detail.paymentStatus === "IN_PROGRESS") {
+    return "결제 진행 중";
+  }
+  return paymentBillStatusLabel(detail.status);
+}
+
+function statusClass(detail: PaymentDetail): string {
+  if (detail.status === "UNPAID" && detail.paymentStatus === "IN_PROGRESS") {
+    return "bg-amber-50 text-amber-700";
+  }
+  if (detail.status === "PAID") {
+    return "bg-green-50 text-green-600";
+  }
+  if (detail.status === "UNPAID") {
+    return "bg-blue-50 text-blue-600";
+  }
+  return "bg-red-50 text-red-600";
+}
+
+function refundStatusLabel(status: PaymentRefundStatus): string {
+  if (status === "IN_PROGRESS") {
+    return "환불 진행";
+  }
+  if (status === "DONE") {
+    return "환불 완료";
+  }
+  return "환불 실패";
+}
+
+function text(value: string | null): string {
+  if (value === null || value.trim() === "") {
+    return "-";
+  }
+  return value;
+}
+
+function formatDateTime(value: string | null): string {
+  if (value === null || value.trim() === "") {
+    return "-";
+  }
+  const matched = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/.exec(value);
+  if (matched === null) {
+    return value;
+  }
+  return `${matched[1]} ${matched[2]}`;
 }

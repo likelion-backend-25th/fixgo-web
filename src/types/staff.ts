@@ -2,7 +2,6 @@ export type StaffRole = "ADMIN" | "RECEPTIONIST" | "TECHNICIAN" | "MANAGER";
 
 export interface SessionUser {
   loginId: string;
-  password: string;
   name: string;
   role: StaffRole;
   email: string;

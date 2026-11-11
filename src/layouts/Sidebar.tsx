@@ -1,4 +1,5 @@
 import { Link, useLocation } from "react-router";
+import { logoutFromServer } from "@/lib/authApi";
 import { cn } from "@/lib/cn";
 import { useSessionStore } from "@/stores/useSessionStore";
 import { isNavActive, NAV_GROUPS } from "@/layouts/navigation";
@@ -11,7 +12,6 @@ interface SidebarProps {
 export function Sidebar({ open, onNavigate }: SidebarProps) {
   const { pathname } = useLocation();
   const user = useSessionStore((state) => state.user);
-  const logout = useSessionStore((state) => state.logout);
   const role = user?.role;
 
   return (
@@ -67,7 +67,7 @@ export function Sidebar({ open, onNavigate }: SidebarProps) {
       <button
         type="button"
         onClick={() => {
-          logout();
+          void logoutFromServer();
           onNavigate();
         }}
         className="mx-3 mb-3 rounded-lg px-2.5 py-2 text-left text-sm text-neutral-500 hover:bg-neutral-50 hover:text-neutral-800"

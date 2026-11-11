@@ -1,9 +1,24 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
+function SortMark({ active, direction }: { active: boolean; direction: "asc" | "desc" }) {
+  const points = direction === "asc" ? "4 0.5 7.5 7.5 0.5 7.5" : "0.5 0.5 7.5 0.5 4 7.5";
+  return (
+    <svg
+      width="8"
+      height="8"
+      viewBox="0 0 8 8"
+      aria-hidden="true"
+      className={cn("shrink-0", active ? "text-neutral-500" : "text-neutral-400")}
+    >
+      <polygon points={points} fill="currentColor" />
+    </svg>
+  );
+}
+
 export interface Column<T> {
   key: string;
-  header: string;
+  header: ReactNode;
   render: (row: T) => ReactNode;
   className?: string;
   sortable?: boolean;
@@ -42,9 +57,10 @@ export function DataTable<T>({
                 {column.sortable === true && onSort !== undefined ? (
                   <button type="button" className="inline-flex items-center gap-1" onClick={() => onSort(column.key)}>
                     {column.header}
-                    <span className="text-[10px] text-neutral-400">
-                      {sortKey === column.key ? (sortDir === "asc" ? "▲" : "▼") : "▾"}
-                    </span>
+                    <SortMark
+                      active={sortKey === column.key}
+                      direction={sortKey === column.key ? sortDir : "desc"}
+                    />
                   </button>
                 ) : (
                   column.header

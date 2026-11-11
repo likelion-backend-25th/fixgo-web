@@ -1,10 +1,10 @@
 import { Link } from "react-router";
 import { cn } from "@/lib/cn";
 
-export function ProgressTabs({ repairId, current }: { repairId: string; current: "inspection" | "repair" }) {
+export function ProgressTabs({ receptionId, current }: { receptionId: number; current: "inspection" | "repair" }) {
   const tabs = [
-    { id: "inspection" as const, label: "점검/견적", to: `/as/${repairId}/inspection` },
-    { id: "repair" as const, label: "수리", to: `/as/${repairId}/repair` },
+    { id: "inspection" as const, label: "점검/견적", to: `/as/${receptionId}/inspection` },
+    { id: "repair" as const, label: "수리", to: `/as/${receptionId}/repair` },
   ];
   return (
     <div className="inline-flex rounded-lg bg-neutral-100 p-1">

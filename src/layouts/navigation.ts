@@ -20,7 +20,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "A/S",
     items: [
       { label: "A/S 목록", to: "/as/list", roles: all },
-      { label: "A/S 접수 등록", to: "/as/new", roles: ["RECEPTIONIST", "MANAGER"] },
+      { label: "A/S 접수 등록", to: "/as/new", roles: desk },
     ],
   },
   {
@@ -46,7 +46,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "통계/리포트", to: "/admin/statistics", roles: ["ADMIN"] },
       { label: "부품 관리", to: "/admin/parts/list", roles: ["ADMIN"] },
-      { label: "비용 관리", to: "/admin/costs", roles: ["ADMIN"] },
+      { label: "공임비·점검비", to: "/admin/costs", roles: ["ADMIN"] },
       { label: "프리셋 관리", to: "/preset/list", roles: floor },
       { label: "기사 배정 이력", to: "/admin/allocation_history", roles: ["ADMIN"] },
       { label: "A/S 상태 변경 이력", to: "/admin/status_change_history", roles: ["ADMIN"] },
@@ -89,11 +89,10 @@ export function resolveHeading(pathname: string, role: StaffRole): { title: stri
   if (pathname === "/as/list") return { title: "A/S 목록" };
   if (pathname === "/as/new") return { title: "A/S 접수 등록" };
   if (pathname.startsWith("/as/details/")) {
-    return { title: "접수 상세", meta: decodeURIComponent(pathname.split("/").at(-1) ?? "") };
+    return { title: "접수 상세" };
   }
   if (/^\/as\/[^/]+\/(inspection|repair)$/.test(pathname)) {
-    const id = pathname.split("/")[2] ?? "";
-    return { title: "A/S 진행 상세", meta: decodeURIComponent(id) };
+    return { title: "A/S 진행 상세" };
   }
   if (pathname === "/preset/list") return { title: "프리셋 관리" };
   if (pathname === "/customer") return { title: "고객 관리" };
@@ -105,11 +104,12 @@ export function resolveHeading(pathname: string, role: StaffRole): { title: stri
   if (pathname === "/notification/list") return { title: "이메일 발송 내역" };
   if (pathname.startsWith("/admin/products")) return { title: "지원 품목" };
   if (pathname.startsWith("/admin/parts")) return { title: "부품 관리" };
-  if (pathname === "/admin/costs") return { title: "비용 관리" };
+  if (pathname === "/admin/costs") return { title: "공임비·점검비" };
   if (pathname === "/admin/statistics") return { title: "통계/리포트" };
   if (pathname === "/admin/statistics/deposits/waiting") return { title: "입금 대기 내역" };
   if (pathname === "/admin/statistics/technicians") return { title: "기사별 수리 현황" };
-  if (pathname === "/admin/statistics/repair_cost") return { title: "수리비 추이" };
+  if (pathname === "/admin/statistics/repair_cost") return { title: "수리비 수납" };
+  if (pathname === "/admin/statistics/shipments") return { title: "배송 현황" };
   if (pathname === "/admin/statistics/incomplete") return { title: "장기 미처리" };
   if (pathname.startsWith("/admin/statistics/models/")) return { title: "고장 증상 분포" };
   if (pathname === "/admin/statistics/models") return { title: "제품 모델별 수리 건수" };

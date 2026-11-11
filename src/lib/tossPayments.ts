@@ -45,7 +45,21 @@ export async function requestTossPayment(params: {
 }
 
 export function isPaymentCanceled(error: unknown): boolean {
-  return isRecord(error) && error.code === "PAY_PROCESS_CANCELED";
+  if (typeof error === "string") {
+    return isCancelMessage(error);
+  }
+  if (!isRecord(error)) {
+    return false;
+  }
+  const code = typeof error.code === "string" ? error.code : typeof error.errorCode === "string" ? error.errorCode : "";
+  if (code === "PAY_PROCESS_CANCELED" || code === "USER_CANCEL") {
+    return true;
+  }
+  return typeof error.message === "string" && isCancelMessage(error.message);
+}
+
+function isCancelMessage(message: string): boolean {
+  return message.includes("취소되었습니다") || message.includes("결제를 취소");
 }
 
 export function paymentErrorMessage(error: unknown): string {

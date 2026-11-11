@@ -1,7 +1,11 @@
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { won } from "@/lib/format";
-import { inspectionLines } from "@/mocks/screenData";
+import { Notice } from "@/components/ui/Panel";
+import { isAbortError } from "@/lib/apiClient";
+import { fetchEstimate, fetchReceptionReceipt, fetchRepairStatement } from "@/lib/asReceptionApi";
+import { EstimateSheet, PaymentSheet, ReceiptSheet, RepairSheet } from "@/pages/as/DocumentSheets";
+import type { EstimateDocument, ReceptionReceipt, RepairStatement } from "@/types/asReception";
 import type { AsRecord } from "@/types/screen";
 
 export type DocumentKind = "receipt" | "estimate" | "repair" | "payment";
@@ -13,46 +17,90 @@ const titleOf: Record<DocumentKind, string> = {
   payment: "결제 내역서",
 };
 
-export function DocumentModal({ kind, record, onClose }: { kind: DocumentKind; record: AsRecord; onClose: () => void }) {
-  const lines = inspectionLines(record);
-  const total = lines.reduce((sum, line) => sum + line.amount, 0);
+export function DocumentModal({
+  kind,
+  receptionId,
+  record,
+  onClose,
+}: {
+  kind: DocumentKind;
+  receptionId: number;
+  record: AsRecord;
+  onClose: () => void;
+}) {
+  const [receipt, setReceipt] = useState<ReceptionReceipt | null>(null);
+  const [estimate, setEstimate] = useState<EstimateDocument | null>(null);
+  const [repair, setRepair] = useState<RepairStatement | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(kind !== "payment");
+
+  useEffect(() => {
+    if (kind === "payment") {
+      return;
+    }
+    const controller = new AbortController();
+    setReceipt(null);
+    setEstimate(null);
+    setRepair(null);
+    setLoading(true);
+    setError("");
+    // 버튼마다 발급 API가 다르다. 없는 서류는 서버 메시지를 그대로 보여 준다.
+    const request = kind === "receipt"
+      ? fetchReceptionReceipt(receptionId, controller.signal).then(setReceipt)
+      : kind === "estimate"
+        ? fetchEstimate(receptionId, controller.signal).then(setEstimate)
+        : fetchRepairStatement(receptionId, controller.signal).then(setRepair);
+    request
+      .catch((cause: unknown) => {
+        if (isAbortError(cause)) {
+          return;
+        }
+        setError(cause instanceof Error ? cause.message : "서류를 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+    return () => controller.abort();
+  }, [kind, receptionId]);
+
+  const ready = kind === "payment" || (error === "" && !loading && (receipt !== null || estimate !== null || repair !== null));
+  const sheetRef = useRef<HTMLDivElement>(null);
+
+  function printDocument() {
+    const sheet = sheetRef.current?.querySelector("[data-print-sheet]");
+    if (!(sheet instanceof HTMLElement)) {
+      return;
+    }
+    // 서류만 인쇄한다. 화면 자체를 display:none 하면 프린터 선택 창이 바로 닫힌다.
+    document.querySelectorAll(".print-host").forEach((node) => node.remove());
+    const host = document.createElement("div");
+    host.className = "print-host";
+    host.append(sheet.cloneNode(true));
+    document.body.append(host);
+    document.body.classList.add("printing-document");
+    const cleanup = () => {
+      host.remove();
+      document.body.classList.remove("printing-document");
+      window.removeEventListener("afterprint", cleanup);
+    };
+    window.addEventListener("afterprint", cleanup);
+    window.print();
+  }
+
   return (
-    <Modal title={titleOf[kind]} onClose={onClose}>
-      <article className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm">
-        <p className="mb-4 text-center text-2xl font-semibold text-blue-600">FixGo</p>
-        <p className="mb-3 text-center text-lg">{titleOf[kind]}</p>
-        <dl className="grid grid-cols-[90px_1fr] gap-y-1">
-          <dt className="text-neutral-500">접수번호</dt><dd>{record.id}</dd>
-          <dt className="text-neutral-500">고객명</dt><dd>{record.customerName}</dd>
-          <dt className="text-neutral-500">연락처</dt><dd>{record.phone}</dd>
-          <dt className="text-neutral-500">제품</dt><dd>{record.productGroup} {record.modelName}</dd>
-          <dt className="text-neutral-500">시리얼번호</dt><dd>{record.serial}</dd>
-          <dt className="text-neutral-500">증상</dt><dd>{record.symptom}</dd>
-          <dt className="text-neutral-500">수령 방식</dt><dd>{record.receiveMethod}</dd>
-          <dt className="text-neutral-500">담당 기사</dt><dd>{record.technician}</dd>
-        </dl>
-        {kind !== "receipt" && (
-          <table className="mt-4 w-full text-left">
-            <thead className="bg-neutral-100">
-              <tr>{["구분", "항목", "금액"].map((header) => <th key={header} className="px-2 py-1">{header}</th>)}</tr>
-            </thead>
-            <tbody>
-              {lines.filter((line) => line.amount > 0).map((line) => (
-                <tr key={line.id} className="border-t border-neutral-200">
-                  <td className="px-2 py-1">{line.kind}</td>
-                  <td className="px-2 py-1">{line.name}</td>
-                  <td className="px-2 py-1">{won(line.amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        {kind !== "receipt" && <p className="mt-3 text-right font-semibold">합계 {won(total === 0 ? 15000 : total)}</p>}
-        {kind === "payment" && <p className="mt-2">결제 수단 카드 · 결제 상태 결제 완료</p>}
-        {kind === "estimate" && <p className="mt-2">최종 판정: 보증 기간 내 무상</p>}
-      </article>
-      <div className="mt-4 text-right">
-        <Button onClick={() => window.print()}>인쇄</Button>
+    <Modal title={titleOf[kind]} onClose={onClose} wide={kind !== "receipt"}>
+      {loading && <p className="text-sm text-neutral-500">서류를 불러오는 중입니다.</p>}
+      {error !== "" && <Notice tone="error">{error}</Notice>}
+      <div ref={sheetRef}>
+        {kind === "receipt" && receipt !== null && <ReceiptSheet data={receipt} />}
+        {kind === "estimate" && estimate !== null && <EstimateSheet data={estimate} />}
+        {kind === "repair" && repair !== null && <RepairSheet data={repair} />}
+        {kind === "payment" && <PaymentSheet record={record} />}
+      </div>
+      <div className="mt-4 text-right print:hidden">
+        <Button onClick={printDocument} disabled={!ready}>인쇄</Button>
       </div>
     </Modal>
   );

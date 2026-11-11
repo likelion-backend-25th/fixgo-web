@@ -1,138 +1,76 @@
-import { useMemo, useState } from "react";
-import { Button } from "@/components/ui/Button";
+import { useEffect, useState } from "react";
 import { DataTable, type Column } from "@/components/ui/DataTable";
-import { SelectBox, TextField } from "@/components/ui/Field";
-import { Modal } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Panel";
-import { includesText } from "@/lib/format";
-import { costRecords } from "@/mocks/screenData";
-import type { CostRecord } from "@/types/screen";
-
-const products = ["스마트폰", "노트북"] as const;
-const categories = ["공임비", "점검비"] as const;
+import { isAbortError } from "@/lib/apiClient";
+import { formatDate, won } from "@/lib/format";
+import { fetchLaborRates, type LaborRateItem, type RateType } from "@/lib/laborRateApi";
+import { categoryToLabel } from "@/lib/productModelApi";
 
 export function CostListPage() {
-  const [rows, setRows] = useState(costRecords);
-  const [query, setQuery] = useState("");
-  const [editing, setEditing] = useState<CostRecord | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [notice, setNotice] = useState("");
-  const visible = useMemo(
-    () => rows.filter((row) => includesText(`${row.product} ${row.category}`, query)),
-    [query, rows],
-  );
-  const columns: Column<CostRecord>[] = [
-    { key: "no", header: "번호", render: (row) => rows.findIndex((item) => item.id === row.id) + 1 },
-    { key: "product", header: "제품", render: (row) => row.product },
-    { key: "category", header: "분류", render: (row) => row.category },
-    { key: "amount", header: "금액", render: (row) => row.amountLabel },
-    {
-      key: "manage",
-      header: "관리",
-      render: (row) => (
-        <span className="flex gap-2">
-          <Button variant="outline" onClick={() => setEditing(row)}>수정</Button>
-          <Button variant="outline" className="border-red-600 text-red-600 hover:bg-red-50" onClick={() => remove(row.id)}>삭제</Button>
-        </span>
-      ),
-    },
-  ];
+  const [rows, setRows] = useState<LaborRateItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  function remove(id: string) {
-    setRows((current) => current.filter((row) => row.id !== id));
-    setNotice("비용 기준을 삭제했습니다.");
-  }
-
-  function save(next: CostRecord) {
-    setRows((current) => {
-      const exists = current.some((row) => row.id === next.id);
-      return exists ? current.map((row) => (row.id === next.id ? next : row)) : [...current, next];
-    });
-    setCreating(false);
-    setEditing(null);
-    setNotice(editing === null ? "비용 기준을 등록했습니다." : "비용 기준을 수정했습니다.");
-  }
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    fetchLaborRates(controller.signal)
+      .then((result) => {
+        setRows(result);
+        setError("");
+      })
+      .catch((cause: unknown) => {
+        if (isAbortError(cause)) {
+          return;
+        }
+        setRows([]);
+        setError(cause instanceof Error ? cause.message : "공임비·점검비 목록을 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+    return () => controller.abort();
+  }, []);
 
   return (
-    <div>
-      {notice !== "" && <Notice>{notice}</Notice>}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <TextField value={query} onChange={setQuery} placeholder="제품, 분류" className="w-64" />
-        <Button className="ml-auto" onClick={() => setCreating(true)}>비용 등록</Button>
-      </div>
-      <DataTable columns={columns} rows={visible} rowKey={(row) => row.id} />
-      {(creating || editing !== null) && (
-        <CostModal
-          initial={editing}
-          onClose={() => {
-            setCreating(false);
-            setEditing(null);
-          }}
-          onSave={save}
-        />
-      )}
+    <div className="space-y-8">
+      {error !== "" && <Notice tone="error">{error}</Notice>}
+      <RateTable title="공임비" rateType="LABOR_RATE" rows={rows} loading={loading} />
+      <RateTable title="점검비" rateType="INSPECTION_COST" rows={rows} loading={loading} />
     </div>
   );
 }
 
-function CostModal({
-  initial,
-  onClose,
-  onSave,
+function RateTable({
+  title,
+  rateType,
+  rows,
+  loading,
 }: {
-  initial: CostRecord | null;
-  onClose: () => void;
-  onSave: (row: CostRecord) => void;
+  title: string;
+  rateType: RateType;
+  rows: LaborRateItem[];
+  loading: boolean;
 }) {
-  const [product, setProduct] = useState<CostRecord["product"]>(initial?.product ?? "스마트폰");
-  const [category, setCategory] = useState<CostRecord["category"]>(initial?.category ?? "공임비");
-  const [amount, setAmount] = useState(initial?.amountLabel ?? "6,000원");
-  const [error, setError] = useState("");
+  const visible = rows.filter((row) => row.rateType === rateType);
+  const columns: Column<LaborRateItem>[] = [
+    { key: "no", header: "번호", render: (row) => visible.findIndex((item) => item.id === row.id) + 1 },
+    { key: "product", header: "제품", render: (row) => categoryToLabel(row.productCategory) },
+    { key: "amount", header: "금액", render: (row) => won(row.cost) },
+    { key: "effectiveDate", header: "적용일", render: (row) => formatDate(row.effectiveDate) },
+  ];
 
   return (
-    <Modal title={initial === null ? "비용 등록" : "비용 수정"} onClose={onClose}>
-      <form
-        className="space-y-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const amountLabel = formatAmount(category, amount);
-          if (amountLabel === "") {
-            setError("금액을 입력해 주세요.");
-            return;
-          }
-          onSave({
-            id: initial?.id ?? `${Date.now()}`,
-            product,
-            category,
-            amountLabel,
-          });
-        }}
-      >
-        <p className="text-sm text-neutral-500">제품과 분류에 따른 비용 기준을 등록합니다.</p>
-        <label className="block text-sm">
-          <span className="mb-1 block">제품</span>
-          <SelectBox className="w-full" value={product} onChange={(value) => setProduct(value as CostRecord["product"])} options={products.map((value) => ({ value, label: value }))} />
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block">분류</span>
-          <SelectBox className="w-full" value={category} onChange={(value) => setCategory(value as CostRecord["category"])} options={categories.map((value) => ({ value, label: value }))} />
-        </label>
-        <TextField label="금액" value={amount} onChange={setAmount} />
-        {error !== "" && <Notice tone="error">{error}</Notice>}
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>취소</Button>
-          <Button type="submit">{initial === null ? "등록" : "수정"}</Button>
-        </div>
-      </form>
-    </Modal>
+    <section>
+      <h2 className="mb-3 text-lg font-semibold">{title}</h2>
+      <DataTable
+        columns={columns}
+        rows={visible}
+        rowKey={(row) => String(row.id)}
+        emptyText={loading ? "불러오는 중입니다." : "등록된 기준이 없습니다."}
+      />
+    </section>
   );
-}
-
-function formatAmount(category: CostRecord["category"], raw: string): string {
-  const digits = raw.replace(/[^\d]/g, "");
-  if (digits === "") {
-    return "";
-  }
-  const formatted = `${Number(digits).toLocaleString("ko-KR")}원`;
-  return category === "공임비" ? `${formatted}/10분` : formatted;
 }

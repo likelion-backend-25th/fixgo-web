@@ -204,10 +204,10 @@ export const payments: PaymentRecord[] = [
 ];
 
 export const shipments: ShipmentRecord[] = [
-  { no: 18, asId: "AS-2026-1112", method: "택배", receiver: "김수민", phone: "010-5555-1212", carrier: "CJ대한통운", trackingNo: "5100-2219", status: "배송중", startedAt: "2026.10.25 14:10" },
-  { no: 17, asId: "AS-2026-1108", method: "택배", receiver: "장우진", phone: "010-3333-9090", carrier: "한진택배", trackingNo: "5099-1002", status: "배송완료", startedAt: "2026.10.24 11:02" },
-  { no: 16, asId: "AS-2026-1094", method: "방문 수령", receiver: "한소희", phone: "010-7777-4040", carrier: "-", trackingNo: "-", status: "수령완료", startedAt: "-" },
-  { no: 15, asId: "AS-2026-1062", method: "택배", receiver: "정하늘", phone: "010-4444-2020", carrier: "사자택배", trackingNo: "5100-2219", status: "배송대기", startedAt: "-" },
+  { no: 18, asId: "AS-2026-1112", method: "택배", receiver: "김수민", phone: "010-5555-1212", address: "서울특별시 강남구 테헤란로 00", addressDetail: "00아파트 00동 00호", carrier: "CJ대한통운", trackingNo: "5100-2219", status: "배송중", startedAt: "2026.10.25 14:10" },
+  { no: 17, asId: "AS-2026-1108", method: "택배", receiver: "장우진", phone: "010-3333-9090", address: "서울특별시 중구 세종대로 110", addressDetail: "3층", carrier: "한진택배", trackingNo: "5099-1002", status: "배송완료", startedAt: "2026.10.24 11:02" },
+  { no: 16, asId: "AS-2026-1094", method: "방문 수령", receiver: "한소희", phone: "010-7777-4040", address: "", addressDetail: "", carrier: "-", trackingNo: "-", status: "미수령", startedAt: "-" },
+  { no: 15, asId: "AS-2026-1062", method: "택배", receiver: "정하늘", phone: "010-4444-2020", address: "인천광역시 연수구 송도과학로 32", addressDetail: "B동", carrier: "롯데택배", trackingNo: "5100-2219", status: "배송대기", startedAt: "-" },
 ];
 
 export const emailRecords: EmailRecord[] = [

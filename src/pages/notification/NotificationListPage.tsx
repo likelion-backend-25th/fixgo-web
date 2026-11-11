@@ -6,7 +6,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Pagination } from "@/components/ui/Pagination";
 import { Notice } from "@/components/ui/Panel";
 import { cn } from "@/lib/cn";
-import { fetchEmailHistory, type EmailHistoryItem, type NotificationStatus } from "@/lib/notificationApi";
+import { fetchEmailDetail, fetchEmailHistory, retryNotificationEmail, type EmailDetail, type EmailHistoryItem, type NotificationStatus } from "@/lib/notificationApi";
 
 const PAGE_SIZE = 20;
 
@@ -55,8 +55,10 @@ export function NotificationListPage() {
   const [total, setTotal] = useState(0);
   const [pageCount, setPageCount] = useState(1);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<EmailHistoryItem | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [retryingId, setRetryingId] = useState<number | null>(null);
   const dateInvalid = from !== "" && to !== "" && from > to;
 
   useEffect(() => {
@@ -116,6 +118,32 @@ export function NotificationListPage() {
     return () => controller.abort();
   }, [applied, page]);
 
+  async function retry(id: number) {
+    if (retryingId !== null) {
+      return;
+    }
+    setRetryingId(id);
+    setError("");
+    setNotice("");
+    try {
+      const result = await retryNotificationEmail(id);
+      setRows((current) => current.map((row) => (
+        row.id === id
+          ? { ...row, status: result.status, sentAt: result.sentAt ?? row.sentAt }
+          : row
+      )));
+      if (result.status === "FAILED") {
+        setError("이메일 발송에 실패했습니다.");
+        return;
+      }
+      setNotice("이메일을 다시 발송했습니다.");
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : "이메일 재발송에 실패했습니다.");
+    } finally {
+      setRetryingId(null);
+    }
+  }
+
   const columns: Column<EmailHistoryItem>[] = [
     { key: "id", header: "번호", render: (row) => row.id },
     { key: "at", header: "발송일시", render: (row) => displaySentAt(row.sentAt) },
@@ -127,7 +155,18 @@ export function NotificationListPage() {
       header: "발송 상태",
       render: (row) => <span className={statusClass(row.status)}>{statusLabel(row.status)}</span>,
     },
-    { key: "detail", header: "", render: (row) => <Button onClick={() => setSelected(row)}>상세</Button> },
+    {
+      key: "detail",
+      header: "",
+      render: (row) => (
+        <div className="flex items-center gap-2 whitespace-nowrap">
+          <Button onClick={() => setSelectedId(row.id)}>상세 보기</Button>
+          {row.status === "FAILED" && (
+            <Button disabled={retryingId === row.id} onClick={() => void retry(row.id)}>발송</Button>
+          )}
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -142,6 +181,7 @@ export function NotificationListPage() {
         </div>
       </div>
       {dateInvalid && <Notice tone="error">시작일은 종료일보다 늦을 수 없습니다.</Notice>}
+      {notice !== "" && <Notice>{notice}</Notice>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
       <DataTable
         columns={columns}
@@ -150,45 +190,76 @@ export function NotificationListPage() {
         emptyText={loading ? "발송 내역을 불러오는 중입니다." : "조건에 맞는 발송 내역이 없습니다."}
       />
       <Pagination page={page} pageCount={pageCount} onPageChange={setPage} />
-      {selected !== null && <EmailDetailModal record={selected} onClose={() => setSelected(null)} />}
+      {selectedId !== null && <EmailDetailModal id={selectedId} onClose={() => setSelectedId(null)} />}
     </div>
   );
 }
 
-function EmailDetailModal({ record, onClose }: { record: EmailHistoryItem; onClose: () => void }) {
-  const failed = record.status === "FAILED";
+function EmailDetailModal({ id, onClose }: { id: number; onClose: () => void }) {
+  const [detail, setDetail] = useState<EmailDetail | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchEmailDetail(id, controller.signal)
+      .then((result) => {
+        setDetail(result);
+        setError("");
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === "AbortError") {
+          return;
+        }
+        setDetail(null);
+        setError(cause instanceof Error ? cause.message : "이메일 상세를 불러오지 못했습니다.");
+      });
+    return () => controller.abort();
+  }, [id]);
+
+  const failed = detail?.notificationStatus === "FAILED";
+  const receptionNumber = detail?.receptionNumber?.trim() ?? "";
+
   return (
     <Modal title="이메일 발송 상세" wide onClose={onClose}>
-      <div className="grid gap-4 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm sm:grid-cols-3">
-        <Field label="발송번호" value={record.id} />
-        <Field label="발송일시" value={displaySentAt(record.sentAt)} />
-        <Field label="발송 상태" value={<span className={statusClass(record.status)}>{statusLabel(record.status)}</span>} />
-      </div>
-      <h3 className="mt-5 mb-2 text-sm font-medium">수신자 정보</h3>
-      <div className="grid gap-4 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm sm:grid-cols-2">
-        <Field label="고객명" value={record.customerName ?? "-"} />
-        <Field label="이메일" value={record.recipientEmail} />
-      </div>
-      <h3 className="mt-5 mb-2 text-sm font-medium">이메일 제목</h3>
-      <p className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm">{record.messageTitle}</p>
-      <h3 className="mt-5 mb-2 text-sm font-medium">발송 결과</h3>
-      <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
-        <table className="w-full border-collapse text-sm">
-          <thead className="bg-neutral-100 text-left">
-            <tr>
-              {["결과", "발송 시각"].map((header) => (
-                <th key={header} className="px-3 py-2 font-medium">{header}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            <tr className="border-t border-neutral-200">
-              <td className={cn("px-3 py-2", failed ? "text-red-600" : "text-green-600")}>{failed ? "실패" : statusLabel(record.status)}</td>
-              <td className="px-3 py-2">{displaySentAt(record.sentAt)}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      {error !== "" && <Notice tone="error">{error}</Notice>}
+      {detail === null && error === "" && <p className="text-sm text-neutral-500">상세를 불러오는 중입니다.</p>}
+      {detail !== null && (
+        <>
+          <div className="grid gap-4 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm sm:grid-cols-3">
+            <Field label="발송번호" value={detail.id} />
+            <Field label="발송일시" value={displaySentAt(detail.sentAt)} />
+            <Field label="발송 상태" value={<span className={statusClass(detail.notificationStatus)}>{statusLabel(detail.notificationStatus)}</span>} />
+          </div>
+          <h3 className="mt-5 mb-2 text-sm font-medium">수신자 정보</h3>
+          <div className={cn("grid gap-4 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm", receptionNumber === "" ? "sm:grid-cols-2" : "sm:grid-cols-3")}>
+            <Field label="고객명" value={detail.customerName ?? "-"} />
+            {receptionNumber !== "" && <Field label="접수번호" value={receptionNumber} />}
+            <Field label="이메일" value={detail.recipientEmail} />
+          </div>
+          <h3 className="mt-5 mb-2 text-sm font-medium">이메일 제목</h3>
+          <p className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm">{detail.messageTitle}</p>
+          <h3 className="mt-5 mb-2 text-sm font-medium">이메일 내용</h3>
+          <p className="whitespace-pre-line rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-3 text-sm">{detail.message}</p>
+          <h3 className="mt-5 mb-2 text-sm font-medium">발송 결과</h3>
+          <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
+            <table className="w-full border-collapse text-sm">
+              <thead className="bg-neutral-100 text-left">
+                <tr>
+                  {["결과", "발송 시각"].map((header) => (
+                    <th key={header} className="px-3 py-2 font-medium">{header}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-t border-neutral-200">
+                  <td className={cn("px-3 py-2", failed ? "text-red-600" : "text-green-600")}>{failed ? "실패" : statusLabel(detail.notificationStatus)}</td>
+                  <td className="px-3 py-2">{displaySentAt(detail.sentAt)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </Modal>
   );
 }

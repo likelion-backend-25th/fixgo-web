@@ -4,22 +4,17 @@ import { Button } from "@/components/ui/Button";
 import { TextField } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Panel";
 import { useHydratedSession } from "@/hooks/useHydratedSession";
-import { DEMO_ACCOUNTS, TEST_PASSWORD } from "@/mocks/accounts";
+import { loginWithPassword } from "@/lib/authApi";
 import { useSessionStore } from "@/stores/useSessionStore";
-import { ROLE_LABEL, type StaffRole } from "@/types/staff";
-
-const LOGIN_ROLE_LABEL: Record<StaffRole, string> = {
-  ...ROLE_LABEL,
-  ADMIN: "관리자",
-};
 
 export function LoginPage() {
   const { user, ready } = useHydratedSession();
-  const login = useSessionStore((state) => state.login);
+  const loginWithApi = useSessionStore((state) => state.loginWithApi);
   const navigate = useNavigate();
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
 
   if (!ready) {
     return null;
@@ -28,20 +23,23 @@ export function LoginPage() {
     return <Navigate to="/as/list" replace />;
   }
 
-  function submit() {
-    if (loginId.trim() === "" || password.trim() === "") {
+  async function submit() {
+    const id = loginId.trim();
+    if (id === "" || password.trim() === "") {
       setError("아이디와 비밀번호를 입력해 주세요.");
       return;
     }
-    const account = DEMO_ACCOUNTS.find(
-      (item) => item.loginId === loginId.trim() && item.password === password,
-    );
-    if (account === undefined) {
-      setError("아이디 또는 비밀번호가 올바르지 않습니다.");
-      return;
+    setPending(true);
+    setError("");
+    try {
+      const session = await loginWithPassword(id, password);
+      loginWithApi(session.user, session.accessToken, session.refreshToken, session.memberId);
+      navigate("/as/list");
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : "로그인에 실패했습니다.");
+    } finally {
+      setPending(false);
     }
-    login(account);
-    navigate("/as/list");
   }
 
   return (
@@ -60,38 +58,16 @@ export function LoginPage() {
           className="mt-8 space-y-4"
           onSubmit={(event) => {
             event.preventDefault();
-            submit();
+            void submit();
           }}
         >
-          <TextField label="아이디" value={loginId} onChange={setLoginId} />
+          <TextField label="아이디" value={loginId} onChange={setLoginId} placeholder="이메일" />
           <TextField label="비밀번호" type="password" value={password} onChange={setPassword} />
           {error !== "" && <Notice tone="error">{error}</Notice>}
-          <Button type="submit" className="w-full py-2.5">
-            로그인
+          <Button type="submit" className="w-full py-2.5" disabled={pending}>
+            {pending ? "로그인 중" : "로그인"}
           </Button>
         </form>
-      </div>
-      <div className="mt-4 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-xs text-neutral-600 shadow-sm">
-        <p className="text-center">테스트 비밀번호는 모두 {TEST_PASSWORD} 입니다.</p>
-        <ul className="mt-2 space-y-1">
-          {DEMO_ACCOUNTS.map((account) => (
-            <li key={account.loginId} className="flex items-center justify-between gap-3">
-              <span>
-                {LOGIN_ROLE_LABEL[account.role]} · {account.name}
-              </span>
-              <button
-                type="button"
-                className="rounded-md bg-neutral-50 px-2 py-1 font-medium text-neutral-800 hover:bg-neutral-100"
-                onClick={() => {
-                  login(account);
-                  navigate("/as/list");
-                }}
-              >
-                {account.loginId}
-              </button>
-            </li>
-          ))}
-        </ul>
       </div>
       </div>
     </div>

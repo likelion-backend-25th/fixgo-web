@@ -1,3 +1,5 @@
+import { apiFetch, isRecord, readErrorMessage } from "@/lib/apiClient";
+
 export type NotificationType = "RECEIVED" | "ESTIMATE" | "REPAIR" | "PAYMENT" | "SHIPPING";
 
 export type NotificationStatus = "PENDING" | "SENDING" | "SENT" | "FAILED";
@@ -43,28 +45,38 @@ export interface EmailHistoryPage {
   totalPages: number;
 }
 
+export interface EmailStatistics {
+  total: number;
+  success: number;
+  failed: number;
+}
+
+export interface EmailDetail {
+  id: number;
+  customerName: string | null;
+  receptionNumber: string | null;
+  recipientEmail: string;
+  messageTitle: string;
+  message: string;
+  notificationStatus: NotificationStatus;
+  sentAt: string | null;
+  errorMessage: string | null;
+}
+
 const notificationTypes: readonly NotificationType[] = ["RECEIVED", "ESTIMATE", "REPAIR", "PAYMENT", "SHIPPING"];
 const notificationStatuses: readonly NotificationStatus[] = ["PENDING", "SENDING", "SENT", "FAILED"];
 
 export async function sendNotificationEmail(request: SendEmailRequest): Promise<SendEmailResponse> {
-  let response: Response;
-  try {
-    response = await fetch("/api/v1/notifications/emails", {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        recipientEmail: request.recipientEmail,
-        messageTitle: request.messageTitle,
-        message: request.message,
-        notificationType: request.notificationType,
-      }),
-    });
-  } catch {
-    throw new Error("이메일 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-  }
+  const response = await apiFetch("/api/v1/notifications/emails", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      recipientEmail: request.recipientEmail,
+      messageTitle: request.messageTitle,
+      message: request.message,
+      notificationType: request.notificationType,
+    }),
+  });
 
   if (!response.ok) {
     throw new Error(await readErrorMessage(response, "이메일 발송에 실패했습니다."));
@@ -82,6 +94,32 @@ export async function sendNotificationEmail(request: SendEmailRequest): Promise<
   return body;
 }
 
+export async function retryNotificationEmail(id: number): Promise<SendEmailResponse> {
+  const response = await apiFetch(`/api/v1/notifications/emails/${id}/retry`, { method: "POST" });
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "이메일 재발송에 실패했습니다."));
+  }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new Error("이메일 재발송 응답이 올바르지 않습니다.");
+  }
+  if (!isSendEmailResponse(body)) {
+    throw new Error("이메일 재발송 응답이 올바르지 않습니다.");
+  }
+  return {
+    id: body.id,
+    recipientEmail: body.recipientEmail,
+    notificationType: body.notificationType,
+    messageTitle: body.messageTitle,
+    status: body.status,
+    sentAt: typeof body.sentAt === "string" ? body.sentAt : null,
+  };
+}
+
 export async function fetchEmailHistory(query: EmailHistoryQuery, signal: AbortSignal): Promise<EmailHistoryPage> {
   const params = new URLSearchParams();
   if (query.keyword !== "") {
@@ -97,18 +135,7 @@ export async function fetchEmailHistory(query: EmailHistoryQuery, signal: AbortS
   params.set("page", String(query.page - 1));
   params.set("size", String(query.size));
 
-  let response: Response;
-  try {
-    response = await fetch(`/api/v1/notifications/emails?${params.toString()}`, {
-      headers: { Accept: "application/json" },
-      signal,
-    });
-  } catch (error) {
-    if (isAbortError(error)) {
-      throw error;
-    }
-    throw new Error("이메일 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-  }
+  const response = await apiFetch(`/api/v1/notifications/emails?${params.toString()}`, { signal });
 
   if (!response.ok) {
     throw new Error(await readErrorMessage(response, "이메일 발송 내역을 불러오지 못했습니다."));
@@ -128,6 +155,63 @@ export async function fetchEmailHistory(query: EmailHistoryQuery, signal: AbortS
     items: body.content.map(parseEmailHistoryItem),
     totalElements: body.totalElements,
     totalPages: body.totalPages,
+  };
+}
+
+export async function fetchEmailStatistics(signal: AbortSignal): Promise<EmailStatistics> {
+  const response = await apiFetch("/api/v1/notifications/statistics", { signal });
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "이메일 발송 통계를 불러오지 못했습니다."));
+  }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new Error("이메일 발송 통계 응답이 올바르지 않습니다.");
+  }
+  if (!isRecord(body) || typeof body.total !== "number" || typeof body.success !== "number" || typeof body.failed !== "number") {
+    throw new Error("이메일 발송 통계 응답이 올바르지 않습니다.");
+  }
+  return { total: body.total, success: body.success, failed: body.failed };
+}
+
+export async function fetchEmailDetail(id: number, signal: AbortSignal): Promise<EmailDetail> {
+  const response = await apiFetch(`/api/v1/notifications/emails/${id}`, { signal });
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "이메일 상세를 불러오지 못했습니다."));
+  }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new Error("이메일 상세 응답이 올바르지 않습니다.");
+  }
+  if (!isRecord(body)
+    || typeof body.id !== "number"
+    || !isNullableString(body.customerName)
+    || !isNullableString(body.receptionNumber)
+    || typeof body.recipientEmail !== "string"
+    || typeof body.messageTitle !== "string"
+    || typeof body.message !== "string"
+    || !isNotificationStatus(body.notificationStatus)
+    || !isNullableString(body.sentAt)
+    || !isNullableString(body.errorMessage)) {
+    throw new Error("이메일 상세 응답이 올바르지 않습니다.");
+  }
+  return {
+    id: body.id,
+    customerName: body.customerName ?? null,
+    receptionNumber: body.receptionNumber ?? null,
+    recipientEmail: body.recipientEmail,
+    messageTitle: body.messageTitle,
+    message: body.message,
+    notificationStatus: body.notificationStatus,
+    sentAt: body.sentAt ?? null,
+    errorMessage: body.errorMessage ?? null,
   };
 }
 
@@ -159,18 +243,6 @@ function isNullableString(value: unknown): value is string | null | undefined {
   return value === undefined || value === null || typeof value === "string";
 }
 
-async function readErrorMessage(response: Response, fallback: string): Promise<string> {
-  try {
-    const body: unknown = await response.json();
-    if (isRecord(body) && typeof body.message === "string" && body.message.trim() !== "") {
-      return body.message;
-    }
-  } catch {
-    // 본문이 JSON이 아니면 기본 문구를 쓴다.
-  }
-  return fallback;
-}
-
 function isSendEmailResponse(value: unknown): value is SendEmailResponse {
   if (!isRecord(value)) {
     return false;
@@ -190,10 +262,3 @@ function isNotificationStatus(value: unknown): value is NotificationStatus {
   return notificationStatuses.some((status) => status === value);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError";
-}

@@ -1,41 +1,33 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { TextArea, TextField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Panel";
 import { cn } from "@/lib/cn";
-import { sendNotificationEmail, type NotificationType } from "@/lib/notificationApi";
-import { emailRecords } from "@/mocks/screenData";
+import { createEmailPreset, deleteEmailPreset, fetchEmailPresets, updateEmailPreset, type EmailPreset } from "@/lib/emailPresetApi";
+import { fetchEmailStatistics, sendNotificationEmail, type NotificationType } from "@/lib/notificationApi";
 
 interface EmailTemplate {
+  id: number;
   title: string;
-  email?: string;
   subject: string;
   body: string;
 }
 
-const initialTemplates: EmailTemplate[] = [
-  {
-    title: "접수 완료 안내",
-    subject: "[FixGo] A/S 접수 완료 안내",
-    body: "고객님의 A/S 접수가 정상적으로 완료되었습니다.\n진행 상황은 안내 링크에서 확인하실 수 있습니다.",
-  },
-  {
-    title: "견적서 발급 완료 안내",
-    subject: "[FixGo] 견적서 발급 안내",
-    body: "고객님의 견적서가 발급되었습니다.\n고객 포탈에서 수리 진행 여부를 선택해 주세요.",
-  },
-  {
-    title: "수리 완료 및 결제 안내",
-    subject: "[FixGo] 수리 완료 안내",
-    body: "[FixGo] 고객님의 수리가 완료되었습니다.\n담당 기사: 김기사\n연락처: 010-1234-1234\n결제 확인 후 제품을 수령해 주세요.",
-  },
-  {
-    title: "배송 시작 안내",
-    subject: "[FixGo] 배송 시작 안내",
-    body: "고객님의 제품 배송이 시작되었습니다.\n운송장번호로 배송 위치를 확인해 주세요.",
-  },
-];
+interface PresetForm {
+  title: string;
+  subject: string;
+  body: string;
+}
+
+function toTemplate(preset: EmailPreset): EmailTemplate {
+  return {
+    id: preset.id,
+    title: preset.name,
+    subject: preset.messageTitle,
+    body: preset.message,
+  };
+}
 
 function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
@@ -59,22 +51,59 @@ function notificationTypeOf(title: string, subject: string): NotificationType {
   return "RECEIVED";
 }
 
-function countEmails() {
-  const success = emailRecords.filter((row) => row.status === "성공").length;
-  const failed = emailRecords.filter((row) => row.status === "실패").length;
-  return { today: success + failed, success, failed };
-}
-
 export function NotificationServicePage() {
-  const [templates, setTemplates] = useState(initialTemplates);
-  const [email, setEmail] = useState("user1@exampler.com");
-  const [subject, setSubject] = useState(initialTemplates[0]?.subject ?? "");
-  const [body, setBody] = useState(initialTemplates[0]?.body ?? "");
-  const [selected, setSelected] = useState(initialTemplates[0]?.title ?? "");
+  const [templates, setTemplates] = useState<EmailTemplate[]>([]);
+  const [presetsLoading, setPresetsLoading] = useState(true);
+  const [email, setEmail] = useState("");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [presetOpen, setPresetOpen] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [sending, setSending] = useState(false);
+  const [counts, setCounts] = useState({ total: 0, success: 0, failed: 0 });
+  const [statsVersion, setStatsVersion] = useState(0);
+  const [statsError, setStatsError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchEmailStatistics(controller.signal)
+      .then((stats) => {
+        setCounts(stats);
+        setStatsError("");
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === "AbortError") {
+          return;
+        }
+        setStatsError(cause instanceof Error ? cause.message : "이메일 발송 통계를 불러오지 못했습니다.");
+      });
+    return () => controller.abort();
+  }, [statsVersion]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchEmailPresets(controller.signal)
+      .then((presets) => {
+        setTemplates(presets.map(toTemplate));
+        setError("");
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === "AbortError") {
+          return;
+        }
+        setError(cause instanceof Error ? cause.message : "이메일 프리셋 목록을 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setPresetsLoading(false);
+        }
+      });
+    return () => controller.abort();
+  }, []);
 
   async function send() {
     if (sending) {
@@ -93,7 +122,7 @@ export function NotificationServicePage() {
         recipientEmail: email.trim(),
         messageTitle: subject.trim(),
         message: body,
-        notificationType: notificationTypeOf(selected, subject),
+        notificationType: notificationTypeOf(templates.find((item) => item.id === selectedId)?.title ?? "", subject),
       });
       if (result.status === "FAILED") {
         setError("이메일 발송에 실패했습니다.");
@@ -104,39 +133,69 @@ export function NotificationServicePage() {
       setError(cause instanceof Error ? cause.message : "이메일 발송에 실패했습니다.");
     } finally {
       setSending(false);
+      setStatsVersion((current) => current + 1);
     }
   }
 
-  function savePreset(preset: EmailTemplate) {
-    setTemplates((current) => [...current, preset]);
-    setSelected(preset.title);
+  async function savePreset(preset: PresetForm) {
+    const created = await createEmailPreset({
+      name: preset.title,
+      messageTitle: preset.subject,
+      message: preset.body,
+    });
+    const next = toTemplate(created);
+    setTemplates((current) => [...current, next]);
+    setSelectedId(next.id);
     setPresetOpen(false);
     setError("");
     setNotice("SMS 프리셋을 저장했습니다.");
   }
 
-  function deleteTemplate(index: number) {
-    const target = templates[index];
-    if (target === undefined) {
+  async function updatePreset(preset: PresetForm) {
+    if (editingId === null) {
       return;
     }
-    setTemplates((current) => current.filter((_, itemIndex) => itemIndex !== index));
-    if (selected === target.title) {
-      setSelected("");
-    }
+    const updated = await updateEmailPreset(editingId, {
+      name: preset.title,
+      messageTitle: preset.subject,
+      message: preset.body,
+    });
+    const next = toTemplate(updated);
+    setTemplates((current) => current.map((item) => (item.id === next.id ? next : item)));
+    setEditingId(null);
     setError("");
-    setNotice("이메일 템플릿을 삭제했습니다.");
+    setNotice("SMS 프리셋을 수정했습니다.");
   }
 
-  const counts = countEmails();
+  async function deleteTemplate(id: number) {
+    if (deletingId !== null) {
+      return;
+    }
+    setDeletingId(id);
+    setError("");
+    setNotice("");
+    try {
+      await deleteEmailPreset(id);
+      setTemplates((current) => current.filter((item) => item.id !== id));
+      setSelectedId((current) => (current === id ? null : current));
+      setNotice("이메일 템플릿을 삭제했습니다.");
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : "이메일 프리셋 삭제에 실패했습니다.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  const editing = templates.find((item) => item.id === editingId);
 
   return (
     <div className="space-y-5">
       <div className="grid gap-3 sm:grid-cols-3">
-        <Kpi label="오늘 발송" value={`${counts.today}건`} />
+        <Kpi label="오늘 발송" value={`${counts.total}건`} />
         <Kpi label="발송 성공" value={`${counts.success}건`} />
         <Kpi label="발송 실패" value={`${counts.failed}건`} />
       </div>
+      {statsError !== "" && <Notice tone="error">{statsError}</Notice>}
       {notice !== "" && <Notice>{notice}</Notice>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_28rem]">
@@ -155,12 +214,16 @@ export function NotificationServicePage() {
           <div className="flex items-center justify-end border-b border-neutral-100 px-4 py-3">
             <Button onClick={() => setPresetOpen(true)}>등록</Button>
           </div>
+          {presetsLoading && <p className="px-4 py-6 text-sm text-neutral-500">프리셋을 불러오는 중입니다.</p>}
+          {!presetsLoading && templates.length === 0 && (
+            <p className="px-4 py-6 text-sm text-neutral-500">등록된 프리셋이 없습니다.</p>
+          )}
           <ul>
-            {templates.map((template, index) => {
-              const active = selected === template.title;
+            {templates.map((template) => {
+              const active = selectedId === template.id;
               return (
                 <li
-                  key={`${template.title}-${index}`}
+                  key={template.id}
                   className={cn(
                     "flex items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3 last:border-b-0",
                     active && "bg-blue-50",
@@ -171,17 +234,15 @@ export function NotificationServicePage() {
                     <Button
                       variant="outline"
                       onClick={() => {
-                        setSelected(template.title);
-                        if (template.email !== undefined && template.email !== "") {
-                          setEmail(template.email);
-                        }
+                        setSelectedId(template.id);
                         setSubject(template.subject);
                         setBody(template.body);
                       }}
                     >
                       적용
                     </Button>
-                    <Button variant="outline" onClick={() => deleteTemplate(index)}>삭제</Button>
+                    <Button variant="outline" onClick={() => setEditingId(template.id)}>수정</Button>
+                    <Button variant="outline" disabled={deletingId === template.id} onClick={() => void deleteTemplate(template.id)}>삭제</Button>
                   </div>
                 </li>
               );
@@ -190,30 +251,60 @@ export function NotificationServicePage() {
         </section>
       </div>
       {presetOpen && <SmsPresetModal onClose={() => setPresetOpen(false)} onSave={savePreset} />}
+      {editing !== undefined && (
+        <SmsPresetModal
+          modalTitle="SMS 프리셋 수정"
+          initial={editing}
+          onClose={() => setEditingId(null)}
+          onSave={updatePreset}
+        />
+      )}
     </div>
   );
 }
 
-function SmsPresetModal({ onClose, onSave }: { onClose: () => void; onSave: (preset: EmailTemplate) => void }) {
-  const [title, setTitle] = useState("");
-  const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
+function SmsPresetModal({
+  modalTitle = "SMS 프리셋 등록",
+  initial,
+  onClose,
+  onSave,
+}: {
+  modalTitle?: string;
+  initial?: PresetForm;
+  onClose: () => void;
+  onSave: (preset: PresetForm) => Promise<void>;
+}) {
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [subject, setSubject] = useState(initial?.subject ?? "");
+  const [body, setBody] = useState(initial?.body ?? "");
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  function submit() {
+  async function submit() {
+    if (saving) {
+      return;
+    }
     if (title.trim() === "" || subject.trim() === "" || body.trim() === "") {
       setError("프리셋 제목, 제목, 본문을 입력해 주세요.");
       return;
     }
-    onSave({
-      title: title.trim(),
-      subject: subject.trim(),
-      body,
-    });
+    setSaving(true);
+    setError("");
+    try {
+      await onSave({
+        title: title.trim(),
+        subject: subject.trim(),
+        body,
+      });
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : "이메일 프리셋 저장에 실패했습니다.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
-    <Modal title="SMS 프리셋 등록" onClose={onClose}>
+    <Modal title={modalTitle} onClose={onClose}>
       <form
         className="space-y-4"
         onSubmit={(event) => {
@@ -227,7 +318,7 @@ function SmsPresetModal({ onClose, onSave }: { onClose: () => void; onSave: (pre
         {error !== "" && <Notice tone="error">{error}</Notice>}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>취소</Button>
-          <Button type="submit">저장</Button>
+          <Button disabled={saving} type="submit">저장</Button>
         </div>
       </form>
     </Modal>

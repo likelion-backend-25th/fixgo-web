@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { TextField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Panel";
+import { changeMyPassword, confirmCurrentPassword, logoutFromServer } from "@/lib/authApi";
 import { ROLE_LABEL } from "@/types/staff";
 import { useSessionStore } from "@/stores/useSessionStore";
 
@@ -48,18 +49,22 @@ export function MyPage() {
 
 function PasswordModal({ onClose }: { onClose: () => void }) {
   const user = useSessionStore((state) => state.user);
-  const updatePassword = useSessionStore((state) => state.updatePassword);
-  const logout = useSessionStore((state) => state.logout);
+  const accessToken = useSessionStore((state) => state.accessToken);
   const navigate = useNavigate();
   const [currentPassword, setCurrentPassword] = useState("");
   const [nextPassword, setNextPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  function submit() {
-    if (user === null || currentPassword !== user.password) {
-      setError("기존 비밀번호가 일치하지 않습니다.");
+  async function submit() {
+    if (user === null || accessToken === null) {
+      setError("직원 이메일로 로그인한 뒤에 비밀번호를 변경할 수 있습니다.");
+      return;
+    }
+    if (currentPassword === "") {
+      setError("기존 비밀번호를 입력해 주세요.");
       return;
     }
     if (nextPassword.length < 4) {
@@ -70,9 +75,16 @@ function PasswordModal({ onClose }: { onClose: () => void }) {
       setError("새 비밀번호 확인이 일치하지 않습니다.");
       return;
     }
-    updatePassword(nextPassword);
-    setDone(true);
+    setSaving(true);
     setError("");
+    try {
+      await confirmCurrentPassword(user.email, currentPassword);
+      await changeMyPassword(user.email, nextPassword);
+      setDone(true);
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : "비밀번호를 변경하지 못했습니다.");
+      setSaving(false);
+    }
   }
 
   return (
@@ -83,7 +95,7 @@ function PasswordModal({ onClose }: { onClose: () => void }) {
           <div className="flex justify-end">
             <Button
               onClick={() => {
-                logout();
+                void logoutFromServer();
                 navigate("/login");
               }}
             >
@@ -96,7 +108,7 @@ function PasswordModal({ onClose }: { onClose: () => void }) {
           className="space-y-3"
           onSubmit={(event) => {
             event.preventDefault();
-            submit();
+            void submit();
           }}
         >
           <TextField label="기존 비밀번호" type="password" value={currentPassword} onChange={setCurrentPassword} />
@@ -107,7 +119,7 @@ function PasswordModal({ onClose }: { onClose: () => void }) {
             <Button variant="ghost" onClick={onClose}>
               취소
             </Button>
-            <Button type="submit">변경</Button>
+            <Button type="submit" disabled={saving}>변경</Button>
           </div>
         </form>
       )}
