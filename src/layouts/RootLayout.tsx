@@ -2,6 +2,7 @@ import { Menu } from "lucide-react";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { Link, Navigate, Outlet, useLocation } from "react-router";
 import { useHydratedSession } from "@/hooks/useHydratedSession";
+import { AiChatWidget } from "@/layouts/AiChatWidget";
 import { Sidebar } from "@/layouts/Sidebar";
 import { resolveHeading } from "@/layouts/navigation";
 import { ROLE_LABEL } from "@/types/staff";
@@ -87,6 +88,7 @@ export function RootLayout() {
           <Outlet />
         </main>
       </div>
+      {user.role === "ADMIN" && <AiChatWidget />}
     </div>
     </HeadingMetaContext.Provider>
   );

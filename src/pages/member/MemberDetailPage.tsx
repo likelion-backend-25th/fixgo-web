@@ -11,6 +11,7 @@ import {
   parseMemberRole, parseMemberStatus, updateMemberProfile, updateMemberRole, updateMemberStatus,
   type MemberDetail, type MemberSummary,
 } from "@/lib/memberApi";
+import { logoutFromServer } from "@/lib/authApi";
 import { useSessionStore } from "@/stores/useSessionStore";
 import type { AsReceptionListItem } from "@/types/asReception";
 
@@ -24,7 +25,6 @@ export function MemberDetailPage() {
 function MemberDetails({ id }: { id: number }) {
   const isAdmin = useSessionStore((state) => state.user?.role) === "ADMIN";
   const currentMemberId = useSessionStore((state) => state.memberId);
-  const logout = useSessionStore((state) => state.logout);
   const [member, setMember] = useState<MemberDetail | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -60,7 +60,7 @@ function MemberDetails({ id }: { id: number }) {
       setNotice(message);
       if (currentMemberId === id && (
         updated === undefined || updated.status !== "ACTIVE" || updated.role !== record.role
-      )) logout();
+      )) void logoutFromServer();
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : "계정 변경에 실패했습니다.");
     } finally {

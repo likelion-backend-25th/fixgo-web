@@ -5,42 +5,24 @@ import { useSessionStore } from "@/stores/useSessionStore";
 export interface ApiSession {
   user: SessionUser;
   accessToken: string;
+  refreshToken: string;
   memberId: number;
 }
 
 export async function loginWithPassword(email: string, password: string): Promise<ApiSession> {
-  let response: Response;
-  try {
-    response = await fetch("/api/v1/auth/login", {
-      method: "POST",
-      headers: { Accept: "application/json", "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-  } catch {
-    throw new Error("로그인 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-  }
-
+  const response = await postLogin(email, password);
   if (!response.ok) {
     throw new Error(await readLoginError(response));
   }
 
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
-    throw new Error("로그인 응답이 올바르지 않습니다.");
-  }
-  if (!isRecord(body) || typeof body.accessToken !== "string" || body.accessToken === "") {
-    throw new Error("로그인 응답이 올바르지 않습니다.");
-  }
-
-  const profile = await fetchProfile(body.accessToken);
+  const issued = await readIssuedTokens(response);
+  const profile = await fetchProfile(issued.accessToken);
   return {
-    accessToken: body.accessToken,
+    accessToken: issued.accessToken,
+    refreshToken: issued.refreshToken,
     memberId: profile.memberId,
     user: {
       loginId: profile.email,
-      password,
       name: profile.name,
       role: profile.role,
       email: profile.email,
@@ -49,6 +31,49 @@ export async function loginWithPassword(email: string, password: string): Promis
       workStatus: profile.workStatus,
     },
   };
+}
+
+export async function confirmCurrentPassword(email: string, password: string): Promise<void> {
+  const response = await postLogin(email, password);
+  if (response.ok) {
+    // 비밀번호 확인만 한다. 이 응답의 토큰과 비밀번호는 세션에 넣지 않는다.
+    return;
+  }
+  if (response.status === 401) {
+    throw new Error("기존 비밀번호가 일치하지 않습니다.");
+  }
+  throw new Error(await readLoginError(response));
+}
+
+async function postLogin(email: string, password: string): Promise<Response> {
+  try {
+    return await fetch("/api/v1/auth/login", {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+  } catch {
+    throw new Error("로그인 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+  }
+}
+
+async function readIssuedTokens(response: Response): Promise<{ accessToken: string; refreshToken: string }> {
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new Error("로그인 응답이 올바르지 않습니다.");
+  }
+  if (
+    !isRecord(body)
+    || typeof body.accessToken !== "string"
+    || body.accessToken === ""
+    || typeof body.refreshToken !== "string"
+    || body.refreshToken === ""
+  ) {
+    throw new Error("로그인 응답이 올바르지 않습니다.");
+  }
+  return { accessToken: body.accessToken, refreshToken: body.refreshToken };
 }
 
 async function fetchProfile(accessToken: string): Promise<{
@@ -116,15 +141,61 @@ export async function changeMyPassword(email: string, password: string): Promise
 }
 
 export async function logoutFromServer(): Promise<void> {
-  const token = useSessionStore.getState().accessToken;
-  if (typeof token === "string" && token !== "") {
-    try {
-      await apiFetch("/api/v1/auth/logout", { method: "POST" });
-    } catch {
-      // 서버 로그아웃이 실패해도 화면 세션은 끊는다.
-    }
+  const { accessToken, refreshToken } = useSessionStore.getState();
+  try {
+    await revokeIssuedTokens(accessToken, refreshToken);
+  } catch {
+    // 서버 파기에 실패해도 브라우저에 남은 토큰은 지운다.
   }
   useSessionStore.getState().logout();
+}
+
+async function revokeIssuedTokens(accessToken: string | null, refreshToken: string | null): Promise<void> {
+  if (typeof accessToken === "string" && accessToken !== "") {
+    const response = await requestLogout(accessToken);
+    if (response.ok || response.status !== 401) {
+      return;
+    }
+  }
+  if (typeof refreshToken !== "string" || refreshToken === "") {
+    return;
+  }
+  // 액세스 토큰이 만료됐으면 한 번 갱신한 뒤 로그아웃해, 계정에 남은 리프레시 토큰을 모두 파기한다.
+  const renewed = await refreshAccessToken(refreshToken);
+  await requestLogout(renewed);
+}
+
+async function requestLogout(accessToken: string): Promise<Response> {
+  return fetch("/api/v1/auth/logout", {
+    method: "POST",
+    headers: { Accept: "application/json", Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+async function refreshAccessToken(refreshToken: string): Promise<string> {
+  let response: Response;
+  try {
+    response = await fetch("/api/v1/auth/refresh", {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+  } catch {
+    throw new Error("로그인 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+  }
+  if (!response.ok) {
+    throw new Error("토큰을 갱신하지 못했습니다.");
+  }
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new Error("토큰을 갱신하지 못했습니다.");
+  }
+  if (!isRecord(body) || typeof body.accessToken !== "string" || body.accessToken === "") {
+    throw new Error("토큰을 갱신하지 못했습니다.");
+  }
+  return body.accessToken;
 }
 
 async function readLoginError(response: Response): Promise<string> {

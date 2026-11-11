@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { TextField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Panel";
-import { changeMyPassword, logoutFromServer } from "@/lib/authApi";
+import { changeMyPassword, confirmCurrentPassword, logoutFromServer } from "@/lib/authApi";
 import { ROLE_LABEL } from "@/types/staff";
 import { useSessionStore } from "@/stores/useSessionStore";
 
@@ -50,7 +50,6 @@ export function MyPage() {
 function PasswordModal({ onClose }: { onClose: () => void }) {
   const user = useSessionStore((state) => state.user);
   const accessToken = useSessionStore((state) => state.accessToken);
-  const updatePassword = useSessionStore((state) => state.updatePassword);
   const navigate = useNavigate();
   const [currentPassword, setCurrentPassword] = useState("");
   const [nextPassword, setNextPassword] = useState("");
@@ -64,8 +63,8 @@ function PasswordModal({ onClose }: { onClose: () => void }) {
       setError("직원 이메일로 로그인한 뒤에 비밀번호를 변경할 수 있습니다.");
       return;
     }
-    if (currentPassword !== user.password) {
-      setError("기존 비밀번호가 일치하지 않습니다.");
+    if (currentPassword === "") {
+      setError("기존 비밀번호를 입력해 주세요.");
       return;
     }
     if (nextPassword.length < 4) {
@@ -79,8 +78,8 @@ function PasswordModal({ onClose }: { onClose: () => void }) {
     setSaving(true);
     setError("");
     try {
+      await confirmCurrentPassword(user.email, currentPassword);
       await changeMyPassword(user.email, nextPassword);
-      updatePassword(nextPassword);
       setDone(true);
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : "비밀번호를 변경하지 못했습니다.");

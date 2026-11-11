@@ -43,7 +43,7 @@ export function LoginPage() {
       setError("");
       try {
         const session = await loginWithPassword(id, password);
-        loginWithApi(session.user, session.accessToken, session.memberId);
+        loginWithApi(session.user, session.accessToken, session.refreshToken, session.memberId);
         navigate("/as/list");
       } catch (cause: unknown) {
         setError(cause instanceof Error ? cause.message : "로그인에 실패했습니다.");

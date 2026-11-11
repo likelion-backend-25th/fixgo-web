@@ -1,8 +1,12 @@
 import type { SessionUser } from "@/types/staff";
 
+export interface DemoAccount extends SessionUser {
+  password: string;
+}
+
 export const TEST_PASSWORD = "1234";
 
-export const DEMO_ACCOUNTS: SessionUser[] = [
+export const DEMO_ACCOUNTS: DemoAccount[] = [
   {
     loginId: "reception1",
     password: TEST_PASSWORD,
