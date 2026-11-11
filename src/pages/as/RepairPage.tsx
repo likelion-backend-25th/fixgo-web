@@ -143,7 +143,7 @@ function RepairView({
     <div className="space-y-4">
       <AsSummary record={reception} />
       {role === "TECHNICIAN" && <ProgressTabs receptionId={reception.id} current="repair" />}
-      {repair === null && <Notice>수리 내역 조회는 아직 연결되지 않았습니다.</Notice>}
+      {repair === null && <Notice>아직 A/S 진행 전입니다.</Notice>}
       {repair !== null && loading && <Notice>수리 정보를 불러오는 중입니다.</Notice>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
       {detail !== null && (

@@ -4,9 +4,11 @@ interface PaginationProps {
   onPageChange: (page: number) => void;
 }
 
+const VISIBLE_PAGES = 5;
+
 export function Pagination({ page, pageCount, onPageChange }: PaginationProps) {
   const safeCount = Math.max(1, pageCount);
-  const pages = Array.from({ length: safeCount }, (_, index) => index + 1);
+  const pages = visiblePages(page, safeCount);
 
   function go(next: number) {
     if (next < 1 || next > safeCount || next === page) {
@@ -38,6 +40,12 @@ export function Pagination({ page, pageCount, onPageChange }: PaginationProps) {
       <PageButton label="»" disabled={page === safeCount} onClick={() => go(safeCount)} />
     </nav>
   );
+}
+
+function visiblePages(page: number, pageCount: number): number[] {
+  const length = Math.min(VISIBLE_PAGES, pageCount);
+  const start = Math.min(Math.max(1, page - Math.floor(length / 2)), pageCount - length + 1);
+  return Array.from({ length }, (_, index) => start + index);
 }
 
 function PageButton({

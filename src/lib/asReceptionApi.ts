@@ -922,6 +922,7 @@ function parseProductSummary(value: unknown): ProductSummary {
     || !isCategory(value.category)
     || !isNullableString(value.manufacturedAt)
     || !isNullableString(value.purchasedAt)
+    || !isWarrantyMonths(value.warrantyMonths)
   ) {
     throw new Error("제품 응답이 올바르지 않습니다.");
   }
@@ -934,7 +935,12 @@ function parseProductSummary(value: unknown): ProductSummary {
     category: value.category,
     manufacturedAt: value.manufacturedAt,
     purchasedAt: value.purchasedAt,
+    warrantyMonths: value.warrantyMonths,
   };
+}
+
+function isWarrantyMonths(value: unknown): value is number | null {
+  return value === null || (typeof value === "number" && Number.isInteger(value) && value >= 0);
 }
 
 function parseMember(value: unknown): ReceptionMember | null {

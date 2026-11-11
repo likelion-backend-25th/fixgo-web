@@ -201,6 +201,7 @@ export interface ProductSummary {
   category: ProductCategory;
   manufacturedAt: string | null;
   purchasedAt: string | null;
+  warrantyMonths: number | null;
 }
 
 export interface TechnicianSummary {

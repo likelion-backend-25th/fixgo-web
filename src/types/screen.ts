@@ -31,6 +31,10 @@ export interface RepairLine {
   amount: number;
   indent?: boolean;
   presetId?: number;
+  symptomId?: number;
+  groupId?: string;
+  partId?: number;
+  quantity?: number;
 }
 
 export interface CustomerRecord {
