@@ -9,7 +9,9 @@ import { isAbortError } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import {
   fetchParts,
+  isPartStatus,
   partStatusLabel,
+  updatePartMinutes,
   updatePartPrice,
   updatePartStock,
   type PartItem,
@@ -22,6 +24,7 @@ const PAGE_SIZE = 20;
 export function PartListPage() {
   const [query, setQuery] = useState("");
   const [applied, setApplied] = useState("");
+  const [status, setStatus] = useState<"" | PartStatus>("");
   const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(1);
   const [rows, setRows] = useState<PartItem[]>([]);
@@ -43,7 +46,12 @@ export function PartListPage() {
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
-    fetchParts({ partName: applied, page, size: PAGE_SIZE }, controller.signal)
+    fetchParts({
+      partName: applied,
+      status: status === "" ? null : status,
+      page,
+      size: PAGE_SIZE,
+    }, controller.signal)
       .then((result) => {
         setRows(result.content);
         setPageCount(Math.max(1, result.totalPages));
@@ -63,12 +71,13 @@ export function PartListPage() {
         }
       });
     return () => controller.abort();
-  }, [applied, page, reloadKey]);
+  }, [applied, status, page, reloadKey]);
 
   const columns: Column<PartItem>[] = [
     { key: "no", header: "번호", render: (row) => (page - 1) * PAGE_SIZE + rows.findIndex((item) => item.id === row.id) + 1 },
     { key: "name", header: "부품명", render: (row) => row.name },
     { key: "price", header: "단가", render: (row) => row.unitPrice.toLocaleString("ko-KR") },
+    { key: "minutes", header: "표준 작업시간", render: (row) => `${row.standardMinutes}분` },
     { key: "stock", header: "재고", render: (row) => row.stockQuantity },
     { key: "status", header: "상태", render: (row) => <span className={statusClass(row.status)}>{partStatusLabel(row.status)}</span> },
     {
@@ -84,6 +93,19 @@ export function PartListPage() {
       {error !== "" && <Notice tone="error">{error}</Notice>}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <TextField value={query} onChange={setQuery} placeholder="부품명" className="w-64" />
+        <SelectBox
+          value={status}
+          onChange={(value) => {
+            setStatus(isPartStatus(value) ? value : "");
+            setPage(1);
+          }}
+          options={[
+            { value: "", label: "상태 전체" },
+            { value: "ACTIVE", label: "사용" },
+            { value: "LOW_QUANTITY", label: "재고 부족" },
+            { value: "DISCONTINUED", label: "단종" },
+          ]}
+        />
         <Button className="ml-auto" onClick={() => setInbound(true)}>입고 등록</Button>
       </div>
       <DataTable
@@ -110,7 +132,7 @@ export function PartListPage() {
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
-            setNotice("부품 단가를 수정했습니다.");
+            setNotice("부품 정보를 수정했습니다.");
             setError("");
             setReloadKey((current) => current + 1);
           }}
@@ -242,21 +264,28 @@ function PartEditModal({
   onSaved: () => void;
 }) {
   const [price, setPrice] = useState(String(initial.unitPrice));
+  const [minutes, setMinutes] = useState(String(initial.standardMinutes));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function submit() {
     const parsed = Number(price.replace(/[^\d]/g, ""));
+    const parsedMinutes = Number(minutes);
     if (!Number.isInteger(parsed) || parsed < 0) {
       setError("단가는 0 이상의 숫자로 입력해 주세요.");
+      return;
+    }
+    if (!Number.isInteger(parsedMinutes) || parsedMinutes < 0) {
+      setError("표준 작업시간은 0 이상의 숫자로 입력해 주세요.");
       return;
     }
     setSaving(true);
     try {
       await updatePartPrice(initial.id, parsed);
+      await updatePartMinutes(initial.id, parsedMinutes);
       onSaved();
     } catch (cause: unknown) {
-      setError(cause instanceof Error ? cause.message : "부품 단가를 수정하지 못했습니다.");
+      setError(cause instanceof Error ? cause.message : "부품 정보를 수정하지 못했습니다.");
       setSaving(false);
     }
   }
@@ -272,6 +301,7 @@ function PartEditModal({
       >
         <TextField label="부품명" value={initial.name} onChange={() => undefined} readOnly />
         <TextField label="단가" value={price} onChange={setPrice} />
+        <TextField label="표준 작업시간(분)" value={minutes} onChange={setMinutes} />
         <TextField label="상태" value={partStatusLabel(initial.status)} onChange={() => undefined} readOnly />
         {error !== "" && <Notice tone="error">{error}</Notice>}
         <div className="flex justify-end gap-2">

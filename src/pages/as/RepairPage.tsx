@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Panel";
 import { formatDateTime, won } from "@/lib/format";
 import { isAbortError } from "@/lib/apiClient";
+import { applyRepairPartStock } from "@/lib/partApi";
 import {
   completeRepair,
   fetchRepairDetail,
@@ -113,6 +114,14 @@ function RepairView({
     && (detail.warrantyResult !== "PAID" || detail.finalAmount <= 0);
   const canComplete = (role === "ADMIN" || role === "MANAGER")
     && (detail?.status === "REPAIRING" || needsReturnRecovery);
+
+  async function finishRepair(repairId: number) {
+    await completeRepair(repairId);
+    // 수리 완료로 바꿀 때만 사용 부품 재고를 뺀다. 배송·수령 대기 전환은 이미 반영된 재고를 다시 빼지 않는다.
+    if (!needsReturnRecovery) {
+      await applyRepairPartStock(repairId);
+    }
+  }
 
   async function runRepairAction(action: (repairId: number) => Promise<void>) {
     if (detail === null) {
@@ -240,7 +249,7 @@ function RepairView({
           )}
 
           {canComplete && (
-            <Button disabled={pending} onClick={() => void runRepairAction(completeRepair)}>
+            <Button disabled={pending} onClick={() => void runRepairAction(finishRepair)}>
               {pending ? "처리 중…" : needsReturnRecovery ? "배송·수령 대기로 전환" : "수리 완료"}
             </Button>
           )}
