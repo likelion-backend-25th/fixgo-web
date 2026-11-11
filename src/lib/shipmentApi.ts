@@ -158,7 +158,7 @@ export async function fetchShipmentManagement(
   params.set("returnMethod", query.returnMethod);
   params.set("page", String(query.page - 1));
   params.set("size", String(query.size));
-  const response = await apiFetch(`/api/v1/shipments/management?${params.toString()}`, { signal });
+  const response = await apiFetch(`/api/v1/shipments/list?${params.toString()}`, { signal });
   if (!response.ok) {
     throw new Error(await readErrorMessage(response, "배송 목록을 불러오지 못했습니다."));
   }
