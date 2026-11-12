@@ -1,7 +1,9 @@
 import { Menu } from "lucide-react";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { Link, Navigate, Outlet, useLocation } from "react-router";
+import { Button } from "@/components/ui/Button";
 import { useHydratedSession } from "@/hooks/useHydratedSession";
+import { logoutFromServer } from "@/lib/authApi";
 import { AiChatWidget } from "@/layouts/AiChatWidget";
 import { Sidebar } from "@/layouts/Sidebar";
 import { resolveHeading } from "@/layouts/navigation";
@@ -71,18 +73,21 @@ export function RootLayout() {
               )}
             </div>
           </div>
-          <Link
-            to="/member/me"
-            className="flex items-center gap-2.5 rounded-full py-1 pr-2 pl-1 hover:bg-neutral-50"
-          >
-            <span className="grid size-8 place-items-center rounded-full bg-blue-600 text-sm font-semibold text-white">
-              {user.name.slice(0, 1)}
-            </span>
-            <span className="text-right text-sm leading-tight">
-              <span className="block font-medium">{user.name}</span>
-              <span className="block text-xs text-neutral-500">{ROLE_LABEL[user.role]}</span>
-            </span>
-          </Link>
+          <div className="flex shrink-0 items-center gap-2">
+            <Link
+              to="/member/me"
+              className="flex items-center gap-2.5 rounded-full py-1 pr-2 pl-1 hover:bg-neutral-50"
+            >
+              <span className="grid size-8 place-items-center rounded-full bg-blue-600 text-sm font-semibold text-white">
+                {user.name.slice(0, 1)}
+              </span>
+              <span className="text-right text-sm leading-tight">
+                <span className="block font-medium">{user.name}</span>
+                <span className="block text-xs text-neutral-500">{ROLE_LABEL[user.role]}</span>
+              </span>
+            </Link>
+            <Button variant="outline" onClick={() => void logoutFromServer()}>로그아웃</Button>
+          </div>
         </header>
         <main className="flex-1 px-4 py-6 md:px-8">
           <Outlet />
