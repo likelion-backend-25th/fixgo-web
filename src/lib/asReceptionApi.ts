@@ -66,7 +66,6 @@ interface RepairResponseData {
 export function receptionStatusLabel(status: AsReceptionStatus): string {
   if (status === "RECEIVED") return "접수";
   if (status === "INSPECTION") return "점검 중";
-  if (status === "WARRANTY_REVIEW") return "보증 판정";
   if (status === "AWAITING_QUOTE_APPROVAL") return "견적 승인 대기";
   if (status === "AWAITING_REPAIR") return "수리 대기";
   if (status === "REPAIR_IN_PROGRESS") return "수리 중";
@@ -94,7 +93,7 @@ export function historyStatusLabel(status: string | null): string {
   if (status === "REQUESTED") return "수리 요청";
   if (status === "APPROVED") return "수리 승인";
   if (status === "REJECTED") return "수리 반려";
-  if (status === "DIAGNOSING") return "점검 중";
+  if (status === "DIAGNOSING" || status === "WARRANTY_REVIEW") return "점검 중";
   if (status === "REPAIRING") return "수리 중";
   return status;
 }
@@ -457,29 +456,6 @@ export async function reassignTechnician(
   }
 }
 
-export async function changeReceptionStatus(
-  id: number,
-  newStatus: AsReceptionStatus,
-  reason: string,
-): Promise<void> {
-  const params = new URLSearchParams({ newStatus });
-
-  if (reason.trim() !== "") {
-    params.set("reason", reason.trim());
-  }
-
-  const response = await apiFetch(
-    `/api/v1/as-receptions/${id}/status?${params.toString()}`,
-    { method: "PATCH" },
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      await readErrorMessage(response, "접수 상태를 변경하지 못했습니다."),
-    );
-  }
-}
-
 // 접수 고객과 무관하게 등록된 제품 전체를 시리얼로 찾는다.
 export async function searchProductsBySerial(
   serialNumber: string,
@@ -516,15 +492,13 @@ export async function searchProductsBySerialPage(
   signal: AbortSignal,
 ): Promise<{ items: ProductSummary[]; totalPages: number }> {
   const serial = serialNumber.trim();
-  if (serial === "") {
-    return { items: [], totalPages: 0 };
-  }
-
   const params = new URLSearchParams({
-    serialNumber: serial,
     page: String(page - 1),
     size: String(size),
   });
+  if (serial !== "") {
+    params.set("serialNumber", serial);
+  }
   const response = await apiFetch(`/api/v1/products/search?${params.toString()}`, { signal });
   if (!response.ok) {
     throw new Error(await readErrorMessage(response, "제품을 조회하지 못했습니다."));
@@ -558,6 +532,25 @@ export async function fetchProduct(
   );
 
   return parseProductSummary(body);
+}
+
+export async function registerPurchasedAt(
+  id: number,
+  input: { productModelId: number; purchasedAt: string },
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await apiFetch(`/api/v1/products/${id}/purchased_at`, {
+    method: "PATCH",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      productModelId: input.productModelId,
+      purchasedAt: input.purchasedAt,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, "구매일을 저장하지 못했습니다."));
+  }
 }
 
 export async function fetchReceptionReceipt(
@@ -947,6 +940,7 @@ function parseProductSummary(value: unknown): ProductSummary {
   if (
     !isRecord(value)
     || !isId(value.id)
+    || !isId(value.productModelId)
     || typeof value.serialNumber !== "string"
     || typeof value.modelName !== "string"
     || typeof value.name !== "string"
@@ -960,6 +954,7 @@ function parseProductSummary(value: unknown): ProductSummary {
 
   return {
     id: value.id,
+    productModelId: value.productModelId,
     serialNumber: value.serialNumber,
     modelName: value.modelName,
     name: value.name,

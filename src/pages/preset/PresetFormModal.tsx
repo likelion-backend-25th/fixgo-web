@@ -13,10 +13,19 @@ import {
   fetchSymptomPresets,
 } from "@/lib/repair";
 import { won } from "@/lib/format";
-import { fetchParts, type Part } from "@/lib/part";
+import type { PartItem } from "@/lib/partApi";
+import { PartPickerModal } from "./PartPickerModal";
+
+interface ChosenPart {
+  id: number;
+  name: string;
+  unitPrice: number;
+  standardMinutes: number;
+  stockQuantity: number;
+}
 
 interface SelectedPart {
-  part: Part;
+  part: ChosenPart;
   quantity: number;
 }
 
@@ -36,7 +45,6 @@ const safeNumber = (value: unknown): number => {
 
 export function PresetFormModal({ onClose, onSave }: Props) {
   // 서버 데이터
-  const [allParts, setAllParts] = useState<Part[]>([]);
   const [allSymptoms, setAllSymptoms] = useState<SymptomPreset[]>([]);
   const [presets, setPresets] = useState<RepairPreset[]>([]);
   const [presetsLoading, setPresetsLoading] = useState(false);
@@ -54,31 +62,24 @@ export function PresetFormModal({ onClose, onSave }: Props) {
 
   // 3열: 부품 목록 및 비용
   const [selectedParts, setSelectedParts] = useState<SelectedPart[]>([]);
-  const [showPartPicker, setShowPartPicker] = useState(false);
-  const [partSearch, setPartSearch] = useState("");
+  const [partPickerOpen, setPartPickerOpen] = useState(false);
 
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // 부품, 고장 증상 조회
+  // 고장 증상 조회
   useEffect(() => {
     const controller = new AbortController();
 
-    Promise.all([
-      fetchParts(controller.signal),
-      fetchSymptomPresets(controller.signal),
-    ])
-      .then(([parts, symptoms]) => {
-        setAllParts(parts);
-        setAllSymptoms(symptoms);
-      })
+    fetchSymptomPresets(controller.signal)
+      .then(setAllSymptoms)
       .catch((err) => {
         if (controller.signal.aborted) return;
 
         setError(
           err instanceof Error
             ? err.message
-            : "부품 또는 고장 증상 목록을 불러오지 못했습니다.",
+            : "고장 증상 목록을 불러오지 못했습니다.",
         );
       });
 
@@ -142,18 +143,6 @@ export function PresetFormModal({ onClose, onSave }: Props) {
     );
   }, [presets, presetSearch]);
 
-  // 이미 선택한 부품 제외 및 검색
-  const availableParts = useMemo(() => {
-    const keyword = partSearch.trim().toLowerCase();
-    const selectedIds = new Set(selectedParts.map((item) => item.part.id));
-
-    return allParts.filter(
-      (part) =>
-        !selectedIds.has(part.id) &&
-        part.name.toLowerCase().includes(keyword),
-    );
-  }, [allParts, selectedParts, partSearch]);
-
   // 고장 증상 선택 -> 하위 선택 초기화
   const handleSelectSymptom = (symptom: Selection) => {
     setSelectedSymptom(symptom);
@@ -161,7 +150,7 @@ export function PresetFormModal({ onClose, onSave }: Props) {
     setPresetSearch("");
     setPresetEtc("");
     setSelectedParts([]);
-    setShowPartPicker(false);
+    setPartPickerOpen(false);
     setError("");
   };
 
@@ -203,7 +192,7 @@ export function PresetFormModal({ onClose, onSave }: Props) {
   };
 
   // 부품 추가
-  const handleAddPart = (part: Part) => {
+  const handleAddPart = (part: PartItem) => {
     setSelectedParts((current) => {
       if (current.some((item) => item.part.id === part.id)) {
         return current;
@@ -279,12 +268,12 @@ export function PresetFormModal({ onClose, onSave }: Props) {
   };
 
   const sectionClass =
-    "flex min-h-[520px] min-w-0 flex-col border border-neutral-300 p-3";
+    "flex h-[520px] max-h-[calc(100vh-14rem)] min-h-0 min-w-0 flex-col overflow-hidden border border-neutral-300 p-3";
   const searchClass =
     "mb-3 w-full rounded border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-blue-500";
 
   return (
-    <Modal title="수리 프리셋 불러오기" wide onClose={onClose}>
+    <Modal title="수리 프리셋 등록" wide onClose={onClose}>
       <p className="mb-3 text-xs text-neutral-400">
         고장 증상을 선택하면 관련된 수리 프리셋과 부품 목록을 확인할 수 있습니다.
       </p>
@@ -293,7 +282,7 @@ export function PresetFormModal({ onClose, onSave }: Props) {
         <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[0.8fr_1fr_1.8fr]">
           {/* 1열: 고장 증상 */}
           <section className={sectionClass}>
-            <div className="mb-3 flex items-center gap-2">
+            <div className="mb-3 flex shrink-0 items-center gap-2">
               <h3 className="shrink-0 text-sm font-semibold">고장 증상</h3>
               <select
                 value={category}
@@ -314,10 +303,10 @@ export function PresetFormModal({ onClose, onSave }: Props) {
               value={symptomSearch}
               onChange={(event) => setSymptomSearch(event.target.value)}
               placeholder="고장 증상을 검색하세요."
-              className={searchClass}
+              className={`${searchClass} shrink-0`}
             />
 
-            <div className="flex-1 space-y-1 overflow-y-auto">
+            <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
               {filteredSymptoms.length === 0 ? (
                 <p className="py-8 text-center text-sm text-neutral-400">
                   {allSymptoms.length === 0
@@ -354,7 +343,7 @@ export function PresetFormModal({ onClose, onSave }: Props) {
 
             {/* 기타 직접입력 */}
             <label
-              className={`mt-2 flex cursor-pointer items-center gap-2 border p-2 text-sm ${
+              className={`mt-2 flex shrink-0 cursor-pointer items-center gap-2 border p-2 text-sm ${
                 selectedSymptom === ETC
                   ? "border-blue-500 bg-blue-50 text-blue-700"
                   : "border-neutral-200"
@@ -384,17 +373,17 @@ export function PresetFormModal({ onClose, onSave }: Props) {
 
           {/* 2열: 수리 프리셋 */}
           <section className={sectionClass}>
-            <h3 className="mb-3 text-sm font-semibold">수리 프리셋</h3>
+            <h3 className="mb-3 shrink-0 text-sm font-semibold">수리 프리셋</h3>
 
             <input
               type="text"
               value={presetSearch}
               onChange={(event) => setPresetSearch(event.target.value)}
               placeholder="수리 프리셋을 검색하세요."
-              className={searchClass}
+              className={`${searchClass} shrink-0`}
             />
 
-            <div className="flex-1 space-y-2 overflow-y-auto">
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
               {selectedSymptom === null ? (
                 <p className="py-8 text-center text-sm text-neutral-400">
                   고장 증상을 먼저 선택해 주세요.
@@ -444,7 +433,7 @@ export function PresetFormModal({ onClose, onSave }: Props) {
 
             {/* 기타 직접입력 */}
             <label
-              className={`mt-2 flex cursor-pointer items-start gap-2 border p-2 text-sm ${
+              className={`mt-2 flex shrink-0 cursor-pointer items-start gap-2 border p-2 text-sm ${
                 selectedPreset === ETC
                   ? "border-blue-500 bg-blue-50"
                   : "border-neutral-300"
@@ -484,14 +473,14 @@ export function PresetFormModal({ onClose, onSave }: Props) {
 
           {/* 3열: 부품 목록 및 비용 */}
           <section className={sectionClass}>
-            <h3 className="mb-1 text-sm font-semibold">부품 목록 및 비용</h3>
+            <h3 className="mb-1 shrink-0 text-sm font-semibold">부품 목록 및 비용</h3>
 
-            <p className="mb-4 text-xs text-neutral-400">
+            <p className="mb-4 shrink-0 text-xs text-neutral-400">
               선택된 수리 프리셋에 포함된 부품 목록과 예상 비용입니다.
             </p>
 
             {selectedParts.length > 0 ? (
-              <div className="overflow-x-auto">
+              <div className="min-h-0 flex-1 overflow-auto">
                 <table className="w-full min-w-[480px] text-sm">
                   <thead className="text-xs text-neutral-500">
                     <tr>
@@ -555,7 +544,7 @@ export function PresetFormModal({ onClose, onSave }: Props) {
                 </table>
               </div>
             ) : (
-              <div className="flex min-h-24 items-center justify-center border border-dashed border-neutral-300 text-sm text-neutral-400">
+              <div className="flex min-h-0 flex-1 items-center justify-center border border-dashed border-neutral-300 text-sm text-neutral-400">
                 부품이 선택되지 않았습니다.
               </div>
             )}
@@ -563,17 +552,13 @@ export function PresetFormModal({ onClose, onSave }: Props) {
             {/* + 부품 추가 */}
             <button
               type="button"
-              onClick={() => setShowPartPicker((current) => !current)}
-              className={`mt-2 w-full border py-3 text-sm ${
-                showPartPicker
-                  ? "border-blue-500 bg-blue-50 text-blue-700"
-                  : "border-neutral-300 hover:bg-neutral-50"
-              }`}
+              onClick={() => setPartPickerOpen(true)}
+              className="mt-2 w-full shrink-0 border border-neutral-300 py-3 text-sm hover:bg-neutral-50"
             >
               + 부품 추가
             </button>
 
-            <div className="mt-auto space-y-3 pt-4">
+            <div className="mt-auto shrink-0 space-y-3 pt-4">
               {error !== "" && <Notice tone="error">{error}</Notice>}
 
               <div className="flex justify-end gap-2">
@@ -592,47 +577,14 @@ export function PresetFormModal({ onClose, onSave }: Props) {
             </div>
           </section>
         </div>
-
-        {/* 오른쪽 사이드: 부품 목록 (부품 추가 클릭 시) */}
-        {showPartPicker && (
-          <aside className="flex w-72 shrink-0 flex-col border border-neutral-300 p-3">
-            <h3 className="mb-3 text-sm font-semibold">부품 목록</h3>
-
-            <input
-              type="text"
-              value={partSearch}
-              onChange={(event) => setPartSearch(event.target.value)}
-              placeholder="부품을 검색하세요."
-              className={searchClass}
-            />
-
-            <div className="max-h-[440px] flex-1 space-y-2 overflow-y-auto">
-              {availableParts.length === 0 ? (
-                <p className="py-8 text-center text-sm text-neutral-400">
-                  {allParts.length === 0
-                    ? "등록된 부품이 없습니다."
-                    : "추가할 수 있는 부품이 없습니다."}
-                </p>
-              ) : (
-                availableParts.map((part) => (
-                  <button
-                    key={part.id}
-                    type="button"
-                    onClick={() => handleAddPart(part)}
-                    className="block w-full border border-neutral-300 p-2 text-left text-sm hover:border-blue-400 hover:bg-blue-50"
-                  >
-                    <span className="block font-medium">{part.name}</span>
-                    <span className="block text-xs text-neutral-400">
-                      {won(safeNumber(part.unitPrice))} · 재고{" "}
-                      {safeNumber(part.stockQuantity)}
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-          </aside>
-        )}
       </form>
+      {partPickerOpen && (
+        <PartPickerModal
+          selectedIds={selectedParts.map((item) => item.part.id)}
+          onAdd={handleAddPart}
+          onClose={() => setPartPickerOpen(false)}
+        />
+      )}
     </Modal>
   );
 }

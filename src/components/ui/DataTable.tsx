@@ -29,6 +29,7 @@ interface DataTableProps<T> {
   rows: T[];
   rowKey: (row: T) => string;
   onRowClick?: (row: T) => void;
+  onRowDoubleClick?: (row: T) => void;
   selectedKey?: string;
   emptyText?: string;
   sortKey?: string;
@@ -42,6 +43,7 @@ export function DataTable<T>({
   rows,
   rowKey,
   onRowClick,
+  onRowDoubleClick,
   selectedKey,
   emptyText = "조회 결과가 없습니다.",
   sortKey,
@@ -86,9 +88,10 @@ export function DataTable<T>({
                 <tr
                   key={key}
                   onClick={onRowClick === undefined ? undefined : () => onRowClick(row)}
+                  onDoubleClick={onRowDoubleClick === undefined ? undefined : () => onRowDoubleClick(row)}
                   className={cn(
                     "border-t border-neutral-100",
-                    onRowClick !== undefined && "cursor-pointer hover:bg-neutral-50",
+                    (onRowClick !== undefined || onRowDoubleClick !== undefined) && "cursor-pointer hover:bg-neutral-50",
                     selectedKey === key && "bg-blue-50",
                   )}
                 >

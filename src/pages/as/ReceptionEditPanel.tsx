@@ -9,7 +9,6 @@ import type { AsReceptionDetail, AsReceptionStatus, ReturnMethod } from "@/types
 const editableStatuses: readonly AsReceptionStatus[] = [
   "RECEIVED",
   "INSPECTION",
-  "WARRANTY_REVIEW",
   "AWAITING_QUOTE_APPROVAL",
   "AWAITING_REPAIR",
 ];

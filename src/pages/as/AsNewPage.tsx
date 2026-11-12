@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { DateField, TextArea, TextField } from "@/components/ui/Field";
 import { Notice, Panel } from "@/components/ui/Panel";
-import { categoryLabel, createCustomer, createReception, searchCustomers, searchProductsBySerial, searchTechnicians } from "@/lib/asReceptionApi";
+import { categoryLabel, createCustomer, createReception, fetchProduct, registerPurchasedAt, searchCustomers, searchProductsBySerial, searchTechnicians } from "@/lib/asReceptionApi";
 import { CustomerNameField } from "@/pages/as/CustomerNameField";
 import { SerialNumberField } from "@/pages/as/SerialNumberField";
 import { AsLookupModals, type LookupKind } from "@/pages/as/AsLookupModals";
@@ -18,10 +18,12 @@ interface AsForm {
   address: string;
   addressDetail: string;
   productId: number | null;
+  productModelId: number | null;
   serial: string;
   productGroup: string;
   modelName: string;
   purchasedAt: string;
+  purchasedAtLocked: boolean;
   symptom: string;
   symptomDetail: string;
   memo: string;
@@ -39,10 +41,12 @@ const emptyForm: AsForm = {
   address: "",
   addressDetail: "",
   productId: null,
+  productModelId: null,
   serial: "",
   productGroup: "",
   modelName: "",
   purchasedAt: "",
+  purchasedAtLocked: false,
   symptom: "",
   symptomDetail: "",
   memo: "",
@@ -65,11 +69,16 @@ export function AsNewPage() {
   }
 
   function applyProduct(product: ProductSummary) {
+    const purchasedAt = product.purchasedAt?.slice(0, 10) ?? "";
     patch({
       productId: product.id,
+      productModelId: product.productModelId,
       serial: product.serialNumber,
       productGroup: categoryLabel(product.category),
       modelName: product.modelName,
+      // 저장된 구매일이 있으면 채우고 수정을 막는다. 없으면 직접 입력할 수 있게 연다.
+      purchasedAt,
+      purchasedAtLocked: purchasedAt !== "",
     });
   }
 
@@ -120,19 +129,34 @@ export function AsNewPage() {
     try {
       // 조회 후 이름을 고치면 id가 지워지므로, 접수 시점에 연락처·시리얼·기사명으로 다시 맞춘다.
       const customerId = await resolveCustomerId(form, signal);
-      const productId = await resolveProductId(form, signal);
+      const product = await resolveProduct(form, signal);
+      const productId = product?.id ?? null;
+      const productModelId = product?.productModelId ?? null;
       const technicianId = await resolveTechnicianId(form, signal);
       const returnMethod = toReturnMethod(form.receiveMethod);
-      if (customerId !== form.customerId || productId !== form.productId || technicianId !== form.technicianId) {
-        patch({ customerId, productId, technicianId });
+      if (
+        customerId !== form.customerId
+        || productId !== form.productId
+        || productModelId !== form.productModelId
+        || technicianId !== form.technicianId
+      ) {
+        patch({ customerId, productId, productModelId, technicianId });
       }
       const missing = missingFields(form, customerId, productId, technicianId, returnMethod);
       if (missing.length > 0) {
         setError(`${missing.join(" ")}`);
         return;
       }
-      if (customerId === null || productId === null || technicianId === null || returnMethod === null) {
+      if (customerId === null || productId === null || productModelId === null || technicianId === null || returnMethod === null) {
         return;
+      }
+      // 저장된 구매일이 없는 제품만, 접수 화면에서 입력한 날짜를 제품에 기록한다.
+      if (!form.purchasedAtLocked) {
+        const purchasedAt = toPurchaseDateTime(form.purchasedAt);
+        if (purchasedAt !== null) {
+          await registerPurchasedAt(productId, { productModelId, purchasedAt }, signal);
+          patch({ purchasedAtLocked: true });
+        }
       }
       const created = await createReception({
         customerId,
@@ -181,7 +205,7 @@ export function AsNewPage() {
           />
           <TextField label="연락처" value={form.phone} onChange={(phone) => patch({ phone, customerId: null })} invalid={tried && form.customerId === null} />
           <TextField label="이메일" value={form.email} onChange={(email) => patch({ email })} />
-          <TextField label="우편번호" value={form.postalCode} onChange={(postalCode) => patch({ postalCode })} invalid={invalid(form.postalCode)} />
+          <TextField label="우편번호" value={form.postalCode} onChange={(postalCode) => patch({ postalCode })} invalid={invalid(form.postalCode)} readOnly />
           <TextField label="기본 주소" value={form.address} onChange={(address) => patch({ address })} invalid={invalid(form.address)} />
           <div className="flex items-end gap-2">
             <TextField className="flex-1" label="상세 주소" value={form.addressDetail} onChange={(addressDetail) => patch({ addressDetail })} />
@@ -197,7 +221,15 @@ export function AsNewPage() {
           <SerialNumberField
             value={form.serial}
             invalid={tried && form.productId === null}
-            onChange={(serial) => patch({ serial, productId: null, productGroup: "", modelName: "" })}
+            onChange={(serial) => patch({
+              serial,
+              productId: null,
+              productModelId: null,
+              productGroup: "",
+              modelName: "",
+              purchasedAt: "",
+              purchasedAtLocked: false,
+            })}
             onPick={applyProduct}
           />
           <div className="flex items-end">
@@ -207,7 +239,7 @@ export function AsNewPage() {
           </div>
           <TextField label="제품군" value={form.productGroup} onChange={(productGroup) => patch({ productGroup })} readOnly />
           <TextField label="모델명" value={form.modelName} onChange={(modelName) => patch({ modelName })} readOnly />
-          <DateField label="구매일" value={form.purchasedAt} onChange={(purchasedAt) => patch({ purchasedAt })} />
+          <DateField label="구매일" value={form.purchasedAt} readOnly={form.purchasedAtLocked} onChange={(purchasedAt) => patch({ purchasedAt })} />
         </div>
       </Panel>
 
@@ -309,9 +341,16 @@ async function resolveCustomerId(form: AsForm, signal: AbortSignal): Promise<num
   return created.id;
 }
 
-async function resolveProductId(form: AsForm, signal: AbortSignal): Promise<number | null> {
+async function resolveProduct(
+  form: AsForm,
+  signal: AbortSignal,
+): Promise<{ id: number; productModelId: number } | null> {
+  if (form.productId !== null && form.productModelId !== null) {
+    return { id: form.productId, productModelId: form.productModelId };
+  }
   if (form.productId !== null) {
-    return form.productId;
+    const product = await fetchProduct(form.productId, signal);
+    return { id: product.id, productModelId: product.productModelId };
   }
   const serial = form.serial.trim();
   if (serial === "") {
@@ -319,7 +358,28 @@ async function resolveProductId(form: AsForm, signal: AbortSignal): Promise<numb
   }
   const products = await searchProductsBySerial(serial, signal);
   const product = products.find((item) => item.serialNumber.toLowerCase() === serial.toLowerCase());
-  return product?.id ?? null;
+  if (product === undefined) {
+    return null;
+  }
+  return { id: product.id, productModelId: product.productModelId };
+}
+
+function toPurchaseDateTime(value: string): string | null {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 0) {
+    return null;
+  }
+  if (digits.length !== 8) {
+    throw new Error("구매일은 YYYY/MM/DD 형식으로 입력해 주세요.");
+  }
+  const year = Number(digits.slice(0, 4));
+  const month = Number(digits.slice(4, 6));
+  const day = Number(digits.slice(6, 8));
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    throw new Error("구매일은 YYYY/MM/DD 형식으로 입력해 주세요.");
+  }
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}T00:00:00`;
 }
 
 async function resolveTechnicianId(form: AsForm, signal: AbortSignal): Promise<number | null> {

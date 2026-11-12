@@ -1,4 +1,5 @@
 import { apiFetch, isId, isRecord, mapSpringPage, readApiJson, type SpringPage } from "@/lib/apiClient";
+import type { ProductCategory } from "@/types/asReception";
 
 export type PartStatus = "ACTIVE" | "LOW_QUANTITY" | "DISCONTINUED";
 export type StockMovement = "IN" | "OUT";
@@ -25,20 +26,33 @@ export function partStatusLabel(status: PartStatus): string {
 }
 
 export async function fetchParts(
-  query: { partName: string; status?: PartStatus | null; page: number; size: number },
+  query: {
+    partName: string;
+    status?: PartStatus | null;
+    category?: ProductCategory | null;
+    productModelId?: number | null;
+    page: number;
+    size: number;
+  },
   signal?: AbortSignal,
 ): Promise<SpringPage<PartItem>> {
   const params = new URLSearchParams({
     page: String(query.page - 1),
     size: String(query.size),
   });
-  // 목록 검색은 GET 쿼리다. 본문에 넣으면 서버가 partName, status를 받지 못한다.
+  // 목록 검색은 GET 쿼리다. 본문에 넣으면 서버가 검색 조건을 받지 못한다.
   const partName = query.partName.trim();
   if (partName !== "") {
     params.set("partName", partName);
   }
   if (query.status != null) {
     params.set("status", query.status);
+  }
+  if (query.category != null) {
+    params.set("category", query.category);
+  }
+  if (query.productModelId != null) {
+    params.set("productModelId", String(query.productModelId));
   }
   const response = await apiFetch(`/api/v1/part?${params.toString()}`, { signal });
   const body = await readApiJson(response, "부품 목록을 불러오지 못했습니다.");

@@ -1,0 +1,12 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { cn } from "@/lib/cn";
+function SortMark({ active, direction }) {
+    const points = direction === "asc" ? "4 0.5 7.5 7.5 0.5 7.5" : "0.5 0.5 7.5 0.5 4 7.5";
+    return (_jsx("svg", { width: "8", height: "8", viewBox: "0 0 8 8", "aria-hidden": "true", className: cn("shrink-0", active ? "text-neutral-500" : "text-neutral-400"), children: _jsx("polygon", { points: points, fill: "currentColor" }) }));
+}
+export function DataTable({ columns, rows, rowKey, onRowClick, onRowDoubleClick, selectedKey, emptyText = "조회 결과가 없습니다.", sortKey, sortDir = "asc", onSort, compact = false, }) {
+    return (_jsx("div", { className: "overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm", children: _jsxs("table", { className: cn("border-collapse text-sm", compact ? "w-full" : "w-full min-w-[720px]"), children: [_jsx("thead", { className: "bg-neutral-50 text-left text-xs font-medium text-neutral-500", children: _jsx("tr", { children: columns.map((column) => (_jsx("th", { className: cn(compact ? "px-3 py-2 font-medium" : "px-4 py-2.5 font-medium", column.className), children: column.sortable === true && onSort !== undefined ? (_jsxs("button", { type: "button", className: "inline-flex items-center gap-1", onClick: () => onSort(column.key), children: [column.header, _jsx(SortMark, { active: sortKey === column.key, direction: sortKey === column.key ? sortDir : "desc" })] })) : (column.header) }, column.key))) }) }), _jsx("tbody", { children: rows.length === 0 ? (_jsx("tr", { children: _jsx("td", { colSpan: columns.length, className: "px-4 py-12 text-center text-neutral-500", children: emptyText }) })) : (rows.map((row) => {
+                        const key = rowKey(row);
+                        return (_jsx("tr", { onClick: onRowClick === undefined ? undefined : () => onRowClick(row), onDoubleClick: onRowDoubleClick === undefined ? undefined : () => onRowDoubleClick(row), className: cn("border-t border-neutral-100", (onRowClick !== undefined || onRowDoubleClick !== undefined) && "cursor-pointer hover:bg-neutral-50", selectedKey === key && "bg-blue-50"), children: columns.map((column) => (_jsx("td", { className: cn(compact ? "px-3 py-2.5 align-middle text-neutral-800" : "px-4 py-3 align-middle text-neutral-800", column.className), children: column.render(row) }, column.key))) }, key));
+                    })) })] }) }));
+}

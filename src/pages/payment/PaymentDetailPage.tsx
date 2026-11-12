@@ -5,6 +5,7 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { SelectBox, TextArea, TextField } from "@/components/ui/Field";
 import { InfoField, Notice, Panel } from "@/components/ui/Panel";
 import { won } from "@/lib/format";
+import { useSessionStore } from "@/stores/useSessionStore";
 import { tossBankName } from "@/lib/tossBank";
 import {
   fetchPaymentDetail,
@@ -62,6 +63,7 @@ const bankOptions = [
 
 export function PaymentDetailPage() {
   const { billId = "" } = useParams();
+  const canManage = useSessionStore((state) => state.user?.role !== "TECHNICIAN");
   const [reloadKey, setReloadKey] = useState(0);
   const [load, setLoad] = useState<LoadState>({ kind: "loading" });
 
@@ -159,7 +161,7 @@ export function PaymentDetailPage() {
         </Panel>
       )}
 
-      {canPayByCash(detail) && (
+      {canManage && canPayByCash(detail) && (
         <CashPaymentForm
           billId={detail.billId}
           amount={detail.amount}
@@ -171,11 +173,11 @@ export function PaymentDetailPage() {
         <Notice>결제 결과를 확인하고 있습니다. 확인이 끝날 때까지 다시 결제할 수 없습니다.</Notice>
       )}
 
-      {detail.status === "UNPAID" && detail.paymentStatus !== "IN_PROGRESS" && !canPayByCash(detail) && (
+      {canManage && detail.status === "UNPAID" && detail.paymentStatus !== "IN_PROGRESS" && !canPayByCash(detail) && (
         <Notice>발급된 가상계좌가 있어 현금으로 받을 수 없습니다. 가상계좌는 먼저 취소해 주세요.</Notice>
       )}
 
-      {detail.refundable && (
+      {canManage && detail.refundable && (
         <RefundForm
           billId={detail.billId}
           method={detail.paymentMethod}

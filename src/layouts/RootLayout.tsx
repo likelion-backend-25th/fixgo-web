@@ -1,5 +1,5 @@
 import { Menu } from "lucide-react";
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useLayoutEffect, useRef, useState } from "react";
 import { Link, Navigate, Outlet, useLocation } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { useHydratedSession } from "@/hooks/useHydratedSession";
@@ -9,25 +9,36 @@ import { Sidebar } from "@/layouts/Sidebar";
 import { resolveHeading } from "@/layouts/navigation";
 import { ROLE_LABEL } from "@/types/staff";
 
-const HeadingMetaContext = createContext<(meta: string | undefined) => void>(() => {});
+const HeadingMetaContext = createContext<(owner: symbol, meta: string | undefined) => void>(() => {});
 
 export function useHeadingMeta(meta: string | undefined) {
   const setMeta = useContext(HeadingMetaContext);
-  useEffect(() => {
-    setMeta(meta);
-    return () => setMeta(undefined);
-  }, [meta, setMeta]);
+  const owner = useRef(Symbol("heading")).current;
+
+  useLayoutEffect(() => {
+    setMeta(owner, meta);
+    return () => setMeta(owner, undefined);
+  }, [meta, owner, setMeta]);
 }
 
 export function RootLayout() {
   const { user, ready } = useHydratedSession();
   const { pathname } = useLocation();
   const [menuState, setMenuState] = useState({ path: pathname, open: false });
-  const [pageMeta, setPageMeta] = useState<{ path: string; meta?: string }>({ path: pathname });
+  const [pageMeta, setPageMeta] = useState<string | undefined>(undefined);
+  const metaOwner = useRef<symbol | null>(null);
   const menuOpen = menuState.open && menuState.path === pathname;
-  const setHeadingMeta = useCallback((meta: string | undefined) => {
-    setPageMeta({ path: pathname, meta });
-  }, [pathname]);
+  // 화면을 떠나는 정리가 다음 화면보다 늦게 실행돼도, 지금 화면의 접수번호는 남긴다.
+  const setHeadingMeta = useCallback((owner: symbol, meta: string | undefined) => {
+    if (meta === undefined || meta === "") {
+      if (metaOwner.current !== owner) return;
+      metaOwner.current = null;
+      setPageMeta(undefined);
+      return;
+    }
+    metaOwner.current = owner;
+    setPageMeta(meta);
+  }, []);
 
   function setMenuOpen(open: boolean) {
     setMenuState({ path: pathname, open });
@@ -41,7 +52,7 @@ export function RootLayout() {
   }
 
   const heading = resolveHeading(pathname, user.role);
-  const meta = pageMeta.path === pathname && pageMeta.meta !== undefined ? pageMeta.meta : heading.meta;
+  const meta = pageMeta !== undefined && pageMeta !== "" ? pageMeta : heading.meta;
 
   return (
     <HeadingMetaContext.Provider value={setHeadingMeta}>

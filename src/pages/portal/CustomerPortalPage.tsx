@@ -36,12 +36,12 @@ type LoadState =
 
 const STEPS = ["접수", "점검", "견적 승인", "수리", "결제"] as const;
 
-// 고객에게 보이는 5단계. 보증 판정은 점검, 배송·수령·완료는 결제 단계에 둔다.
+// 고객에게 보이는 5단계. 배송·수령·완료는 결제 단계에 둔다.
 function stageIndex(status: AsReceptionStatus): number {
   if (status === "RECEIVED") {
     return 0;
   }
-  if (status === "INSPECTION" || status === "WARRANTY_REVIEW") {
+  if (status === "INSPECTION") {
     return 1;
   }
   if (status === "AWAITING_QUOTE_APPROVAL") {
@@ -143,6 +143,7 @@ function PortalBody({
 }) {
   const { reception, quote, payment } = portal;
   const current = stageIndex(reception.status);
+  const repairSkipped = quote?.status === "REJECTED" && current > 3;
   const [selected, setSelected] = useState(current);
   const [seenStatus, setSeenStatus] = useState(reception.status);
   const [receiptOpen, setReceiptOpen] = useState(false);
@@ -192,29 +193,36 @@ function PortalBody({
             />
           )}
           {STEPS.map((label, index) => {
-            const reached = index <= current;
+            const skipped = repairSkipped && index === 3;
+            const reached = !skipped && index <= current;
             const active = index === selected;
             return (
               <li key={label} className="relative">
                 <button
                   type="button"
-                  disabled={!reached}
-                  aria-current={index === current ? "step" : undefined}
+                  disabled={!reached && !skipped}
+                  aria-current={!skipped && index === current ? "step" : undefined}
                   onClick={() => setSelected(index)}
                   className="flex w-full flex-col items-center gap-2 disabled:cursor-default"
                 >
+                  {skipped ? (
+                    <span className="relative z-10 flex h-3.5 w-3.5 items-center justify-center text-sm font-bold leading-none text-red-600" aria-label="건너뜀">×</span>
+                  ) : (
+                    <span
+                      className={
+                        reached
+                          ? `relative z-10 h-3.5 w-3.5 rounded-full bg-blue-600 ${active ? "ring-2 ring-blue-200 ring-offset-2" : ""}`
+                          : "relative z-10 h-3.5 w-3.5 rounded-full bg-neutral-300"
+                      }
+                    />
+                  )}
                   <span
                     className={
-                      reached
-                        ? `h-3.5 w-3.5 rounded-full bg-blue-600 ${active ? "ring-2 ring-blue-200 ring-offset-2" : ""}`
-                        : "h-3.5 w-3.5 rounded-full bg-neutral-300"
-                    }
-                  />
-                  <span
-                    className={
-                      reached
-                        ? `text-center text-[11px] leading-tight ${active ? "font-semibold text-blue-600" : "text-blue-600"}`
-                        : "text-center text-[11px] leading-tight text-neutral-500"
+                      skipped
+                        ? `text-center text-[11px] leading-tight font-semibold text-red-600 ${active ? "underline" : ""}`
+                        : reached
+                          ? `text-center text-[11px] leading-tight ${active ? "font-semibold text-blue-600" : "text-blue-600"}`
+                          : "text-center text-[11px] leading-tight text-neutral-500"
                     }
                   >
                     {label}
@@ -433,9 +441,6 @@ function stageLines(
     if (status === "INSPECTION") {
       return ["점검이 진행 중입니다.", "견적 전입니다."];
     }
-    if (status === "WARRANTY_REVIEW") {
-      return ["보증을 확인하고 있습니다.", "견적 전입니다."];
-    }
     return ["점검이 완료되었습니다."];
   }
   if (stage === 2) {
@@ -451,6 +456,9 @@ function stageLines(
     return ["견적 단계가 완료되었습니다."];
   }
   if (stage === 3) {
+    if (quote?.status === "REJECTED") {
+      return ["견적 거부로 수리를 진행하지 않습니다."];
+    }
     if (status === "AWAITING_REPAIR") {
       return ["수리를 기다리고 있습니다.", "결제 전입니다."];
     }
@@ -458,6 +466,14 @@ function stageLines(
       return ["수리가 진행 중입니다.", "결제 전입니다."];
     }
     return ["수리가 완료되었습니다."];
+  }
+  if (status === "AWAITING_SHIPMENT" || status === "AWAITING_PICKUP") {
+    if (quote?.status !== "APPROVED" && quote?.status !== "REJECTED") {
+      return [
+        "A/S가 중단되어 수리를 진행하지 않습니다.",
+        status === "AWAITING_PICKUP" ? "수령을 기다리고 있습니다." : "배송을 기다리고 있습니다.",
+      ];
+    }
   }
   if (status === "AWAITING_SHIPMENT") {
     return ["결제가 완료되었습니다.", "배송을 기다리고 있습니다."];

@@ -449,6 +449,25 @@ export async function confirmRepairCost(repairId: number): Promise<{ message: st
   );
 }
 
+export type AbortCategory = "REPAIR_IMPOSSIBLE" | "CUSTOMER_CANCEL";
+
+// 점검 중 수리가 불가능하면 배송 대기 또는 수령 대기로 넘긴다.
+export async function abortRepair(
+  repairId: number,
+  request: { category: AbortCategory; reason: string },
+): Promise<{ message: string }> {
+  const response = await apiFetch(`${API_BASE}/${repairId}/abort`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+
+  return handleResponse<{ message: string }>(
+    response,
+    "A/S를 중단하지 못했습니다.",
+  );
+}
+
 export interface RepairUpdateRequest {
   asReceptionId: number;
   technicianId: number;

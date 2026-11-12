@@ -112,10 +112,11 @@ interface DateFieldProps {
   label?: string;
   value: string;
   onChange: (value: string) => void;
+  readOnly?: boolean;
   className?: string;
 }
 
-export function DateField({ label, value, onChange, className }: DateFieldProps) {
+export function DateField({ label, value, onChange, readOnly = false, className }: DateFieldProps) {
   const pickerRef = useRef<HTMLInputElement>(null);
   const iso = toIsoDate(value);
 
@@ -128,14 +129,27 @@ export function DateField({ label, value, onChange, className }: DateFieldProps)
           inputMode="numeric"
           placeholder="YYYY/MM/DD"
           value={formatDateInput(value)}
-          onChange={(event) => onChange(commitDateInput(event.target.value))}
-          className={cn(controlClass, "pr-10")}
+          readOnly={readOnly}
+          onChange={(event) => {
+            if (!readOnly) {
+              onChange(commitDateInput(event.target.value));
+            }
+          }}
+          className={cn(controlClass, "pr-10", readOnly && "bg-neutral-50 text-neutral-700")}
         />
         <button
           type="button"
           aria-label="달력에서 날짜 선택"
-          className="absolute top-1/2 right-2 -translate-y-1/2 text-neutral-500"
-          onClick={() => openDatePicker(pickerRef.current)}
+          disabled={readOnly}
+          className={cn(
+            "absolute top-1/2 right-2 -translate-y-1/2 text-neutral-500",
+            readOnly && "cursor-not-allowed text-neutral-300",
+          )}
+          onClick={() => {
+            if (!readOnly) {
+              openDatePicker(pickerRef.current);
+            }
+          }}
         >
           <Calendar className="size-4" />
         </button>
@@ -144,8 +158,13 @@ export function DateField({ label, value, onChange, className }: DateFieldProps)
           type="date"
           tabIndex={-1}
           aria-hidden
+          disabled={readOnly}
           value={iso}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => {
+            if (!readOnly) {
+              onChange(event.target.value);
+            }
+          }}
           className="pointer-events-none absolute size-0 opacity-0"
         />
       </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Panel";
 import { formatDateTime, won } from "@/lib/format";
@@ -60,6 +61,7 @@ function RepairView({
   const [loading, setLoading] = useState(repair !== null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const navigate = useNavigate();
   const role = useSessionStore((state) => state.user?.role);
 
   useEffect(() => {
@@ -107,6 +109,8 @@ function RepairView({
   }, [repair]);
 
   const rejected = detail?.status === "REJECTED";
+  const inspectionEnded = rejected
+    && (reception.status === "AWAITING_SHIPMENT" || reception.status === "AWAITING_PICKUP");
   const approved = detail?.status === "APPROVED";
   const agreed = detail?.status === "REPAIRING" || detail?.status === "COMPLETED";
   const completed = detail?.status === "COMPLETED";
@@ -151,11 +155,21 @@ function RepairView({
   return (
     <div className="space-y-4">
       <AsSummary record={reception} />
-      {role === "TECHNICIAN" && <ProgressTabs receptionId={reception.id} current="repair" />}
+      {role === "TECHNICIAN" && !inspectionEnded && (
+        <ProgressTabs receptionId={reception.id} current="repair" />
+      )}
       {repair === null && <Notice>아직 A/S 진행 전입니다.</Notice>}
       {repair !== null && loading && <Notice>수리 정보를 불러오는 중입니다.</Notice>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
-      {detail !== null && (
+      {detail !== null && inspectionEnded && (
+        <div className="space-y-4">
+          <Notice>{`A/S를 중단했습니다. ${reception.returnMethod === "PICKUP" ? "수령 대기" : "배송 대기"}로 넘어가 점검이 끝났습니다.`}</Notice>
+          <div className="flex justify-end">
+            <Button onClick={() => navigate("/as/list")}>목록으로</Button>
+          </div>
+        </div>
+      )}
+      {detail !== null && !inspectionEnded && (
         <>
           <section className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
             <h2 className="mb-4 text-lg font-semibold">수리 정보</h2>

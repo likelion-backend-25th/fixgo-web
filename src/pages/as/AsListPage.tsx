@@ -103,6 +103,9 @@ function isTechSortKey(value: string): value is TechSortKey {
 }
 
 function technicianStatusLabel(row: TechnicianRepairRow): string {
+  if (isReturnWaiting(row.receptionStatus)) {
+    return receptionStatusLabel(row.receptionStatus);
+  }
   return row.repairStatus === null
     ? receptionStatusLabel(row.receptionStatus)
     : repairStatusLabel(row.repairStatus);
@@ -339,6 +342,11 @@ function TechnicianAsListPage() {
               : "조회 결과가 없습니다."
         }
         onRowClick={(row) => {
+          // 중단된 접수는 점검·수리 화면으로 다시 들어가지 않는다.
+          if (row.repairStatus === "REJECTED" && isReturnWaiting(row.receptionStatus)) {
+            navigate(`/as/details/${row.id}`);
+            return;
+          }
           // 수리 진행 상태에 따라 점검 또는 수리 탭으로 이동한다. 주소의 id는 접수 ID다.
           const status = row.repairStatus;
           const goRepair =
@@ -638,10 +646,14 @@ function isSortKey(value: string): value is SortKey {
 }
 
 function statusText(row: AsReceptionListItem): string {
-  if (row.repairStatus === "REJECTED") {
+  if (row.repairStatus === "REJECTED" && !isReturnWaiting(row.receptionStatus)) {
     return "수리 거부";
   }
   return receptionStatusLabel(row.receptionStatus);
+}
+
+function isReturnWaiting(status: AsReceptionListItem["receptionStatus"]): boolean {
+  return status === "AWAITING_SHIPMENT" || status === "AWAITING_PICKUP";
 }
 
 const deskColumns: Column<AsReceptionListItem>[] = [

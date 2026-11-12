@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { categoryLabel, fetchProduct } from "@/lib/asReceptionApi";
 import { won } from "@/lib/format";
 import {
+  createRepairPreset,
   fetchRepairPresetParts,
   fetchRepairPresetsBySymptom,
   fetchSymptomPresets,
@@ -11,6 +12,7 @@ import {
   type RepairPresetPart,
   type SymptomPreset,
 } from "@/lib/repair";
+import { PresetFormModal } from "@/pages/preset/PresetFormModal";
 
 export interface InspectionPresetChoice {
   preset: RepairPreset;
@@ -43,7 +45,10 @@ export function PresetPickerModal({ productId, onClose, onApply }: Props) {
   const [partsByPresetId, setPartsByPresetId] = useState<Map<number, RepairPresetPart[]>>(new Map());
   const [partsLoadingIds, setPartsLoadingIds] = useState<number[]>([]);
   const [applying, setApplying] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [presetReloadKey, setPresetReloadKey] = useState(0);
   const [error, setError] = useState("");
+  const loadedSymptomId = useRef<number | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -85,10 +90,14 @@ export function PresetPickerModal({ productId, onClose, onApply }: Props) {
 
     const controller = new AbortController();
     setPresetsLoading(true);
-    setPresets([]);
-    setSelectedPresetIds([]);
-    setPartsByPresetId(new Map());
-    setPartsLoadingIds([]);
+    // 증상을 바꿀 때만 선택을 비운다. 등록 후 새로고침은 고른 프리셋을 유지한다.
+    if (loadedSymptomId.current !== selectedSymptomId) {
+      loadedSymptomId.current = selectedSymptomId;
+      setPresets([]);
+      setSelectedPresetIds([]);
+      setPartsByPresetId(new Map());
+      setPartsLoadingIds([]);
+    }
 
     fetchRepairPresetsBySymptom(selectedSymptomId, controller.signal)
       .then((result) => {
@@ -103,7 +112,7 @@ export function PresetPickerModal({ productId, onClose, onApply }: Props) {
       });
 
     return () => controller.abort();
-  }, [selectedSymptomId]);
+  }, [selectedSymptomId, presetReloadKey]);
 
   const visibleSymptoms = useMemo(() => {
     const keyword = symptomQuery.trim().toLowerCase();
@@ -266,15 +275,28 @@ export function PresetPickerModal({ productId, onClose, onApply }: Props) {
         </PickerColumn>
       </div>
       {error !== "" && <p className="mt-3 text-sm text-red-600">{error}</p>}
-      <div className="mt-4 flex justify-end gap-2">
-        <Button variant="ghost" onClick={onClose}>취소</Button>
-        <Button
-          onClick={() => void apply()}
-          disabled={applying || partsLoading || selectedSymptom === undefined || selectedPresets.length === 0}
-        >
-          {applying ? "반영 중…" : `점검 항목에 추가${selectedPresets.length > 1 ? ` (${selectedPresets.length})` : ""}`}
-        </Button>
+      <div className="mt-4 flex items-center justify-between gap-2">
+        <Button variant="outline" onClick={() => setCreating(true)}>프리셋 등록</Button>
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={onClose}>취소</Button>
+          <Button
+            onClick={() => void apply()}
+            disabled={applying || partsLoading || selectedSymptom === undefined || selectedPresets.length === 0}
+          >
+            {applying ? "반영 중…" : `점검 항목에 추가${selectedPresets.length > 1 ? ` (${selectedPresets.length})` : ""}`}
+          </Button>
+        </div>
       </div>
+      {creating && (
+        <PresetFormModal
+          onClose={() => setCreating(false)}
+          onSave={async (request) => {
+            await createRepairPreset(request);
+            setCreating(false);
+            setPresetReloadKey((key) => key + 1);
+          }}
+        />
+      )}
     </Modal>
   );
 }

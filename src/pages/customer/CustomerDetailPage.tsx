@@ -197,7 +197,7 @@ export function CustomerDetailPage() {
             <TextField label="이름" value={name} onChange={setName} />
             <TextField label="연락처" value={phone} onChange={setPhone} />
             <TextField label="이메일" value={email} onChange={setEmail} />
-            <TextField label="우편번호" value={zipcode} onChange={setZipcode} />
+            <TextField label="우편번호" value={zipcode} onChange={setZipcode} readOnly />
             <TextField label="기본 주소" value={basicAddress} onChange={setBasicAddress} />
             <div className="flex items-end gap-2">
               <TextField

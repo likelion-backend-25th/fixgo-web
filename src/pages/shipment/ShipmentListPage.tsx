@@ -7,6 +7,7 @@ import { Notice } from "@/components/ui/Panel";
 import { Pagination } from "@/components/ui/Pagination";
 import { fetchReception, fetchReceptions, receptionStatusLabel } from "@/lib/asReceptionApi";
 import { isAbortError } from "@/lib/apiClient";
+import { useSessionStore } from "@/stores/useSessionStore";
 import { cn } from "@/lib/cn";
 import {
   createPickup,
@@ -84,6 +85,7 @@ interface ReceptionPick {
 const pageSize = 20;
 
 export function ShipmentListPage() {
+  const canManage = useSessionStore((state) => state.user?.role !== "TECHNICIAN");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("전체");
   const [method, setMethod] = useState("전체");
@@ -171,6 +173,16 @@ export function ShipmentListPage() {
       header: "",
       render: (row) => {
         const shipmentId = row.shipmentId;
+        if (!canManage) {
+          if (shipmentId === null) {
+            return null;
+          }
+          return (
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => setSelectedId(shipmentId)}>상세 보기</Button>
+            </div>
+          );
+        }
         return (
           <div className="flex justify-end gap-2 whitespace-nowrap">
             {row.status === "배송 준비 완료" && shipmentId !== null && (
@@ -267,7 +279,7 @@ export function ShipmentListPage() {
         <TextField value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="접수번호, 수령인, 운송장번호 검색" className="w-72" />
         <SelectBox value={status} onChange={(value) => { setStatus(value); setPage(1); }} options={statusFilters} />
         <SelectBox value={method} onChange={(value) => { setMethod(value); setPage(1); }} options={[{ value: "전체", label: "수령 방법 전체" }, { value: "택배", label: "택배" }, { value: "방문 수령", label: "방문 수령" }]} />
-        <Button className="ml-auto" onClick={() => { setCreateInitial(null); setCreating(true); }}>등록</Button>
+        {canManage && <Button className="ml-auto" onClick={() => { setCreateInitial(null); setCreating(true); }}>등록</Button>}
       </div>
       {loadError !== "" && <div className="mb-3"><Notice tone="error">{loadError}</Notice></div>}
       {actionError !== "" && <div className="mb-3"><Notice tone="error">{actionError}</Notice></div>}
@@ -293,6 +305,7 @@ export function ShipmentListPage() {
       {selectedId !== null && (
         <ShipmentDetailModal
           shipmentId={selectedId}
+          readOnly={!canManage}
           onClose={() => setSelectedId(null)}
           onChanged={() => setReloadKey((value) => value + 1)}
         />
@@ -653,7 +666,17 @@ function ReceptionPickModal({
   );
 }
 
-function ShipmentDetailModal({ shipmentId, onClose, onChanged }: { shipmentId: number; onClose: () => void; onChanged: () => void }) {
+function ShipmentDetailModal({
+  shipmentId,
+  readOnly,
+  onClose,
+  onChanged,
+}: {
+  shipmentId: number;
+  readOnly: boolean;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
   const [detail, setDetail] = useState<ShipmentDetail | null>(null);
   const [carrierCode, setCarrierCode] = useState("");
   const [trackingNo, setTrackingNo] = useState("");
@@ -679,7 +702,7 @@ function ShipmentDetailModal({ shipmentId, onClose, onChanged }: { shipmentId: n
   }, [shipmentId]);
 
   const visit = detail?.returnMethod === "PICKUP";
-  const editable = detail?.status === "READY" && !visit;
+  const editable = !readOnly && detail?.status === "READY" && !visit;
 
   async function run(action: () => Promise<void>, done: string) {
     setBusy(true);
@@ -743,7 +766,7 @@ function ShipmentDetailModal({ shipmentId, onClose, onChanged }: { shipmentId: n
       )}
       {detail !== null && error !== "" && <div className="mt-3"><Notice tone="error">{error}</Notice></div>}
       {notice !== "" && <div className="mt-3"><Notice>{notice}</Notice></div>}
-      {detail !== null && (
+      {detail !== null && !readOnly && (
         <div className="mt-4 flex justify-end gap-2">
           {!visit && !editable && (
             <Button
