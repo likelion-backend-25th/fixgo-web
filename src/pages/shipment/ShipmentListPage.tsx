@@ -168,16 +168,29 @@ export function ShipmentListPage() {
     {
       key: "detail",
       header: "",
-      render: (row) => (
-        <Button
-          className="whitespace-nowrap"
-          variant={row.status === "배송 완료" || row.status === "방문 수령 완료" || row.status === "배송 중" ? "outline" : "primary"}
-          disabled={busyId === row.asReceptionId}
-          onClick={() => void runRowAction(row)}
-        >
-          {rowActionLabel(row)}
-        </Button>
-      ),
+      render: (row) => {
+        const shipmentId = row.shipmentId;
+        return (
+          <div className="flex justify-end gap-2 whitespace-nowrap">
+            {row.status === "배송 준비 완료" && shipmentId !== null && (
+              <Button
+                variant="outline"
+                disabled={busyId === row.asReceptionId}
+                onClick={() => setSelectedId(shipmentId)}
+              >
+                수정
+              </Button>
+            )}
+            <Button
+              variant={row.status === "배송 완료" || row.status === "방문 수령 완료" || row.status === "배송 중" ? "outline" : "primary"}
+              disabled={busyId === row.asReceptionId}
+              onClick={() => void runRowAction(row)}
+            >
+              {rowActionLabel(row)}
+            </Button>
+          </div>
+        );
+      },
     },
   ];
 
@@ -725,28 +738,26 @@ function ShipmentDetailModal({ shipmentId, onClose, onChanged }: { shipmentId: n
       {notice !== "" && <div className="mt-3"><Notice>{notice}</Notice></div>}
       {detail !== null && (
         <div className="mt-4 flex justify-end gap-2">
-          {!visit && (
-            <>
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => void run(() => refreshShipmentTracking(shipmentId), "배송 이력을 갱신했습니다.")}
-              >
-                배송 조회
-              </Button>
-              {editable && (
-                <Button
-                  variant="outline"
-                  disabled={busy || carrierCode === "" || trackingNo.trim() === ""}
-                  onClick={() => void run(
-                    () => updateShipmentTracking(shipmentId, carrierCode, trackingNo.trim()).then(() => undefined),
-                    "운송장번호를 수정했습니다.",
-                  )}
-                >
-                  운송장 수정
-                </Button>
+          {!visit && !editable && (
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => void run(() => refreshShipmentTracking(shipmentId), "배송 이력을 갱신했습니다.")}
+            >
+              배송 조회
+            </Button>
+          )}
+          {editable && (
+            <Button
+              variant="outline"
+              disabled={busy || carrierCode === "" || trackingNo.trim() === ""}
+              onClick={() => void run(
+                () => updateShipmentTracking(shipmentId, carrierCode, trackingNo.trim()).then(() => undefined),
+                "운송장번호를 수정했습니다.",
               )}
-            </>
+            >
+              운송장 수정
+            </Button>
           )}
           {visit ? (
             <Button
@@ -755,7 +766,7 @@ function ShipmentDetailModal({ shipmentId, onClose, onChanged }: { shipmentId: n
             >
               수령 완료
             </Button>
-          ) : (
+          ) : !editable && (
             <Button
               disabled={busy || detail.status !== "SHIPPING"}
               onClick={() => void run(() => markShipmentDelivered(shipmentId).then(() => undefined), "배송 완료로 처리했습니다.")}
