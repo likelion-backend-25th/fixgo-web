@@ -618,4 +618,10 @@ export async function fetchRepairPresetParts(
     );
   }
   
-
+// 담당 기사가 본인 수리 건을 완료한다. 재고 차감은 백엔드에서 같은 트랜잭션으로 처리한다.
+export async function completeMyRepair(repairId: number): Promise<void> {
+  const response = await apiFetch(`${API_BASE}/${repairId}/complete`, {
+    method: "PATCH",
+  });
+  await handleResponse<{ message: string }>(response, "수리를 완료하지 못했습니다.");
+}
