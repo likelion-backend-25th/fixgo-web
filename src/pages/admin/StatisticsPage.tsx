@@ -6,11 +6,12 @@ import {
   fetchMonthlyStatistics,
   fetchPaymentStatistics,
   fetchReceptionStatistics,
-  fetchShipmentStatistics,
+  fetchShipmentHistory,
   fetchTechnicianStatistics,
 } from "@/lib/statisticsApi";
 import { formatDurationMinutes, formatRate, statisticsSearch } from "@/lib/statisticsPeriod";
 import { won } from "@/lib/format";
+import { summarizeShipmentMethods } from "@/pages/admin/statistics/ShipmentStatsPage";
 import { MonthlyTrendChart } from "@/pages/admin/statistics/MonthlyTrendChart";
 import { PeriodFilter } from "@/pages/admin/statistics/PeriodFilter";
 import { useStatisticsPeriod } from "@/pages/admin/statistics/useStatisticsPeriod";
@@ -23,9 +24,10 @@ export function StatisticsPage() {
   const payment = useStatisticsResource(fetchPaymentStatistics, startDate, endDate, invalid);
   const technicians = useStatisticsResource(fetchTechnicianStatistics, startDate, endDate, invalid);
   const models = useStatisticsResource(fetchModelStatistics, startDate, endDate, invalid);
-  const shipments = useStatisticsResource(fetchShipmentStatistics, startDate, endDate, invalid);
+  const shipments = useStatisticsResource(fetchShipmentHistory, startDate, endDate, invalid);
   const pending = useStatisticsResource(loadLongPending, startDate, endDate, invalid);
   const monthly = useStatisticsResource(fetchMonthlyStatistics, startDate, endDate, invalid);
+  const shipmentSummary = shipments.data === null ? null : summarizeShipmentMethods(shipments.data);
   const query = statisticsSearch(startDate, endDate);
   const monthLabels = monthly.data?.map((point) => point.label) ?? [];
   const errors = [reception.error, payment.error, technicians.error, models.error, shipments.error, pending.error, monthly.error]
@@ -88,10 +90,16 @@ export function StatisticsPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Link to={`/admin/statistics/shipments?${query}`} className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm hover:border-blue-400">
           <p className="mb-3 text-sm font-medium">배송 현황</p>
+          <p className="mb-2 text-xs font-medium text-neutral-500">택배</p>
           <div className="grid grid-cols-3 gap-3 text-sm">
-            <Metric label="대기" value={countText(shipments.loading, shipments.data?.readyCount, "건")} />
-            <Metric label="배송중" value={countText(shipments.loading, shipments.data?.shippingCount, "건")} />
-            <Metric label="완료" value={countText(shipments.loading, shipments.data?.completedCount, "건")} />
+            <Metric label="대기" value={countText(shipments.loading, shipmentSummary?.delivery.ready, "건")} />
+            <Metric label="배송중" value={countText(shipments.loading, shipmentSummary?.delivery.shipping, "건")} />
+            <Metric label="완료" value={countText(shipments.loading, shipmentSummary?.delivery.completed, "건")} />
+          </div>
+          <p className="mb-2 mt-3 text-xs font-medium text-neutral-500">방문 수령</p>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <Metric label="대기" value={countText(shipments.loading, shipmentSummary?.pickup.ready, "건")} />
+            <Metric label="완료" value={countText(shipments.loading, shipmentSummary?.pickup.completed, "건")} />
           </div>
         </Link>
         <Link to={`/admin/statistics/repair_cost?${query}`} className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm hover:border-blue-400">
