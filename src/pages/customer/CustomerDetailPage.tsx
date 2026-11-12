@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
@@ -8,6 +8,7 @@ import { Notice, Panel } from "@/components/ui/Panel";
 import { Pagination } from "@/components/ui/Pagination";
 import { isAbortError } from "@/lib/apiClient";
 import { fetchReceptions, receptionStatusLabel } from "@/lib/asReceptionApi";
+import { loadDaumPostcode, selectedAddress } from "@/lib/daumPostcode";
 import { repairStatusLabel } from "@/lib/repair";
 import { fetchCustomer, updateCustomer } from "@/lib/customerApi";
 import { formatDate } from "@/lib/format";
@@ -27,6 +28,7 @@ export function CustomerDetailPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState(false);
+  const [postLookup, setPostLookup] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -158,8 +160,14 @@ export function CustomerDetailPage() {
       />
       <Pagination page={historyPage} pageCount={historyPageCount} onPageChange={setHistoryPage} />
 
-      {editing && (
-        <Modal title="고객 정보 수정" onClose={() => setEditing(false)}>
+      {editing && !postLookup && (
+        <Modal
+          title="고객 정보 수정"
+          onClose={() => {
+            setEditing(false);
+            setPostLookup(false);
+          }}
+        >
           <form
             className="space-y-3"
             onSubmit={(event) => {
@@ -177,6 +185,7 @@ export function CustomerDetailPage() {
                 .then((updated) => {
                   setCustomer(updated);
                   setEditing(false);
+                  setPostLookup(false);
                   setNotice("고객 정보를 수정했습니다.");
                 })
                 .catch((cause: unknown) => {
@@ -190,14 +199,105 @@ export function CustomerDetailPage() {
             <TextField label="이메일" value={email} onChange={setEmail} />
             <TextField label="우편번호" value={zipcode} onChange={setZipcode} />
             <TextField label="기본 주소" value={basicAddress} onChange={setBasicAddress} />
-            <TextField label="상세 주소" value={detailAddress} onChange={setDetailAddress} />
+            <div className="flex items-end gap-2">
+              <TextField
+                className="flex-1"
+                label="상세 주소"
+                value={detailAddress}
+                onChange={setDetailAddress}
+              />
+              <Button type="button" variant="outline" onClick={() => setPostLookup(true)}>
+                우편번호 찾기
+              </Button>
+            </div>
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setEditing(false)} disabled={saving}>취소</Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setEditing(false);
+                  setPostLookup(false);
+                }}
+                disabled={saving}
+              >
+                취소
+              </Button>
               <Button type="submit" disabled={saving}>저장</Button>
             </div>
           </form>
         </Modal>
       )}
+
+      {postLookup && (
+        <CustomerPostLookup
+          onClose={() => setPostLookup(false)}
+          onApply={({ postalCode, address }) => {
+            setZipcode(postalCode);
+            setBasicAddress(address);
+            setPostLookup(false);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function CustomerPostLookup({
+  onClose,
+  onApply,
+}: {
+  onClose: () => void;
+  onApply: (result: { postalCode: string; address: string }) => void;
+}) {
+  const frameRef = useRef<HTMLDivElement>(null);
+  const onApplyRef = useRef(onApply);
+  const onCloseRef = useRef(onClose);
+  const [lookupError, setLookupError] = useState("");
+  onApplyRef.current = onApply;
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (frame === null) {
+      return;
+    }
+    let cancelled = false;
+    loadDaumPostcode()
+      .then((Postcode) => {
+        if (cancelled) {
+          return;
+        }
+        frame.replaceChildren();
+        new Postcode({
+          width: "100%",
+          height: "100%",
+          oncomplete: (data) => {
+            onApplyRef.current({
+              postalCode: data.zonecode,
+              address: selectedAddress(data),
+            });
+            onCloseRef.current();
+          },
+        }).embed(frame);
+      })
+      .catch((cause: unknown) => {
+        if (!cancelled) {
+          setLookupError(
+            cause instanceof Error ? cause.message : "카카오 우편번호 서비스를 불러오지 못했습니다.",
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <Modal title="우편번호 찾기" wide onClose={onClose}>
+      {lookupError !== "" && <Notice tone="error">{lookupError}</Notice>}
+      <div ref={frameRef} className="h-[460px] overflow-hidden rounded-xl border border-neutral-200" />
+      <p className="mt-3 text-xs text-neutral-500">
+        주소를 고르면 우편번호와 기본 주소가 입력됩니다. 상세 주소는 직접 입력합니다.
+      </p>
+    </Modal>
   );
 }
