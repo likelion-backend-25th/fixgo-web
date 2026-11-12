@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
-import { TextField } from "@/components/ui/Field";
+import { SelectBox, TextField } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Panel";
 import { Pagination } from "@/components/ui/Pagination";
 import { SortMenu } from "@/components/ui/SortMenu";
@@ -19,20 +19,28 @@ import type { ProductCategory } from "@/types/asReception";
 import type { ModelStatistics } from "@/types/statistics";
 
 type ModelSortKey = "model" | "received" | "done" | "doing";
+type GroupFilter = "ALL" | ProductCategory;
+
+const groupFilters: { value: GroupFilter; label: string }[] = [
+  { value: "ALL", label: "제품군 전체" },
+  { value: "LAPTOP", label: "노트북" },
+  { value: "PHONE", label: "스마트폰" },
+];
 
 export function ModelStatsPage() {
   const { startDate, endDate, invalid } = useStatisticsPeriod();
   const { data, loading, error } = useStatisticsResource(fetchModelStatistics, startDate, endDate, invalid);
   const [keyword, setKeyword] = useState("");
   const [appliedKeyword, setAppliedKeyword] = useState("");
+  const [group, setGroup] = useState<GroupFilter>("ALL");
   const [sortKey, setSortKey] = useState<ModelSortKey | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const query = statisticsSearch(startDate, endDate);
   const rows = useMemo(() => {
-    const matched = (data ?? []).filter((row) => includesText(row.modelName, appliedKeyword));
+    const matched = (data ?? []).filter((row) => includesText(row.modelName, appliedKeyword) && matchesGroup(row, group));
     return sortModels(matched, sortKey, sortDir);
-  }, [appliedKeyword, data, sortDir, sortKey]);
-  const list = useStatisticsPage(rows, `${appliedKeyword}|${sortKey ?? ""}|${sortDir}|${startDate}|${endDate}`);
+  }, [appliedKeyword, data, group, sortDir, sortKey]);
+  const list = useStatisticsPage(rows, `${appliedKeyword}|${group}|${sortKey ?? ""}|${sortDir}|${startDate}|${endDate}`);
 
   function toggleSort(key: ModelSortKey) {
     if (sortKey === key) {
@@ -56,6 +64,7 @@ export function ModelStatsPage() {
       >
         <TextField value={keyword} onChange={setKeyword} placeholder="모델명" className="w-40" />
         <Button type="submit">검색</Button>
+        <SelectBox value={group} onChange={(value) => setGroup(readGroupFilter(value))} options={groupFilters} />
       </form>
       {error !== "" && <Notice tone="error">{error}</Notice>}
       <DataTable
@@ -101,6 +110,17 @@ export function ModelStatsPage() {
       <Pagination page={list.page} pageCount={list.pageCount} onPageChange={list.setPage} />
     </div>
   );
+}
+
+function matchesGroup(row: ModelStatistics, group: GroupFilter): boolean {
+  return group === "ALL" || row.productGroup === group;
+}
+
+function readGroupFilter(value: string): GroupFilter {
+  if (value === "LAPTOP" || value === "PHONE") {
+    return value;
+  }
+  return "ALL";
 }
 
 function sortModels(rows: ModelStatistics[], sortKey: ModelSortKey | null, sortDir: "asc" | "desc"): ModelStatistics[] {

@@ -68,17 +68,19 @@ export function DepositWaitingPage() {
     setSortDir("asc");
   }
 
-  function search() {
-    setAppliedKeyword(keyword);
-  }
-
   return (
     <div>
       <StatisticsBackLink />
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <TextField value={keyword} onChange={setKeyword} placeholder="고객명" className="w-40" />
-        <Button onClick={search}>검색</Button>
-      </div>
+      <form
+        className="mb-4 flex flex-wrap items-center gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setAppliedKeyword(keyword);
+        }}
+      >
+        <TextField value={keyword} onChange={setKeyword} placeholder="접수번호, 고객명" className="w-48" />
+        <Button type="submit">검색</Button>
+      </form>
       {error !== "" && <Notice tone="error">{error}</Notice>}
       <p className="mb-3 text-sm text-neutral-700">
         대기 {loading ? "조회 중" : `${filtered.length.toLocaleString("ko-KR")}건`} 합계 {loading ? "조회 중" : won(total)}
@@ -129,7 +131,7 @@ function column(
 }
 
 function filterDeposits(rows: PaymentListItem[], keyword: string): PaymentListItem[] {
-  return rows.filter((row) => includesText(row.customerName, keyword));
+  return rows.filter((row) => includesText(row.asReceptionNumber, keyword) || includesText(row.customerName, keyword));
 }
 
 function elapsedDays(billedAt: string | null): number | null {
