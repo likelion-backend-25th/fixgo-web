@@ -3,7 +3,7 @@ import { isIsoDate, matchStatisticsPreset, periodForPreset } from "@/lib/statist
 
 export function useStatisticsPeriod() {
   const [params, setParams] = useSearchParams();
-  const fallback = periodForPreset("month");
+  const fallback = periodForPreset("all");
   const startParam = params.get("startDate");
   const endParam = params.get("endDate");
   const startDate = startParam !== null && isIsoDate(startParam) ? startParam : fallback.startDate;

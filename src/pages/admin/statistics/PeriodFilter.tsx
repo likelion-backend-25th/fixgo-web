@@ -11,10 +11,13 @@ import {
 } from "@/lib/statisticsPeriod";
 import { useStatisticsPeriod } from "@/pages/admin/statistics/useStatisticsPeriod";
 
-const presetOptions = STATISTICS_PRESETS.map((preset) => ({
-  value: preset,
-  label: STATISTICS_PRESET_LABEL[preset],
-}));
+const presetOptions = [
+  ...STATISTICS_PRESETS.map((preset) => ({
+    value: preset,
+    label: STATISTICS_PRESET_LABEL[preset],
+  })),
+  { value: "custom", label: "직접 입력" },
+];
 
 export function PeriodFilter() {
   const { startDate, endDate, preset, apply } = useStatisticsPeriod();
@@ -30,6 +33,10 @@ export function PeriodFilter() {
   }, [endDate, preset, startDate]);
 
   function choosePreset(value: string) {
+    if (value === "custom") {
+      setSelected("custom");
+      return;
+    }
     if (!isStatisticsPreset(value)) {
       return;
     }
@@ -42,17 +49,16 @@ export function PeriodFilter() {
 
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2">
-      <SelectBox
-        value={selected === "custom" ? "" : selected}
-        onChange={choosePreset}
-        options={selected === "custom" ? [{ value: "", label: "선택" }, ...presetOptions] : presetOptions}
-      />
-      <span className="ml-1 text-sm text-neutral-500">직접 입력</span>
-      <TextField type="date" value={start} onChange={(value) => { setSelected("custom"); setStart(value); }} className="w-40" />
-      <span className="text-sm text-neutral-500">~</span>
-      <TextField type="date" value={end} onChange={(value) => { setSelected("custom"); setEnd(value); }} className="w-40" />
-      <Button disabled={invalid} onClick={() => apply(start, end)}>조회</Button>
-      {start > end && <span className="text-sm text-red-600">시작일은 종료일보다 늦을 수 없습니다.</span>}
+      <SelectBox value={selected} onChange={choosePreset} options={presetOptions} />
+      {selected === "custom" && (
+        <>
+          <TextField type="date" value={start} onChange={setStart} className="w-40" />
+          <span className="text-sm text-neutral-500">~</span>
+          <TextField type="date" value={end} onChange={setEnd} className="w-40" />
+          <Button disabled={invalid} onClick={() => apply(start, end)}>조회</Button>
+          {start > end && <span className="text-sm text-red-600">시작일은 종료일보다 늦을 수 없습니다.</span>}
+        </>
+      )}
     </div>
   );
 }

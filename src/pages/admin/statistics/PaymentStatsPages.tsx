@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
-import { TextField } from "@/components/ui/Field";
+import { SelectBox, TextField } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Panel";
 import { Pagination } from "@/components/ui/Pagination";
 import { SortMenu } from "@/components/ui/SortMenu";
@@ -9,7 +10,8 @@ import { isAbortError } from "@/lib/apiClient";
 import { formatDate, includesText, won } from "@/lib/format";
 import { compareText } from "@/lib/guards";
 import { fetchDepositWaiting, paymentBillStatusLabel, type PaymentListItem } from "@/lib/paymentApi";
-import { fetchPaymentStatistics } from "@/lib/statisticsApi";
+import { fetchPaymentHistory, fetchPaymentStatistics } from "@/lib/statisticsApi";
+import type { PaymentHistoryItem, PaymentHistoryStatus } from "@/types/statistics";
 import { PeriodFilter, StatisticsBackLink } from "@/pages/admin/statistics/PeriodFilter";
 import { useStatisticsPage } from "@/pages/admin/statistics/useStatisticsPage";
 import { useStatisticsPeriod } from "@/pages/admin/statistics/useStatisticsPeriod";
@@ -230,8 +232,193 @@ export function RepairCostPage() {
         <SummaryCard label="순수납" value={payment.loading ? "조회 중" : money(payment.data?.netCollectedAmount)} hint="수납에서 환불을 뺀 금액" />
         <SummaryCard label="현재 미입금" value={payment.loading ? "조회 중" : count(payment.data?.unpaidCount)} hint="청구서 기준" />
       </div>
+      <PaymentHistorySection />
     </div>
   );
+}
+
+type HistoryFilter = "ALL" | PaymentHistoryStatus;
+type HistorySortKey = "number" | "customer" | "amount" | "status" | "date";
+
+const historyFilters: { value: HistoryFilter; label: string }[] = [
+  { value: "ALL", label: "전체" },
+  { value: "PAID", label: "입금" },
+  { value: "UNPAID", label: "미입금" },
+  { value: "REFUNDED", label: "환불" },
+];
+
+function PaymentHistorySection() {
+  const navigate = useNavigate();
+  const { startDate, endDate, invalid } = useStatisticsPeriod();
+  const history = useStatisticsResource(fetchPaymentHistory, startDate, endDate, invalid);
+  const [status, setStatus] = useState<HistoryFilter>("ALL");
+  const [keyword, setKeyword] = useState("");
+  const [appliedKeyword, setAppliedKeyword] = useState("");
+  const [sortKey, setSortKey] = useState<HistorySortKey | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const rows = useMemo(
+    () => sortHistory(filterHistory(history.data ?? [], status, appliedKeyword), sortKey, sortDir),
+    [appliedKeyword, history.data, sortDir, sortKey, status],
+  );
+  const list = useStatisticsPage(rows, `${startDate}|${endDate}|${status}|${appliedKeyword}|${sortKey ?? ""}|${sortDir}`);
+
+  function toggleSort(key: HistorySortKey) {
+    if (sortKey === key) {
+      setSortDir((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDir("asc");
+  }
+  return (
+    <section className="mt-6">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-base font-semibold text-neutral-900">결제 내역</h2>
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setAppliedKeyword(keyword);
+          }}
+        >
+          <TextField value={keyword} onChange={setKeyword} placeholder="접수번호, 고객명" className="w-48" />
+          <Button type="submit">검색</Button>
+          <SelectBox value={status} onChange={(value) => setStatus(readHistoryFilter(value))} options={historyFilters} />
+        </form>
+      </div>
+      {history.error !== "" && <Notice tone="error">{history.error}</Notice>}
+      <DataTable
+        columns={historyColumns(sortKey, sortDir, toggleSort)}
+        rows={list.visible}
+        rowKey={(row) => `${row.status}-${row.billId}-${row.occurredAt ?? ""}`}
+        onRowClick={(row) => navigate(`/payment/${row.billId}`)}
+        emptyText={historyEmptyText(history.loading, history.error)}
+      />
+      <Pagination page={list.page} pageCount={list.pageCount} onPageChange={list.setPage} />
+    </section>
+  );
+}
+
+function historyColumns(
+  sortKey: HistorySortKey | null,
+  sortDir: "asc" | "desc",
+  toggleSort: (key: HistorySortKey) => void,
+): Column<PaymentHistoryItem>[] {
+  return [
+    historyColumn("number", "접수번호", sortKey, sortDir, toggleSort, (row) => row.receptionNumber),
+    historyColumn("customer", "고객", sortKey, sortDir, toggleSort, (row) => row.customerName),
+    historyColumn("amount", "금액", sortKey, sortDir, toggleSort, (row) => won(row.amount)),
+    historyColumn("status", "상태", sortKey, sortDir, toggleSort, (row) => (
+      <span className={historyStatusClass(row.status)}>{historyStatusLabel(row.status)}</span>
+    )),
+    historyColumn("date", "일자", sortKey, sortDir, toggleSort, (row) => formatDate(row.occurredAt)),
+  ];
+}
+
+function historyColumn(
+  key: HistorySortKey,
+  label: string,
+  sortKey: HistorySortKey | null,
+  sortDir: "asc" | "desc",
+  toggleSort: (key: HistorySortKey) => void,
+  render: (row: PaymentHistoryItem) => ReactNode,
+): Column<PaymentHistoryItem> {
+  return {
+    key,
+    header: <SortMenu label={label} active={sortKey === key} direction={sortDir} onToggle={() => toggleSort(key)} />,
+    render,
+  };
+}
+
+function sortHistory(
+  rows: PaymentHistoryItem[],
+  sortKey: HistorySortKey | null,
+  sortDir: "asc" | "desc",
+): PaymentHistoryItem[] {
+  if (sortKey === null) {
+    return rows;
+  }
+  const direction = sortDir === "asc" ? 1 : -1;
+  return [...rows].sort((left, right) => compareHistory(left, right, sortKey, direction));
+}
+
+function compareHistory(
+  left: PaymentHistoryItem,
+  right: PaymentHistoryItem,
+  sortKey: HistorySortKey,
+  direction: number,
+): number {
+  if (sortKey === "number") {
+    return compareText(left.receptionNumber, right.receptionNumber) * direction;
+  }
+  if (sortKey === "customer") {
+    return compareText(left.customerName, right.customerName) * direction;
+  }
+  if (sortKey === "amount") {
+    return (left.amount - right.amount) * direction;
+  }
+  if (sortKey === "status") {
+    return compareText(historyStatusLabel(left.status), historyStatusLabel(right.status)) * direction;
+  }
+  return compareOptionalText(left.occurredAt, right.occurredAt, direction);
+}
+
+function compareOptionalText(left: string | null, right: string | null, direction: number): number {
+  if (left === null && right === null) {
+    return 0;
+  }
+  if (left === null) {
+    return 1;
+  }
+  if (right === null) {
+    return -1;
+  }
+  return compareText(left, right) * direction;
+}
+
+function historyEmptyText(loading: boolean, error: string): string {
+  if (loading) {
+    return "조회 중";
+  }
+  if (error !== "") {
+    return "결제 내역을 불러오지 못했습니다.";
+  }
+  return "해당 기간의 결제 내역이 없습니다.";
+}
+
+function filterHistory(rows: PaymentHistoryItem[], status: HistoryFilter, keyword: string): PaymentHistoryItem[] {
+  return rows.filter((row) => {
+    const statusMatched = status === "ALL" || row.status === status;
+    const keywordMatched = includesText(row.receptionNumber, keyword) || includesText(row.customerName, keyword);
+    return statusMatched && keywordMatched;
+  });
+}
+
+function readHistoryFilter(value: string): HistoryFilter {
+  if (value === "PAID" || value === "UNPAID" || value === "REFUNDED") {
+    return value;
+  }
+  return "ALL";
+}
+
+function historyStatusLabel(status: PaymentHistoryStatus): string {
+  if (status === "PAID") {
+    return "입금";
+  }
+  if (status === "UNPAID") {
+    return "미입금";
+  }
+  return "환불";
+}
+
+function historyStatusClass(status: PaymentHistoryStatus): string {
+  if (status === "UNPAID") {
+    return "text-orange-500";
+  }
+  if (status === "PAID") {
+    return "text-blue-600";
+  }
+  return "text-neutral-500";
 }
 
 function usePaymentSummary() {
