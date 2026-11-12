@@ -451,7 +451,6 @@ function CreateShipmentModal({
           <FieldLabel>접수번호</FieldLabel>
           <div className="flex items-center gap-2">
             <TextField value={asId} onChange={setAsId} placeholder="AS-2026-0000" readOnly className="min-w-0 flex-1" />
-            <TextField value={lookupQuery} onChange={setLookupQuery} placeholder="접수번호, 고객명" className="w-36" />
             <Button variant="outline" className="shrink-0" onClick={() => setPicking(true)}>검색</Button>
           </div>
         </div>
@@ -537,11 +536,44 @@ function ReceptionPickModal({
   const [selected, setSelected] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [applying, setApplying] = useState(false);
+
+  function applyRow(row: ReceptionPick) {
+    if (applying) {
+      return;
+    }
+    setSelected(row.id);
+    const controller = new AbortController();
+    setApplying(true);
+    fetchReception(row.id, controller.signal)
+      .then((detail) => {
+        onApply({
+          id: detail.id,
+          receptionNumber: detail.receptionNumber,
+          returnMethod: detail.returnMethod,
+          receiver: detail.customer.name,
+          phone: detail.customer.phone,
+          address: detail.customer.basicAddress ?? "",
+          addressDetail: detail.customer.detailAddress ?? "",
+        });
+      })
+      .catch((caught: unknown) => {
+        if (!isAbortError(caught)) {
+          setError(caught instanceof Error ? caught.message : "접수 정보를 불러오지 못했습니다.");
+        }
+      })
+      .finally(() => setApplying(false));
+  }
   const columns: Column<ReceptionPick>[] = [
-    { key: "id", header: "접수번호", render: (row) => row.receptionNumber },
-    { key: "customer", header: "고객명", render: (row) => row.customerName },
-    { key: "phone", header: "연락처", render: (row) => row.phone },
-    { key: "status", header: "상태", render: (row) => receptionStatusLabel(row.status) },
+    { key: "id", header: "접수번호", className: "w-[1%] whitespace-nowrap pl-[38.5px]", render: (row) => row.receptionNumber },
+    // 접수번호 왼쪽·상태 오른쪽은 고정. 가장 긴 값 기준으로 세 간격이 같도록 가운데 열만 밀어 둔다.
+    { key: "customer", header: "고객명", className: "w-[1%] whitespace-nowrap pl-[41.37px]", render: (row) => row.customerName },
+    { key: "phone", header: "연락처", className: "w-[1%] whitespace-nowrap pl-[41.36px]", render: (row) => row.phone },
+    {
+      key: "status",
+      header: <span className="inline-block w-[52px] text-left">상태</span>,
+      className: "whitespace-nowrap text-right pr-[38.5px]",
+      render: (row) => <span className="inline-block w-[52px] text-left">{receptionStatusLabel(row.status)}</span>,
+    },
   ];
 
   useEffect(() => {
@@ -572,51 +604,31 @@ function ReceptionPickModal({
   }, [query]);
 
   return (
-    <Modal title="배송 대기 A/S" wide onClose={onClose}>
-      <TextField value={query} onChange={onQueryChange} placeholder="접수번호, 고객명 검색" className="mb-3 w-72" />
+    <Modal title="배송 대기 A/S" className="max-w-[600px]" onClose={onClose}>
+      <TextField value={query} onChange={onQueryChange} placeholder="접수번호, 고객명 검색" className="mb-3 w-full" />
       {error !== "" && <div className="mb-3"><Notice tone="error">{error}</Notice></div>}
-      <DataTable
-        columns={columns}
-        rows={rows}
-        rowKey={(row) => String(row.id)}
-        selectedKey={selected === null ? undefined : String(selected)}
-        onRowClick={(row) => setSelected(row.id)}
-        emptyText="배송 대기 접수가 없습니다."
-      />
-      <div className="mt-4 flex justify-end gap-2">
-        <Button variant="ghost" onClick={onClose}>취소</Button>
+      <div className="mb-3 flex justify-end">
         <Button
           disabled={applying}
           onClick={() => {
             const row = rows.find((item) => item.id === selected);
-            if (row === undefined) {
-              return;
+            if (row !== undefined) {
+              applyRow(row);
             }
-            const controller = new AbortController();
-            setApplying(true);
-            fetchReception(row.id, controller.signal)
-              .then((detail) => {
-                onApply({
-                  id: detail.id,
-                  receptionNumber: detail.receptionNumber,
-                  returnMethod: detail.returnMethod,
-                  receiver: detail.customer.name,
-                  phone: detail.customer.phone,
-                  address: detail.customer.basicAddress ?? "",
-                  addressDetail: detail.customer.detailAddress ?? "",
-                });
-              })
-              .catch((caught: unknown) => {
-                if (!isAbortError(caught)) {
-                  setError(caught instanceof Error ? caught.message : "접수 정보를 불러오지 못했습니다.");
-                }
-              })
-              .finally(() => setApplying(false));
           }}
         >
           적용
         </Button>
       </div>
+      <DataTable
+        compact
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => String(row.id)}
+        selectedKey={selected === null ? undefined : String(selected)}
+        onRowClick={applyRow}
+        emptyText="배송 대기 접수가 없습니다."
+      />
     </Modal>
   );
 }
