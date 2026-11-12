@@ -11,6 +11,7 @@ import { cn } from "@/lib/cn";
 import {
   createPickup,
   createShipment,
+  fetchShipmentByReception,
   fetchShipmentDetail,
   fetchShipmentManagement,
   getShipmentByReception,
@@ -175,6 +176,7 @@ export function ShipmentListPage() {
             {row.status === "배송 준비 완료" && shipmentId !== null && (
               <Button
                 variant="outline"
+                className="whitespace-nowrap"
                 disabled={busyId === row.asReceptionId}
                 onClick={() => setSelectedId(shipmentId)}
               >
@@ -592,18 +594,23 @@ function ReceptionPickModal({
   useEffect(() => {
     const controller = new AbortController();
     const request = { keyword: query.trim(), technicianId: null, page: 1, size: 50, sort: "createdAt,desc" } as const;
-    Promise.all([
-      fetchReceptions({ ...request, status: "AWAITING_SHIPMENT" }, controller.signal),
-      fetchReceptions({ ...request, status: "AWAITING_PICKUP" }, controller.signal),
-    ])
-      .then(([delivery, pickup]) => {
-        setRows([...delivery.items, ...pickup.items].map((item) => ({
+    // 접수 상태가 배송 대기여도 배송이 이미 있으면 등록 대상이 아니다.
+    fetchReceptions({ ...request, status: "AWAITING_SHIPMENT" }, controller.signal)
+      .then(async (delivery) => {
+        const available = await Promise.all(delivery.items.map(async (item) => {
+          const shipment = await fetchShipmentByReception(item.id, controller.signal);
+          return shipment === null ? item : null;
+        }));
+        if (controller.signal.aborted) {
+          return;
+        }
+        setRows(available.flatMap((item) => item === null ? [] : [{
           id: item.id,
           receptionNumber: item.receptionNumber,
           customerName: item.customerName,
           phone: item.customerPhone,
           status: item.receptionStatus,
-        })));
+        }]));
         setError("");
       })
       .catch((caught: unknown) => {

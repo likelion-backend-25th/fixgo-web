@@ -51,6 +51,7 @@ export function DataTable<T>({
 }: DataTableProps<T>) {
   return (
     <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
+      {/* 좁은 모달에서는 표 최소 너비를 빼야 열이 칸에 맞게 줄어든다. */}
       <table className={cn("border-collapse text-sm", compact ? "w-full" : "w-full min-w-[720px]")}>
         <thead className="bg-neutral-50 text-left text-xs font-medium text-neutral-500">
           <tr>
