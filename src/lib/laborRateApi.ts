@@ -12,7 +12,7 @@ export interface LaborRateItem {
 }
 
 export async function fetchLaborRates(signal?: AbortSignal): Promise<LaborRateItem[]> {
-  const response = await apiFetch("/api/v1/admin/labor-rates", { signal });
+  const response = await apiFetch("/api/v1/labor-rates", { signal });
   const body = await readApiJson(response, "공임비·점검비 목록을 불러오지 못했습니다.");
   if (!Array.isArray(body)) {
     throw new Error("공임비·점검비 목록 응답이 올바르지 않습니다.");
