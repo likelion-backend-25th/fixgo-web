@@ -480,8 +480,8 @@ export async function changeReceptionStatus(
   }
 }
 
+// 접수 고객과 무관하게 등록된 제품 전체를 시리얼로 찾는다.
 export async function searchProductsBySerial(
-  customerId: number,
   serialNumber: string,
   signal: AbortSignal,
 ): Promise<ProductSummary[]> {
@@ -491,7 +491,8 @@ export async function searchProductsBySerial(
     return [];
   }
 
-  const response = await apiFetch(`/api/v1/products/by-customer/${customerId}`, { signal });
+  const params = new URLSearchParams({ serialNumber: serial });
+  const response = await apiFetch(`/api/v1/products?${params.toString()}`, { signal });
 
   if (!response.ok) {
     throw new Error(
@@ -505,8 +506,7 @@ export async function searchProductsBySerial(
     throw new Error("제품 조회 응답이 올바르지 않습니다.");
   }
 
-  const keyword = serial.toLowerCase();
-  return body.map(parseProductSummary).filter((product) => product.serialNumber.toLowerCase().includes(keyword));
+  return body.map(parseProductSummary);
 }
 
 export async function fetchProduct(

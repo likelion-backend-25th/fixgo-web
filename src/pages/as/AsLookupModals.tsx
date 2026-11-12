@@ -30,12 +30,11 @@ interface ApplyPatch {
 
 interface AsLookupModalsProps {
   kind: LookupKind;
-  customerId: number | null;
   onClose: () => void;
   onApply: (patch: ApplyPatch) => void;
 }
 
-export function AsLookupModals({ kind, customerId, onClose, onApply }: AsLookupModalsProps) {
+export function AsLookupModals({ kind, onClose, onApply }: AsLookupModalsProps) {
   if (kind === null) {
     return null;
   }
@@ -43,7 +42,7 @@ export function AsLookupModals({ kind, customerId, onClose, onApply }: AsLookupM
     return <CustomerLookup onClose={onClose} onApply={onApply} />;
   }
   if (kind === "serial") {
-    return customerId === null ? null : <SerialLookup customerId={customerId} onClose={onClose} onApply={onApply} />;
+    return <SerialLookup onClose={onClose} onApply={onApply} />;
   }
   if (kind === "tech") {
     return <TechnicianLookup onClose={onClose} onApply={onApply} />;
@@ -138,7 +137,7 @@ function CustomerLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClose
   );
 }
 
-function SerialLookup({ customerId, onClose, onApply }: Pick<AsLookupModalsProps, "onClose" | "onApply"> & { customerId: number }) {
+function SerialLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClose" | "onApply">) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<number | null>(null);
   const [rows, setRows] = useState<ProductSummary[]>([]);
@@ -162,7 +161,7 @@ function SerialLookup({ customerId, onClose, onApply }: Pick<AsLookupModalsProps
     const timer = window.setTimeout(() => {
       setLoading(true);
       setError("");
-      searchProductsBySerial(customerId, serial, controller.signal)
+      searchProductsBySerial(serial, controller.signal)
         .then((items) => {
           if (!controller.signal.aborted) {
             setRows(items);
@@ -185,7 +184,7 @@ function SerialLookup({ customerId, onClose, onApply }: Pick<AsLookupModalsProps
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [customerId, query]);
+  }, [query]);
 
   return (
     <Modal title="시리얼번호 조회" wide onClose={onClose}>
@@ -197,7 +196,7 @@ function SerialLookup({ customerId, onClose, onApply }: Pick<AsLookupModalsProps
         rowKey={(row) => String(row.id)}
         selectedKey={selected === null ? undefined : String(selected)}
         onRowClick={(row) => setSelected(row.id)}
-        emptyText={query.trim() === "" ? "시리얼번호 일부를 입력해 주세요." : loading ? "제품을 조회하는 중입니다." : "이 고객의 보유 제품 중 조회 결과가 없습니다."}
+        emptyText={query.trim() === "" ? "시리얼번호 일부를 입력해 주세요." : loading ? "제품을 조회하는 중입니다." : "조회 결과가 없습니다."}
       />
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>취소</Button>

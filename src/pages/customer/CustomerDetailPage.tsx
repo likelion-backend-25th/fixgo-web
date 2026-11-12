@@ -10,9 +10,8 @@ import { isAbortError } from "@/lib/apiClient";
 import { fetchReceptions, receptionStatusLabel } from "@/lib/asReceptionApi";
 import { repairStatusLabel } from "@/lib/repair";
 import { fetchCustomer, updateCustomer } from "@/lib/customerApi";
-import { categoryLabel, listProductsByCustomer } from "@/lib/productApi";
 import { formatDate } from "@/lib/format";
-import type { AsReceptionListItem, ProductSummary } from "@/types/asReception";
+import type { AsReceptionListItem } from "@/types/asReception";
 import type { CustomerDetail } from "@/types/customer";
 
 const HISTORY_PAGE_SIZE = 10;
@@ -21,7 +20,6 @@ export function CustomerDetailPage() {
   const { customerId } = useParams();
   const id = Number(customerId);
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
-  const [products, setProducts] = useState<ProductSummary[]>([]);
   const [history, setHistory] = useState<AsReceptionListItem[]>([]);
   const [historyPage, setHistoryPage] = useState(1);
   const [historyPageCount, setHistoryPageCount] = useState(1);
@@ -48,14 +46,10 @@ export function CustomerDetailPage() {
     const controller = new AbortController();
     setLoading(true);
     setError("");
-    Promise.all([
-      fetchCustomer(id, controller.signal),
-      listProductsByCustomer(id, controller.signal),
-    ])
-      .then(([detail, ownedProducts]) => {
+    fetchCustomer(id, controller.signal)
+      .then((detail) => {
         if (controller.signal.aborted) return;
         setCustomer(detail);
-        setProducts(ownedProducts);
         setName(detail.name);
         setPhone(detail.phone);
         setEmail(detail.email);
@@ -118,13 +112,6 @@ export function CustomerDetailPage() {
     .filter((part) => part !== null && part !== "")
     .join(" ");
 
-  const productColumns: Column<ProductSummary>[] = [
-    { key: "model", header: "모델명", render: (row) => row.modelName },
-    { key: "serial", header: "시리얼번호", render: (row) => row.serialNumber },
-    { key: "group", header: "제품군", render: (row) => categoryLabel(row.category) },
-    { key: "purchased", header: "구매일", render: (row) => formatDate(row.purchasedAt) },
-  ];
-
   const historyColumns: Column<AsReceptionListItem>[] = [
     {
       key: "id",
@@ -161,14 +148,6 @@ export function CustomerDetailPage() {
           <p>주소 {address === "" ? "-" : address}</p>
         </div>
       </Panel>
-
-      <h2 className="text-sm font-semibold">보유 제품</h2>
-      <DataTable
-        columns={productColumns}
-        rows={products}
-        rowKey={(row) => String(row.id)}
-        emptyText="등록된 보유 제품이 없습니다."
-      />
 
       <h2 className="text-sm font-semibold">이전 수리 내역</h2>
       <DataTable
