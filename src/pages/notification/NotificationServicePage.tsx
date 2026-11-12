@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { TextArea, TextField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
@@ -198,9 +198,9 @@ export function NotificationServicePage() {
       {statsError !== "" && <Notice tone="error">{statsError}</Notice>}
       {notice !== "" && <Notice>{notice}</Notice>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_28rem]">
+      <div className="grid items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_28rem]">
         <section className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-4 text-sm font-semibold">이메일 작성</h2>
+          <h2 className="section-title mb-4">이메일 작성</h2>
           <div className="space-y-4">
             <TextField label="수신 이메일" value={email} onChange={setEmail} />
             <TextField label="제목" value={subject} onChange={setSubject} />
@@ -210,27 +210,21 @@ export function NotificationServicePage() {
             <Button disabled={sending} onClick={() => void send()}>발송</Button>
           </div>
         </section>
-        <section className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm">
+        <section className="flex flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm">
           <div className="flex items-center justify-end border-b border-neutral-100 px-4 py-3">
             <Button onClick={() => setPresetOpen(true)}>등록</Button>
           </div>
-          {presetsLoading && <p className="px-4 py-6 text-sm text-neutral-500">프리셋을 불러오는 중입니다.</p>}
-          {!presetsLoading && templates.length === 0 && (
-            <p className="px-4 py-6 text-sm text-neutral-500">등록된 프리셋이 없습니다.</p>
-          )}
-          <ul>
+          <ul className="email-preset-list min-h-0 flex-1">
+            {presetsLoading && <li className="email-preset-item text-sm text-neutral-500">프리셋을 불러오는 중입니다.</li>}
+            {!presetsLoading && templates.length === 0 && (
+              <li className="email-preset-item text-sm text-neutral-500">등록된 프리셋이 없습니다.</li>
+            )}
             {templates.map((template) => {
               const active = selectedId === template.id;
               return (
-                <li
-                  key={template.id}
-                  className={cn(
-                    "flex items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3 last:border-b-0",
-                    active && "bg-blue-50",
-                  )}
-                >
-                  <span className={cn("min-w-0 text-sm", active && "font-medium text-blue-700")}>{template.title}</span>
-                  <div className="flex shrink-0 items-center gap-2">
+                <li key={template.id} className={cn("email-preset-item", active && "is-selected")}>
+                  <span className={cn("min-w-0 truncate text-sm", active && "font-medium text-blue-600")}>{template.title}</span>
+                  <div className="flex shrink-0 items-center gap-1">
                     <Button
                       variant="outline"
                       onClick={() => {
@@ -241,8 +235,11 @@ export function NotificationServicePage() {
                     >
                       적용
                     </Button>
-                    <Button variant="outline" onClick={() => setEditingId(template.id)}>수정</Button>
-                    <Button variant="outline" disabled={deletingId === template.id} onClick={() => void deleteTemplate(template.id)}>삭제</Button>
+                    <PresetMoreMenu
+                      deleting={deletingId === template.id}
+                      onEdit={() => setEditingId(template.id)}
+                      onDelete={() => void deleteTemplate(template.id)}
+                    />
                   </div>
                 </li>
               );
@@ -260,6 +257,93 @@ export function NotificationServicePage() {
         />
       )}
     </div>
+  );
+}
+
+function PresetMoreMenu({
+  deleting,
+  onEdit,
+  onDelete,
+}: {
+  deleting: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0, upward: false });
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    function close(event: Event) {
+      const target = event.target;
+      if (target instanceof Node && (buttonRef.current?.contains(target) || menuRef.current?.contains(target))) {
+        return;
+      }
+      setOpen(false);
+    }
+    document.addEventListener("mousedown", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [open]);
+
+  function toggle() {
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (rect !== undefined) {
+      const upward = rect.bottom + 88 > window.innerHeight;
+      setPosition({ top: upward ? rect.top - 4 : rect.bottom + 4, left: rect.right, upward });
+    }
+    setOpen((current) => !current);
+  }
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-label="더보기"
+        aria-expanded={open}
+        className="grid size-8 place-items-center rounded-lg text-lg leading-none text-neutral-500 hover:bg-neutral-100"
+        onClick={toggle}
+      >
+        ⋯
+      </button>
+      {open && (
+        <div
+          ref={menuRef}
+          className="fixed z-50 w-28 overflow-hidden rounded-lg border border-neutral-200 bg-white py-1 shadow-md"
+          style={{ top: position.top, left: position.left, transform: position.upward ? "translate(-100%, -100%)" : "translateX(-100%)" }}
+        >
+          <button
+            type="button"
+            className="block w-full px-3 py-2 text-left text-sm text-neutral-800 hover:bg-neutral-50"
+            onClick={() => {
+              setOpen(false);
+              onEdit();
+            }}
+          >
+            수정
+          </button>
+          <button
+            type="button"
+            disabled={deleting}
+            className="block w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+            onClick={() => {
+              setOpen(false);
+              onDelete();
+            }}
+          >
+            삭제
+          </button>
+        </div>
+      )}
+    </>
   );
 }
 

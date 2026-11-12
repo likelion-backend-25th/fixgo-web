@@ -32,7 +32,7 @@ export function CostListPage() {
         });
         return () => controller.abort();
     }, []);
-    return (_jsxs("div", { className: "space-y-8", children: [error !== "" && _jsx(Notice, { tone: "error", children: error }), _jsx(RateTable, { title: "\uACF5\uC784\uBE44", rateType: "LABOR_RATE", rows: rows, loading: loading }), _jsx(RateTable, { title: "\uC810\uAC80\uBE44", rateType: "INSPECTION_COST", rows: rows, loading: loading })] }));
+    return (_jsxs("div", { className: "space-y-4", children: [error !== "" && _jsx(Notice, { tone: "error", children: error }), _jsx(RateTable, { title: "\uACF5\uC784\uBE44", rateType: "LABOR_RATE", rows: rows, loading: loading }), _jsx(RateTable, { title: "\uC810\uAC80\uBE44", rateType: "INSPECTION_COST", rows: rows, loading: loading })] }));
 }
 function RateTable({ title, rateType, rows, loading, }) {
     const visible = rows.filter((row) => row.rateType === rateType);
@@ -42,5 +42,5 @@ function RateTable({ title, rateType, rows, loading, }) {
         { key: "amount", header: "금액", render: (row) => won(row.cost) },
         { key: "effectiveDate", header: "적용일", render: (row) => formatDate(row.effectiveDate) },
     ];
-    return (_jsxs("section", { children: [_jsx("h2", { className: "mb-3 text-lg font-semibold", children: title }), _jsx(DataTable, { columns: columns, rows: visible, rowKey: (row) => String(row.id), emptyText: loading ? "불러오는 중입니다." : "등록된 기준이 없습니다." })] }));
+    return (_jsxs("section", { children: [_jsx("h2", { className: "section-title mb-3", children: title }), _jsx(DataTable, { columns: columns, rows: visible, rowKey: (row) => String(row.id), emptyText: loading ? "불러오는 중입니다." : "등록된 기준이 없습니다." })] }));
 }

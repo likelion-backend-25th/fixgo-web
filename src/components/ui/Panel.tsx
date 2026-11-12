@@ -13,7 +13,7 @@ export function Panel({ title, action, children, className }: PanelProps) {
     <section className={cn("rounded-xl border border-neutral-200 bg-white p-5 shadow-sm", className)}>
       {(title !== undefined || action !== undefined) && (
         <div className="mb-4 flex items-center justify-between gap-3">
-          {title !== undefined ? <h2 className="text-sm font-semibold text-neutral-900">{title}</h2> : <span />}
+          {title !== undefined ? <h2 className="section-title">{title}</h2> : <span />}
           {action}
         </div>
       )}
@@ -28,6 +28,20 @@ export function InfoField({ label, value }: { label: string; value: ReactNode })
       <div className="text-xs text-neutral-500">{label}</div>
       <div className="mt-1 text-sm font-medium text-neutral-900">{value}</div>
     </div>
+  );
+}
+
+export function FormActions({ hint, children }: { hint?: string; children: ReactNode }) {
+  return (
+    <>
+      <div className="h-16" aria-hidden="true" />
+      <div className="fixed right-0 bottom-0 left-0 z-30 border-t border-neutral-200 bg-white/95 backdrop-blur md:left-56">
+        <div className="mx-auto flex w-full max-w-[1200px] flex-wrap items-center justify-between gap-3 px-8 py-3">
+          <p className="text-[13px] text-neutral-500">{hint ?? ""}</p>
+          <div className="ml-auto flex gap-2">{children}</div>
+        </div>
+      </div>
+    </>
   );
 }
 

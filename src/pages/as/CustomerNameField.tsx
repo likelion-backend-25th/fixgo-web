@@ -7,11 +7,20 @@ import type { CustomerSummary } from "@/types/asReception";
 interface CustomerNameFieldProps {
   value: string;
   invalid?: boolean;
+  required?: boolean;
+  placeholder?: string;
   onChange: (name: string) => void;
   onPick: (customer: CustomerSummary) => void;
 }
 
-export function CustomerNameField({ value, invalid = false, onChange, onPick }: CustomerNameFieldProps) {
+export function CustomerNameField({
+  value,
+  invalid = false,
+  required = false,
+  placeholder = "이름 일부를 입력하면 등록 고객이 나옵니다",
+  onChange,
+  onPick,
+}: CustomerNameFieldProps) {
   const [open, setOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<CustomerSummary[]>([]);
 
@@ -62,7 +71,8 @@ export function CustomerNameField({ value, invalid = false, onChange, onPick }: 
         label="고객명"
         value={value}
         invalid={invalid}
-        placeholder="이름 일부를 입력하면 등록 고객이 나옵니다"
+        required={required}
+        placeholder={placeholder}
         onChange={(name) => {
           setOpen(true);
           onChange(name);

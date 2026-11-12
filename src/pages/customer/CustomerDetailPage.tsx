@@ -151,7 +151,7 @@ export function CustomerDetailPage() {
         </div>
       </Panel>
 
-      <h2 className="text-sm font-semibold">이전 수리 내역</h2>
+      <h2 className="section-title">이전 수리 내역</h2>
       <DataTable
         columns={historyColumns}
         rows={history}

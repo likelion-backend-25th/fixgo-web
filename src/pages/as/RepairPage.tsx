@@ -172,7 +172,7 @@ function RepairView({
       {detail !== null && !inspectionEnded && (
         <>
           <section className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-            <h2 className="mb-4 text-lg font-semibold">수리 정보</h2>
+            <h2 className="section-title mb-4">수리 정보</h2>
 
             <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
               <div>
@@ -281,10 +281,10 @@ function RepairView({
           {agreed && (
             <section className="space-y-4">
               <div>
-                <h2 className="mb-3 text-lg font-semibold">수리 작업 내역</h2>
+                <h2 className="section-title mb-3">수리 작업 내역</h2>
 
                 <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
-                  <table className="w-full min-w-[480px] text-sm">
+                  <table className="w-full text-sm">
                     <thead className="bg-neutral-100 text-left">
                       <tr>
                         <th className="px-3 py-3 font-medium">작업명</th>
@@ -315,7 +315,7 @@ function RepairView({
               </div>
 
               <div className="rounded-xl border border-neutral-200 bg-white p-4">
-                <h2 className="mb-3 font-semibold">수리비 내역</h2>
+                <h2 className="section-title mb-3">수리비 내역</h2>
 
                 <dl className="space-y-3 text-sm">
                   <div className="flex justify-between">

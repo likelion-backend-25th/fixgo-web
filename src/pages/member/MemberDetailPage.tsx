@@ -182,12 +182,13 @@ function AssignedReceptions({ memberId }: { memberId: number }) {
     return () => controller.abort();
   }, [memberId]);
   return (
-    <Panel title="최근 배정된 A/S">
+    <div>
+      <h2 className="section-title mb-4">최근 배정된 A/S</h2>
       {error !== "" ? <Notice tone="error">{error}</Notice> : (
         <DataTable columns={receptionColumns} rows={rows ?? []} rowKey={(row) => String(row.id)}
           emptyText={rows === null ? "배정 이력을 불러오는 중입니다." : "배정된 A/S가 없습니다."} />
       )}
-    </Panel>
+    </div>
   );
 }
 

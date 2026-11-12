@@ -3,19 +3,19 @@ import { useRef } from "react";
 import { Calendar } from "lucide-react";
 import { cn } from "@/lib/cn";
 const controlClass = "w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15";
-export function TextField({ label, value, onChange, placeholder, type = "text", invalid = false, readOnly = false, className, }) {
-    return (_jsxs("label", { className: cn("block text-sm", className), children: [label !== undefined && _jsx("span", { className: "mb-1.5 block text-xs font-medium text-neutral-600", children: label }), _jsx("input", { type: type, value: value, readOnly: readOnly, placeholder: placeholder, onChange: (event) => onChange(event.target.value), className: cn(controlClass, invalid && "border-red-300 bg-red-50", readOnly && "bg-neutral-50 text-neutral-700") })] }));
+export function TextField({ label, value, onChange, placeholder, type = "text", invalid = false, readOnly = false, required = false, className, }) {
+    return (_jsxs("label", { className: cn("block text-sm", className), children: [label !== undefined && _jsxs("span", { className: "form-label mb-1.5 block", children: [label, required && _jsx("span", { className: "ml-0.5 text-red-500", children: "*" })] }), _jsx("input", { type: type, value: value, readOnly: readOnly, placeholder: placeholder, onChange: (event) => onChange(event.target.value), className: cn(controlClass, invalid && "border-red-300 bg-red-50", readOnly && "bg-neutral-50 text-neutral-700") })] }));
 }
-export function TextArea({ label, value, onChange, placeholder, rows = 4, readOnly = false, className, }) {
-    return (_jsxs("label", { className: cn("block text-sm", className), children: [label !== undefined && _jsx("span", { className: "mb-1.5 block text-xs font-medium text-neutral-600", children: label }), _jsx("textarea", { value: value, readOnly: readOnly, rows: rows, placeholder: placeholder, onChange: (event) => onChange(event.target.value), className: cn(controlClass, "resize-y", readOnly && "bg-neutral-50 text-neutral-700") })] }));
+export function TextArea({ label, value, onChange, placeholder, rows = 4, readOnly = false, required = false, className, }) {
+    return (_jsxs("label", { className: cn("block text-sm", className), children: [label !== undefined && _jsxs("span", { className: "form-label mb-1.5 block", children: [label, required && _jsx("span", { className: "ml-0.5 text-red-500", children: "*" })] }), _jsx("textarea", { value: value, readOnly: readOnly, rows: rows, placeholder: placeholder, onChange: (event) => onChange(event.target.value), className: cn(controlClass, "resize-y", readOnly && "bg-neutral-50 text-neutral-700") })] }));
 }
 export function SelectBox({ value, onChange, options, className, ...props }) {
     return (_jsx("select", { value: value, onChange: (event) => onChange(event.target.value), className: cn(controlClass, "h-9 w-auto", className), ...props, children: options.map((option) => (_jsx("option", { value: option.value, children: option.label }, option.value))) }));
 }
-export function DateField({ label, value, onChange, readOnly = false, className }) {
+export function DateField({ label, value, onChange, readOnly = false, required = false, className }) {
     const pickerRef = useRef(null);
     const iso = toIsoDate(value);
-    return (_jsxs("label", { className: cn("block text-sm", className), children: [label !== undefined && _jsx("span", { className: "mb-1.5 block text-xs font-medium text-neutral-600", children: label }), _jsxs("div", { className: "relative", children: [_jsx("input", { type: "text", inputMode: "numeric", placeholder: "YYYY/MM/DD", value: formatDateInput(value), readOnly: readOnly, onChange: (event) => {
+    return (_jsxs("label", { className: cn("block text-sm", className), children: [label !== undefined && _jsxs("span", { className: "form-label mb-1.5 block", children: [label, required && _jsx("span", { className: "ml-0.5 text-red-500", children: "*" })] }), _jsxs("div", { className: "relative", children: [_jsx("input", { type: "text", inputMode: "numeric", placeholder: "YYYY/MM/DD", value: formatDateInput(value), readOnly: readOnly, onChange: (event) => {
                             if (!readOnly) {
                                 onChange(commitDateInput(event.target.value));
                             }
@@ -64,5 +64,5 @@ function openDatePicker(input) {
     }
 }
 export function FieldLabel({ children }) {
-    return _jsx("span", { className: "mb-1.5 block text-xs font-medium text-neutral-600", children: children });
+    return _jsx("span", { className: "form-label mb-1.5 block", children: children });
 }

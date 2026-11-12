@@ -16,7 +16,7 @@ export function Sidebar({ open, onNavigate }) {
                     return (_jsxs("div", { className: "mb-2", children: [_jsx("p", { className: "px-2.5 pt-3 pb-1 text-[11px] font-medium tracking-wide text-neutral-400", children: group.label }), items.map((item) => {
                                 const active = isNavActive(pathname, item.to);
                                 return (_jsx(Link, { to: item.to, onClick: onNavigate, className: cn("my-0.5 block rounded-lg px-2.5 py-2 text-sm", active
-                                        ? "bg-blue-50 font-medium text-blue-600"
+                                        ? "bg-blue-600 font-medium text-white"
                                         : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900"), children: item.label }, item.label));
                             })] }, group.label));
                 }) }), _jsx("button", { type: "button", onClick: () => {

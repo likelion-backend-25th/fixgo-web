@@ -51,10 +51,8 @@ export function NotificationListPage() {
     const [total, setTotal] = useState(0);
     const [pageCount, setPageCount] = useState(1);
     const [error, setError] = useState("");
-    const [notice, setNotice] = useState("");
     const [loading, setLoading] = useState(true);
     const [selectedId, setSelectedId] = useState(null);
-    const [retryingId, setRetryingId] = useState(null);
     const dateInvalid = from !== "" && to !== "" && from > to;
     useEffect(() => {
         const timer = window.setTimeout(() => {
@@ -108,53 +106,30 @@ export function NotificationListPage() {
         });
         return () => controller.abort();
     }, [applied, page]);
-    async function retry(id) {
-        if (retryingId !== null) {
-            return;
-        }
-        setRetryingId(id);
-        setError("");
-        setNotice("");
-        try {
-            const result = await retryNotificationEmail(id);
-            setRows((current) => current.map((row) => (row.id === id
-                ? { ...row, status: result.status, sentAt: result.sentAt ?? row.sentAt }
-                : row)));
-            if (result.status === "FAILED") {
-                setError("이메일 발송에 실패했습니다.");
-                return;
-            }
-            setNotice("이메일을 다시 발송했습니다.");
-        }
-        catch (cause) {
-            setError(cause instanceof Error ? cause.message : "이메일 재발송에 실패했습니다.");
-        }
-        finally {
-            setRetryingId(null);
-        }
-    }
     const columns = [
-        { key: "id", header: "번호", render: (row) => row.id },
-        { key: "at", header: "발송일시", render: (row) => displaySentAt(row.sentAt) },
-        { key: "name", header: "고객명", render: (row) => row.customerName ?? "-" },
-        { key: "email", header: "수신 이메일", render: (row) => row.recipientEmail },
-        { key: "body", header: "내용", render: (row) => row.messageTitle },
+        { key: "name", header: "고객명", width: "12%", render: (row) => row.customerName ?? "-" },
+        { key: "email", header: "수신 이메일", width: "27%", render: (row) => row.recipientEmail },
+        { key: "body", header: "제목", width: "31%", render: (row) => row.messageTitle },
+        { key: "at", header: "발송일", width: "20%", className: "text-center", render: (row) => displaySentAt(row.sentAt) },
         {
             key: "status",
             header: "발송 상태",
+            width: "10%",
+            className: "text-center",
             render: (row) => _jsx("span", { className: statusClass(row.status), children: statusLabel(row.status) }),
         },
-        {
-            key: "detail",
-            header: "",
-            render: (row) => (_jsxs("div", { className: "flex items-center gap-2 whitespace-nowrap", children: [_jsx(Button, { onClick: () => setSelectedId(row.id), children: "\uC0C1\uC138 \uBCF4\uAE30" }), row.status === "FAILED" && (_jsx(Button, { disabled: retryingId === row.id, onClick: () => void retry(row.id), children: "\uBC1C\uC1A1" }))] })),
-        },
     ];
-    return (_jsxs("div", { children: [_jsxs("div", { className: "mb-4 flex flex-wrap items-center gap-2", children: [_jsxs("p", { className: "text-sm text-neutral-500", children: ["\uC804\uCCB4 ", total, "\uAC74"] }), _jsx(TextField, { value: query, onChange: setQuery, placeholder: "\uACE0\uAC1D\uBA85, \uC774\uBA54\uC77C \uAC80\uC0C9", className: "w-56" }), _jsxs("div", { className: "ml-auto flex items-center gap-2", children: [_jsx(TextField, { type: "date", value: from, onChange: setFrom, className: "w-40" }), _jsx("span", { className: "text-sm text-neutral-500", children: "~" }), _jsx(TextField, { type: "date", value: to, onChange: setTo, className: "w-40" })] })] }), dateInvalid && _jsx(Notice, { tone: "error", children: "\uC2DC\uC791\uC77C\uC740 \uC885\uB8CC\uC77C\uBCF4\uB2E4 \uB2A6\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4." }), notice !== "" && _jsx(Notice, { children: notice }), error !== "" && _jsx(Notice, { tone: "error", children: error }), _jsx(DataTable, { columns: columns, rows: rows, rowKey: (row) => String(row.id), emptyText: loading ? "발송 내역을 불러오는 중입니다." : "조건에 맞는 발송 내역이 없습니다." }), _jsx(Pagination, { page: page, pageCount: pageCount, onPageChange: setPage }), selectedId !== null && _jsx(EmailDetailModal, { id: selectedId, onClose: () => setSelectedId(null) })] }));
+    return (_jsxs("div", { children: [_jsxs("div", { className: "mb-4 flex flex-wrap items-center gap-2", children: [_jsxs("p", { className: "text-sm text-neutral-500", children: ["\uC804\uCCB4 ", total, "\uAC74"] }), _jsx(TextField, { value: query, onChange: setQuery, placeholder: "\uACE0\uAC1D\uBA85, \uC774\uBA54\uC77C \uAC80\uC0C9", className: "w-56" }), _jsxs("div", { className: "ml-auto flex items-center gap-2", children: [_jsx(TextField, { type: "date", value: from, onChange: setFrom, className: "w-40" }), _jsx("span", { className: "text-sm text-neutral-500", children: "~" }), _jsx(TextField, { type: "date", value: to, onChange: setTo, className: "w-40" })] })] }), dateInvalid && _jsx(Notice, { tone: "error", children: "\uC2DC\uC791\uC77C\uC740 \uC885\uB8CC\uC77C\uBCF4\uB2E4 \uB2A6\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4." }), error !== "" && _jsx(Notice, { tone: "error", children: error }), _jsx(DataTable, { columns: columns, rows: rows, rowKey: (row) => String(row.id), onRowClick: (row) => setSelectedId(row.id), tableClassName: "email-history-table", emptyText: loading ? "발송 내역을 불러오는 중입니다." : "조건에 맞는 발송 내역이 없습니다." }), _jsx(Pagination, { page: page, pageCount: pageCount, onPageChange: setPage }), selectedId !== null && _jsx(EmailDetailModal, { id: selectedId, onClose: () => setSelectedId(null), onRetried: (result) => {
+            setRows((current) => current.map((row) => (row.id === selectedId
+                ? { ...row, status: result.status, sentAt: result.sentAt ?? row.sentAt }
+                : row)));
+        } })] }));
 }
-function EmailDetailModal({ id, onClose }) {
+function EmailDetailModal({ id, onClose, onRetried }) {
     const [detail, setDetail] = useState(null);
     const [error, setError] = useState("");
+    const [notice, setNotice] = useState("");
+    const [retrying, setRetrying] = useState(false);
     useEffect(() => {
         const controller = new AbortController();
         fetchEmailDetail(id, controller.signal)
@@ -171,9 +146,38 @@ function EmailDetailModal({ id, onClose }) {
         });
         return () => controller.abort();
     }, [id]);
-    const failed = detail?.notificationStatus === "FAILED";
+    async function resend() {
+        if (retrying) {
+            return;
+        }
+        setRetrying(true);
+        setError("");
+        setNotice("");
+        try {
+            const result = await retryNotificationEmail(id);
+            setDetail((current) => (current === null ? current : {
+                ...current,
+                notificationStatus: result.status,
+                sentAt: result.sentAt ?? current.sentAt,
+                errorMessage: result.status === "FAILED" ? current.errorMessage : null,
+            }));
+            onRetried(result);
+            if (result.status === "FAILED") {
+                setError("이메일 발송에 실패했습니다.");
+                return;
+            }
+            setNotice("이메일을 다시 발송했습니다.");
+        }
+        catch (cause) {
+            setError(cause instanceof Error ? cause.message : "이메일 재발송에 실패했습니다.");
+        }
+        finally {
+            setRetrying(false);
+        }
+    }
     const receptionNumber = detail?.receptionNumber?.trim() ?? "";
-    return (_jsxs(Modal, { title: "\uC774\uBA54\uC77C \uBC1C\uC1A1 \uC0C1\uC138", wide: true, onClose: onClose, children: [error !== "" && _jsx(Notice, { tone: "error", children: error }), detail === null && error === "" && _jsx("p", { className: "text-sm text-neutral-500", children: "\uC0C1\uC138\uB97C \uBD88\uB7EC\uC624\uB294 \uC911\uC785\uB2C8\uB2E4." }), detail !== null && (_jsxs(_Fragment, { children: [_jsxs("div", { className: "grid gap-4 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm sm:grid-cols-3", children: [_jsx(Field, { label: "\uBC1C\uC1A1\uBC88\uD638", value: detail.id }), _jsx(Field, { label: "\uBC1C\uC1A1\uC77C\uC2DC", value: displaySentAt(detail.sentAt) }), _jsx(Field, { label: "\uBC1C\uC1A1 \uC0C1\uD0DC", value: _jsx("span", { className: statusClass(detail.notificationStatus), children: statusLabel(detail.notificationStatus) }) })] }), _jsx("h3", { className: "mt-5 mb-2 text-sm font-medium", children: "\uC218\uC2E0\uC790 \uC815\uBCF4" }), _jsxs("div", { className: cn("grid gap-4 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm", receptionNumber === "" ? "sm:grid-cols-2" : "sm:grid-cols-3"), children: [_jsx(Field, { label: "\uACE0\uAC1D\uBA85", value: detail.customerName ?? "-" }), receptionNumber !== "" && _jsx(Field, { label: "\uC811\uC218\uBC88\uD638", value: receptionNumber }), _jsx(Field, { label: "\uC774\uBA54\uC77C", value: detail.recipientEmail })] }), _jsx("h3", { className: "mt-5 mb-2 text-sm font-medium", children: "\uC774\uBA54\uC77C \uC81C\uBAA9" }), _jsx("p", { className: "rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm", children: detail.messageTitle }), _jsx("h3", { className: "mt-5 mb-2 text-sm font-medium", children: "\uC774\uBA54\uC77C \uB0B4\uC6A9" }), _jsx("p", { className: "whitespace-pre-line rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-3 text-sm", children: detail.message }), _jsx("h3", { className: "mt-5 mb-2 text-sm font-medium", children: "\uBC1C\uC1A1 \uACB0\uACFC" }), _jsx("div", { className: "overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm", children: _jsxs("table", { className: "w-full border-collapse text-sm", children: [_jsx("thead", { className: "bg-neutral-100 text-left", children: _jsx("tr", { children: ["결과", "발송 시각"].map((header) => (_jsx("th", { className: "px-3 py-2 font-medium", children: header }, header))) }) }), _jsx("tbody", { children: _jsxs("tr", { className: "border-t border-neutral-200", children: [_jsx("td", { className: cn("px-3 py-2", failed ? "text-red-600" : "text-green-600"), children: failed ? "실패" : statusLabel(detail.notificationStatus) }), _jsx("td", { className: "px-3 py-2", children: displaySentAt(detail.sentAt) })] }) })] }) })] }))] }));
+    const failed = detail?.notificationStatus === "FAILED";
+    return (_jsxs(Modal, { title: "\uC774\uBA54\uC77C \uBC1C\uC1A1 \uC0C1\uC138", wide: true, onClose: onClose, children: [error !== "" && _jsx(Notice, { tone: "error", children: error }), notice !== "" && _jsx(Notice, { children: notice }), detail === null && error === "" && _jsx("p", { className: "text-sm text-neutral-500", children: "\uC0C1\uC138\uB97C \uBD88\uB7EC\uC624\uB294 \uC911\uC785\uB2C8\uB2E4." }), detail !== null && (_jsxs(_Fragment, { children: [_jsxs("div", { className: "grid gap-4 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm sm:grid-cols-3", children: [_jsx(Field, { label: "\uBC1C\uC1A1\uBC88\uD638", value: detail.id }), _jsx(Field, { label: "\uBC1C\uC1A1\uC77C\uC2DC", value: displaySentAt(detail.sentAt) }), _jsx(Field, { label: "\uBC1C\uC1A1 \uC0C1\uD0DC", value: _jsx("span", { className: statusClass(detail.notificationStatus), children: statusLabel(detail.notificationStatus) }) })] }), _jsx("h3", { className: "mt-5 mb-2 text-sm font-medium", children: "\uC218\uC2E0\uC790 \uC815\uBCF4" }), _jsxs("div", { className: cn("grid gap-4 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm", receptionNumber === "" ? "sm:grid-cols-2" : "sm:grid-cols-3"), children: [_jsx(Field, { label: "\uACE0\uAC1D\uBA85", value: detail.customerName ?? "-" }), receptionNumber !== "" && _jsx(Field, { label: "\uC811\uC218\uBC88\uD638", value: receptionNumber }), _jsx(Field, { label: "\uC774\uBA54\uC77C", value: detail.recipientEmail })] }), _jsx("h3", { className: "mt-5 mb-2 text-sm font-medium", children: "\uC774\uBA54\uC77C \uC81C\uBAA9" }), _jsx("p", { className: "rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm", children: detail.messageTitle }), _jsx("h3", { className: "mt-5 mb-2 text-sm font-medium", children: "\uC774\uBA54\uC77C \uB0B4\uC6A9" }), _jsx("p", { className: "whitespace-pre-line rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-3 text-sm", children: detail.message }), failed && _jsx("h3", { className: "mt-5 mb-2 text-sm font-medium", children: "\uBC1C\uC1A1 \uACB0\uACFC" }), failed && _jsxs("div", { children: [_jsx("div", { className: "overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm", children: _jsxs("table", { className: "w-full border-collapse text-sm", children: [_jsx("thead", { className: "bg-neutral-100 text-left", children: _jsx("tr", { children: ["결과", "발송 시각"].map((header) => (_jsx("th", { className: "px-3 py-2 font-medium", children: header }, header))) }) }), _jsx("tbody", { children: _jsxs("tr", { className: "border-t border-neutral-200", children: [_jsx("td", { className: "px-3 py-2 text-red-600", children: "\uC2E4\uD328" }), _jsx("td", { className: "px-3 py-2", children: displaySentAt(detail.sentAt) })] }) })] }) }), detail.errorMessage !== null && detail.errorMessage.trim() !== "" && _jsx("p", { className: "mt-2 text-sm text-red-600", children: detail.errorMessage })] })] })), failed && _jsx("div", { className: "mt-4 flex justify-end", children: _jsx(Button, { disabled: retrying, onClick: () => void resend(), children: retrying ? "발송 중…" : "재발송" }) })] }));
 }
 function Field({ label, value }) {
     return (_jsxs("div", { children: [_jsx("p", { className: "text-xs text-neutral-500", children: label }), _jsx("p", { className: "mt-1 text-sm", children: value })] }));

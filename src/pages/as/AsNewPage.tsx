@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { DateField, TextArea, TextField } from "@/components/ui/Field";
-import { Notice, Panel } from "@/components/ui/Panel";
+import { FormActions, Notice, Panel } from "@/components/ui/Panel";
 import { categoryLabel, createCustomer, createReception, fetchProduct, registerPurchasedAt, searchCustomers, searchProductsBySerial, searchTechnicians } from "@/lib/asReceptionApi";
 import { CustomerNameField } from "@/pages/as/CustomerNameField";
 import { SerialNumberField } from "@/pages/as/SerialNumberField";
@@ -184,11 +184,11 @@ export function AsNewPage() {
       {info !== "" && <Notice>{info}</Notice>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
       <Panel
-        title="고객정보"
+        title="고객 정보"
         action={
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setLookup("customer")}>
-              고객정보 조회
+              고객 조회
             </Button>
             <Button onClick={() => void registerCustomer()} disabled={pending}>
               고객 등록
@@ -200,89 +200,95 @@ export function AsNewPage() {
           <CustomerNameField
             value={form.customerName}
             invalid={tried && form.customerId === null}
+            placeholder="고객명 검색"
             onChange={(customerName) => patch({ customerName, customerId: null })}
             onPick={applyCustomer}
           />
-          <TextField label="연락처" value={form.phone} onChange={(phone) => patch({ phone, customerId: null })} invalid={tried && form.customerId === null} />
-          <TextField label="이메일" value={form.email} onChange={(email) => patch({ email })} />
-          <TextField label="우편번호" value={form.postalCode} onChange={(postalCode) => patch({ postalCode })} invalid={invalid(form.postalCode)} readOnly />
-          <TextField label="기본 주소" value={form.address} onChange={(address) => patch({ address })} invalid={invalid(form.address)} />
-          <div className="flex items-end gap-2">
-            <TextField className="flex-1" label="상세 주소" value={form.addressDetail} onChange={(addressDetail) => patch({ addressDetail })} />
-            <Button variant="outline" onClick={() => setLookup("post")}>
-              우편번호 찾기
-            </Button>
-          </div>
+          <TextField label="연락처" placeholder="010-0000-0000" value={form.phone} onChange={(phone) => patch({ phone, customerId: null })} invalid={tried && form.customerId === null} />
+          <TextField label="이메일" placeholder="example@email.com" value={form.email} onChange={(email) => patch({ email })} />
         </div>
+        <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-end">
+          <TextField className="md:flex-[2]" label="기본 주소" placeholder="도로명 주소" value={form.address} onChange={(address) => patch({ address })} invalid={invalid(form.address)} />
+          <TextField className="md:w-40" label="우편번호" placeholder="우편번호" value={form.postalCode} onChange={(postalCode) => patch({ postalCode })} invalid={invalid(form.postalCode)} readOnly />
+          <Button variant="outline" onClick={() => setLookup("post")}>찾기</Button>
+        </div>
+        <TextField className="mt-3" label="상세 주소" placeholder="동, 호수 등 상세 주소 입력" value={form.addressDetail} onChange={(addressDetail) => patch({ addressDetail })} />
       </Panel>
 
-      <Panel title="제품/접수 정보">
-        <div className="grid gap-3 md:grid-cols-4">
-          <SerialNumberField
-            value={form.serial}
-            invalid={tried && form.productId === null}
-            onChange={(serial) => patch({
-              serial,
-              productId: null,
-              productModelId: null,
-              productGroup: "",
-              modelName: "",
-              purchasedAt: "",
-              purchasedAtLocked: false,
-            })}
-            onPick={applyProduct}
-          />
-          <div className="flex items-end">
-            <Button variant="outline" onClick={() => setLookup("serial")}>
-              시리얼번호 조회
-            </Button>
+      <Panel title="제품 정보">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end">
+          <div className="min-w-0 flex-1">
+            <SerialNumberField
+              value={form.serial}
+              invalid={tried && form.productId === null}
+              placeholder="제품 시리얼번호 입력"
+              onChange={(serial) => patch({
+                serial,
+                productId: null,
+                productModelId: null,
+                productGroup: "",
+                modelName: "",
+                purchasedAt: "",
+                purchasedAtLocked: false,
+              })}
+              onPick={applyProduct}
+            />
           </div>
-          <TextField label="제품군" value={form.productGroup} onChange={(productGroup) => patch({ productGroup })} readOnly />
-          <TextField label="모델명" value={form.modelName} onChange={(modelName) => patch({ modelName })} readOnly />
+          <Button variant="outline" onClick={() => setLookup("serial")}>
+            시리얼번호 조회
+          </Button>
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <TextField label="제품군" placeholder="자동 입력" value={form.productGroup} onChange={(productGroup) => patch({ productGroup })} readOnly />
+          <TextField label="모델명" placeholder="자동 입력" value={form.modelName} onChange={(modelName) => patch({ modelName })} readOnly />
           <DateField label="구매일" value={form.purchasedAt} readOnly={form.purchasedAtLocked} onChange={(purchasedAt) => patch({ purchasedAt })} />
         </div>
       </Panel>
 
       <Panel title="고장 내용">
-        <div className="grid gap-3 md:grid-cols-2">
-          <TextField label="고장 증상 요약" value={form.symptom} onChange={(symptom) => patch({ symptom })} invalid={invalid(form.symptom)} />
-          <TextArea className="md:row-span-2" label="고장 증상 상세" value={form.symptomDetail} onChange={(symptomDetail) => patch({ symptomDetail })} rows={6} />
-          <TextArea label="고객 요청 사항 / 메모" value={form.memo} onChange={(memo) => patch({ memo })} />
+        <div className="space-y-3">
+          <TextField label="고장 증상 요약" placeholder="예: 전원 켜지지 않음, 키보드 불량" value={form.symptom} onChange={(symptom) => patch({ symptom })} invalid={invalid(form.symptom)} />
+          <TextArea label="고장 증상 상세" placeholder="고장 발생 시점 및 구체적인 증상을 입력하세요." value={form.symptomDetail} onChange={(symptomDetail) => patch({ symptomDetail })} rows={3} />
+          <TextArea label="고객 요청 사항 / 메모" placeholder="고객 요청 사항이나 추가 전달 내용을 입력하세요." value={form.memo} onChange={(memo) => patch({ memo })} rows={3} />
         </div>
       </Panel>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Panel title="담당 A/S기사 배정">
-          <div className="flex items-end gap-2">
-            <TextField className="flex-1" label="담당 기사" value={form.technician} onChange={(technician) => patch({ technician })} invalid={tried && form.technicianId === null} readOnly />
+      <Panel title="접수 설정">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
+          <div className="flex min-w-0 flex-1 items-end gap-2">
+            <TextField className="flex-1" label="담당 A/S 기사" placeholder="담당 기사 선택" value={form.technician} onChange={(technician) => patch({ technician })} invalid={tried && form.technicianId === null} readOnly />
             <Button variant="outline" onClick={() => setLookup("tech")}>
-              A/S 기사 목록 조회
+              기사 조회
             </Button>
           </div>
-        </Panel>
-        <Panel title="수령 방식" className="relative">
-          <div className="absolute inset-0 flex items-center justify-center gap-6 text-sm">
-            {(["방문", "택배"] as const).map((method) => (
-              <label key={method} className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="receive"
-                  checked={form.receiveMethod === method}
-                  onChange={() => patch({ receiveMethod: method })}
-                />
-                {method}
-              </label>
-            ))}
+          <div className="lg:w-72">
+            <span className="form-label mb-1.5 block">수령 방식</span>
+            <div className="flex h-10 items-center gap-6 text-sm">
+              {([["방문", "방문 수령"], ["택배", "택배 배송"]] as const).map(([method, label]) => (
+                <label key={method} className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="receive"
+                    checked={form.receiveMethod === method}
+                    onChange={() => patch({ receiveMethod: method })}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
           </div>
-        </Panel>
-      </div>
+        </div>
+        <p className="mt-4 rounded-lg bg-blue-50 px-3 py-2.5 text-sm text-blue-800">
+          접수 완료 시 고객에게 A/S 진행 상황을 확인할 수 있는 안내 이메일이 자동 발송됩니다.
+        </p>
+      </Panel>
 
-      <div className="flex justify-end gap-2">
-        <Button variant="ghost" onClick={() => navigate("/as/list")}>
+      <FormActions>
+        <Button variant="outline" onClick={() => navigate("/as/list")}>
           취소
         </Button>
-        <Button onClick={() => void submit()} disabled={pending}>접수</Button>
-      </div>
+        <Button onClick={() => void submit()} disabled={pending}>{pending ? "등록 중…" : "A/S 접수 등록"}</Button>
+      </FormActions>
       <AsLookupModals kind={lookup} onClose={() => setLookup(null)} onApply={patch} />
     </div>
   );

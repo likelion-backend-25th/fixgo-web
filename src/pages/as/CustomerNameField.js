@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { TextField } from "@/components/ui/Field";
 import { isAbortError } from "@/lib/apiClient";
 import { searchCustomers } from "@/lib/asReceptionApi";
-export function CustomerNameField({ value, invalid = false, onChange, onPick }) {
+export function CustomerNameField({ value, invalid = false, required = false, placeholder = "이름 일부를 입력하면 등록 고객이 나옵니다", onChange, onPick }) {
     const [open, setOpen] = useState(false);
     const [suggestions, setSuggestions] = useState([]);
     useEffect(() => {
@@ -42,7 +42,7 @@ export function CustomerNameField({ value, invalid = false, onChange, onPick }) 
             if (!event.currentTarget.contains(event.relatedTarget)) {
                 setOpen(false);
             }
-        }, children: [_jsx(TextField, { label: "\uACE0\uAC1D\uBA85", value: value, invalid: invalid, placeholder: "\uC774\uB984 \uC77C\uBD80\uB97C \uC785\uB825\uD558\uBA74 \uB4F1\uB85D \uACE0\uAC1D\uC774 \uB098\uC635\uB2C8\uB2E4", onChange: (name) => {
+        }, children: [_jsx(TextField, { label: "\uACE0\uAC1D\uBA85", value: value, invalid: invalid, required: required, placeholder: placeholder, onChange: (name) => {
                     setOpen(true);
                     onChange(name);
                 } }), open && suggestions.length > 0 && (_jsx("ul", { className: "absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-neutral-300 bg-white py-1 shadow-sm", children: suggestions.map((customer) => (_jsx("li", { children: _jsxs("button", { type: "button", className: "flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-neutral-50", onMouseDown: (event) => event.preventDefault(), onClick: () => pick(customer), children: [_jsx("span", { children: customer.name }), _jsx("span", { className: "text-neutral-500", children: customer.phone })] }) }, customer.id))) }))] }));

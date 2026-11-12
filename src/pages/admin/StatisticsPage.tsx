@@ -253,7 +253,7 @@ function TechnicianBars({ loading, rows }: { loading: boolean; rows: TechnicianS
             <span>{row.assignedCount.toLocaleString("ko-KR")}건</span>
           </div>
           <div className="h-2 rounded bg-neutral-100">
-            <div className="h-2 rounded bg-blue-600" style={{ width: `${(row.assignedCount / max) * 100}%` }} />
+            <div className="h-2 rounded bg-blue-400" style={{ width: `${(row.assignedCount / max) * 100}%` }} />
           </div>
         </li>
       ))}

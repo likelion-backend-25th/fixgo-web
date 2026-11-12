@@ -28,6 +28,21 @@ export function RootLayout() {
   const [pageMeta, setPageMeta] = useState<string | undefined>(undefined);
   const metaOwner = useRef<symbol | null>(null);
   const menuOpen = menuState.open && menuState.path === pathname;
+
+  useLayoutEffect(() => {
+    const applyScrollbarSize = () => {
+      const size = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
+      document.documentElement.style.setProperty("--scrollbar-size", `${size}px`);
+    };
+    applyScrollbarSize();
+    const observer = new ResizeObserver(applyScrollbarSize);
+    observer.observe(document.body);
+    window.addEventListener("resize", applyScrollbarSize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", applyScrollbarSize);
+    };
+  }, []);
   // 화면을 떠나는 정리가 다음 화면보다 늦게 실행돼도, 지금 화면의 접수번호는 남긴다.
   const setHeadingMeta = useCallback((owner: symbol, meta: string | undefined) => {
     if (meta === undefined || meta === "") {
@@ -66,8 +81,9 @@ export function RootLayout() {
         />
       )}
       <Sidebar open={menuOpen} onNavigate={() => setMenuOpen(false)} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-neutral-200 bg-white/90 px-4 py-3 backdrop-blur md:px-8">
+      <div className="flex min-w-0 flex-1 flex-col pl-[var(--scrollbar-size)]">
+        <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white/90 backdrop-blur">
+          <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between gap-3 px-8 py-3">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
@@ -99,9 +115,12 @@ export function RootLayout() {
             </Link>
             <Button variant="outline" onClick={() => void logoutFromServer()}>로그아웃</Button>
           </div>
+          </div>
         </header>
-        <main className="flex-1 px-4 py-6 md:px-8">
-          <Outlet />
+        <main className="flex-1">
+          <div className="page-container">
+            <Outlet />
+          </div>
         </main>
       </div>
       {user.role === "ADMIN" && <AiChatWidget />}

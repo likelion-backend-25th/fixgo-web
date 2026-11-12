@@ -100,7 +100,7 @@ function AssignedReceptions({ memberId }) {
         });
         return () => controller.abort();
     }, [memberId]);
-    return (_jsx(Panel, { title: "\uCD5C\uADFC \uBC30\uC815\uB41C A/S", children: error !== "" ? _jsx(Notice, { tone: "error", children: error }) : (_jsx(DataTable, { columns: receptionColumns, rows: rows ?? [], rowKey: (row) => String(row.id), emptyText: rows === null ? "배정 이력을 불러오는 중입니다." : "배정된 A/S가 없습니다." })) }));
+    return (_jsxs("div", { children: [_jsx("h2", { className: "section-title mb-4", children: "\uCD5C\uADFC \uBC30\uC815\uB41C A/S" }), error !== "" ? _jsx(Notice, { tone: "error", children: error }) : (_jsx(DataTable, { columns: receptionColumns, rows: rows ?? [], rowKey: (row) => String(row.id), emptyText: rows === null ? "배정 이력을 불러오는 중입니다." : "배정된 A/S가 없습니다." }))] }));
 }
 function EditProfile({ member, onClose, onSaved }) {
     const [form, setForm] = useState(member);

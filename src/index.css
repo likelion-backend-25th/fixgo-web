@@ -3,6 +3,34 @@
 
 @theme {
   --font-sans: "Pretendard Variable", Pretendard, sans-serif;
+
+  /* 메인 브랜드: 버튼, 활성 메뉴, 제목, 강조 숫자 */
+  --color-blue-600: #005a9c;
+  --color-blue-700: #004a80;
+  --color-blue-800: #003e6b;
+  --color-blue-900: #00325a;
+
+  /* 보조 브랜드: 선택 표시, 그래프, 포커스 */
+  --color-blue-300: #60c1e5;
+  --color-blue-400: #60c1e5;
+  --color-blue-500: #60c1e5;
+
+  /* 강조 배경: 안내 영역, 선택된 행 */
+  --color-blue-50: #a0e0ef;
+  --color-blue-100: #c5eef6;
+  --color-blue-200: #7ed4ea;
+
+  /* 페이지, 글자, 테두리 */
+  --color-neutral-50: #f5f7fa;
+  --color-neutral-100: #eef2f6;
+  --color-neutral-200: #e2e8f0;
+  --color-neutral-300: #e2e8f0;
+  --color-neutral-400: #64748b;
+  --color-neutral-500: #64748b;
+  --color-neutral-600: #64748b;
+  --color-neutral-700: #1e293b;
+  --color-neutral-800: #1e293b;
+  --color-neutral-900: #1e293b;
 }
 
 html,
@@ -11,8 +39,142 @@ body,
   min-height: 100%;
 }
 
+/* 스크롤바는 오른쪽에만 붙는다. 왼쪽 여백에 이 너비를 더해야 화면 끝과 간격이 같다. */
+@property --scrollbar-size {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
 body {
   @apply bg-neutral-50 text-neutral-900 antialiased;
+}
+
+.page-container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 32px;
+  box-sizing: border-box;
+  counter-reset: section;
+}
+
+/* 카드가 나란히 놓이면 간격을 16px로 맞춘다. */
+.page-container .grid:has(> .rounded-xl) {
+  gap: 16px;
+}
+
+.page-container :is(.space-y-5, .space-y-8) > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 16px;
+}
+
+/* 검색·필터 바로 다음 표와의 간격 */
+.page-container *:has(+ .overflow-x-auto) {
+  margin-bottom: 16px;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 17px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.section-title::before {
+  counter-increment: section;
+  content: counter(section);
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 999px;
+  background: #005a9c;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.form-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+}
+
+.email-preset-list {
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.email-preset-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.email-preset-item.is-selected {
+  background: #a0e0ef;
+}
+
+/* 모든 페이지의 표 칸은 한 줄로 두고 세로 가운데에 맞춘다. */
+.shipment-table th,
+.shipment-table td,
+table th,
+table td {
+  padding-left: 16px;
+  padding-right: 16px;
+  white-space: nowrap;
+  word-break: keep-all;
+  vertical-align: middle;
+}
+
+/* 페이지 표는 내용 영역과 같은 너비로 두고, 버튼 칸은 오른쪽에 맞춘다. */
+.page-container .overflow-x-auto {
+  width: 100%;
+}
+
+.page-container .overflow-x-auto > table {
+  width: 100%;
+}
+
+.page-container table:not(:is([role="dialog"] *)):has(td:last-child button) > thead th:last-child,
+.page-container table:not(:is([role="dialog"] *)) > tbody td:last-child:has(button) {
+  text-align: right;
+}
+
+.page-container table:not(:is([role="dialog"] *)) > tbody td:last-child:has(button) > div {
+  display: flex;
+  width: 100%;
+  justify-content: flex-end;
+}
+
+/* 이메일 발송 내역은 컬럼 비율을 고정하고, 발송일과 발송 상태는 가운데에 둔다. */
+.email-history-table {
+  table-layout: fixed;
+}
+
+.email-history-table th,
+.email-history-table td {
+  padding-left: 16px;
+  padding-right: 16px;
+  white-space: nowrap;
+}
+
+.email-history-table td:nth-child(-n + 4) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.email-history-table th:nth-child(4),
+.email-history-table td:nth-child(4),
+.email-history-table th:nth-child(5),
+.email-history-table td:nth-child(5) {
+  text-align: center;
 }
 
 /* 인쇄 중에는 서류만 보이게 한다. display:none 으로 화면을 지우면 프린터 창이 바로 닫힌다. */

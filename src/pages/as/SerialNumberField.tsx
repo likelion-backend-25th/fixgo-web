@@ -7,11 +7,18 @@ import type { ProductSummary } from "@/types/asReception";
 interface SerialNumberFieldProps {
   value: string;
   invalid?: boolean;
+  placeholder?: string;
   onChange: (serial: string) => void;
   onPick: (product: ProductSummary) => void;
 }
 
-export function SerialNumberField({ value, invalid = false, onChange, onPick }: SerialNumberFieldProps) {
+export function SerialNumberField({
+  value,
+  invalid = false,
+  placeholder = "시리얼번호 조회 가능합니다",
+  onChange,
+  onPick,
+}: SerialNumberFieldProps) {
   const [open, setOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<ProductSummary[]>([]);
 
@@ -61,7 +68,7 @@ export function SerialNumberField({ value, invalid = false, onChange, onPick }: 
         label="시리얼번호"
         value={value}
         invalid={invalid}
-        placeholder="시리얼번호 조회 가능합니다"
+        placeholder={placeholder}
         onChange={(serial) => {
           setOpen(true);
           onChange(serial);

@@ -75,7 +75,7 @@ export function SymptomStatsPage() {
               <span>{row.count.toLocaleString("ko-KR")}건 · {formatRate(row.percentage)}</span>
             </div>
             <div className="h-3 rounded bg-neutral-100">
-              <div className="h-3 rounded bg-blue-600" style={{ width: `${Math.min(row.percentage, 100)}%` }} />
+              <div className="h-3 rounded bg-blue-400" style={{ width: `${Math.min(row.percentage, 100)}%` }} />
             </div>
           </li>
         ))}

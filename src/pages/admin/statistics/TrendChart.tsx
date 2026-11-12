@@ -14,7 +14,7 @@ interface TrendChartProps {
 }
 
 const TONE_CLASS = {
-  blue: { swatch: "bg-blue-600", line: "text-blue-600" },
+  blue: { swatch: "bg-blue-400", line: "text-blue-400" },
   green: { swatch: "bg-green-600", line: "text-green-600" },
 } as const;
 

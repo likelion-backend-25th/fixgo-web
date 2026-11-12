@@ -273,9 +273,9 @@ function PaymentHistorySection() {
     setSortDir("asc");
   }
   return (
-    <section className="mt-6">
+    <section className="mt-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold text-neutral-900">결제 내역</h2>
+        <h2 className="section-title">결제 내역</h2>
         <form
           className="flex flex-wrap items-center gap-2"
           onSubmit={(event) => {

@@ -10,7 +10,7 @@ import { fetchReception, fetchReceptions, receptionStatusLabel } from "@/lib/asR
 import { isAbortError } from "@/lib/apiClient";
 import { useSessionStore } from "@/stores/useSessionStore";
 import { cn } from "@/lib/cn";
-import { createPickup, createShipment, fetchShipmentByReception, fetchShipmentDetail, fetchShipmentManagement, getShipmentByReception, markShipmentDelivered, markShipmentPickedUp, markShipmentShipping, refreshShipmentTracking, shipmentEventLabel, shipmentMethodLabel, shipmentStatusLabel, updateShipmentTracking, } from "@/lib/shipmentApi";
+import { createPickup, createShipment, fetchShipmentByReception, fetchShipmentDetail, fetchShipmentManagement, getShipmentByReception, markShipmentDelivered, markShipmentPickedUp, markShipmentShipping, refreshShipmentTracking, shipmentEventLabel, shipmentMethodLabel, shipmentStatusClass, shipmentStatusLabel, updateShipmentTracking, } from "@/lib/shipmentApi";
 import { carrierLabel, sweetTrackerCarriers } from "@/lib/sweetTrackerCarriers";
 const statusFilters = [
     { value: "전체", label: "상태 전체" },
@@ -81,10 +81,9 @@ export function ShipmentListPage() {
                 await markShipmentShipping(row.shipmentId);
                 setActionNotice("배송을 시작했습니다.");
             }
-            else if (row.status === "배송 중" && row.shipmentId !== null) {
-                await refreshShipmentTracking(row.shipmentId);
-                setActionNotice("배송 이력을 갱신했습니다.");
-                setSelectedId(row.shipmentId);
+            else if (row.status === "배송 중" && row.method === "택배" && row.shipmentId !== null) {
+                await markShipmentDelivered(row.shipmentId);
+                setActionNotice("배송 완료로 처리했습니다.");
             }
             else if (row.status === "방문 수령 대기" && row.shipmentId === null) {
                 await createPickup(row.asReceptionId);
@@ -104,7 +103,6 @@ export function ShipmentListPage() {
         }
     }
     const columns = [
-        { key: "no", header: "번호", render: (row) => row.no },
         { key: "as", header: "접수번호", render: (row) => row.asId },
         { key: "method", header: "수령 방법", render: (row) => row.method },
         { key: "receiver", header: "수령인", render: (row) => row.receiver },
@@ -117,14 +115,14 @@ export function ShipmentListPage() {
             key: "detail",
             header: "",
             render: (row) => {
-                const shipmentId = row.shipmentId;
                 if (!canManage) {
-                    if (shipmentId === null) {
-                        return null;
-                    }
-                    return (_jsx("div", { className: "flex justify-end", onClick: (event) => event.stopPropagation(), children: _jsx(Button, { variant: "outline", onClick: () => setSelectedId(shipmentId), children: "\uC0C1\uC138 \uBCF4\uAE30" }) }));
+                    return null;
                 }
-                return (_jsxs("div", { className: "flex justify-end gap-2 whitespace-nowrap", onClick: (event) => event.stopPropagation(), children: [row.status === "배송 준비 완료" && shipmentId !== null && (_jsx(Button, { variant: "outline", className: "whitespace-nowrap", disabled: busyId === row.asReceptionId, onClick: () => setSelectedId(shipmentId), children: "\uC218\uC815" })), _jsx(Button, { variant: row.status === "배송 완료" || row.status === "방문 수령 완료" || row.status === "배송 중" ? "outline" : "primary", disabled: busyId === row.asReceptionId, onClick: () => void runRowAction(row), children: rowActionLabel(row) })] }));
+                const label = rowActionLabel(row);
+                if (label === "배송 알림" || label === "배송 조회" || label === "상세 보기") {
+                    return null;
+                }
+                return (_jsx("div", { className: "flex justify-end", onClick: (event) => event.stopPropagation(), children: _jsx(Button, { variant: label === "배송 완료" || label === "수령 완료" ? "outline" : "primary", className: shipmentActionClass(label), disabled: busyId === row.asReceptionId, onClick: () => void runRowAction(row), children: label }) }));
             },
         },
     ];
@@ -139,8 +137,8 @@ export function ShipmentListPage() {
             size: pageSize,
         }, controller.signal)
             .then((result) => {
-            setRows(result.items.flatMap((item, index) => {
-                const row = toRow(item, result.number * result.size + index + 1);
+            setRows(result.items.flatMap((item) => {
+                const row = toRow(item);
                 return row === null ? [] : [row];
             }));
             setPageCount(Math.max(1, result.totalPages));
@@ -185,10 +183,18 @@ export function ShipmentListPage() {
         });
         return () => controller.abort();
     }, [reloadKey]);
-    return (_jsxs("div", { children: [_jsxs("div", { className: "mb-4 grid gap-3 sm:grid-cols-4", children: [_jsx(Stat, { label: "\uBC30\uC1A1 \uB300\uAE30", value: `${counts.wait}건` }), _jsx(Stat, { label: "\uBC30\uC1A1\uC911", value: `${counts.ing}건` }), _jsx(Stat, { label: "\uBC30\uC1A1 \uC644\uB8CC", value: `${counts.done}건` }), _jsx(Stat, { label: "\uBC29\uBB38 \uC218\uB839", value: `${counts.visit}건` })] }), _jsxs("div", { className: "mb-4 flex flex-wrap items-center gap-2", children: [_jsx(TextField, { value: query, onChange: (value) => { setQuery(value); setPage(1); }, placeholder: "\uC811\uC218\uBC88\uD638, \uC218\uB839\uC778, \uC6B4\uC1A1\uC7A5\uBC88\uD638 \uAC80\uC0C9", className: "w-72" }), _jsx(SelectBox, { value: status, onChange: (value) => { setStatus(value); setPage(1); }, options: statusFilters }), _jsx(SelectBox, { value: method, onChange: (value) => { setMethod(value); setPage(1); }, options: [{ value: "전체", label: "수령 방법 전체" }, { value: "택배", label: "택배" }, { value: "방문 수령", label: "방문 수령" }] }), canManage && _jsx(Button, { className: "ml-auto", onClick: () => { setCreateInitial(null); setCreating(true); }, children: "\uB4F1\uB85D" })] }), loadError !== "" && _jsx("div", { className: "mb-3", children: _jsx(Notice, { tone: "error", children: loadError }) }), actionError !== "" && _jsx("div", { className: "mb-3", children: _jsx(Notice, { tone: "error", children: actionError }) }), actionNotice !== "" && _jsx("div", { className: "mb-3", children: _jsx(Notice, { children: actionNotice }) }), _jsx(DataTable, { columns: columns, rows: rows, rowKey: (row) => String(row.asReceptionId), onRowClick: setInfoRow, selectedKey: selectedId === null ? undefined : String(rows.find((row) => row.shipmentId === selectedId)?.asReceptionId ?? ""), emptyText: loading ? "불러오는 중" : "배송 내역이 없습니다." }), _jsx(Pagination, { page: page, pageCount: pageCount, onPageChange: setPage }), creating && (_jsx(CreateShipmentModal, { initial: createInitial, onClose: () => {
+    return (_jsxs("div", { children: [_jsxs("div", { className: "mb-4 grid gap-3 sm:grid-cols-4", children: [_jsx(Stat, { label: "\uBC30\uC1A1 \uB300\uAE30", value: `${counts.wait}건` }), _jsx(Stat, { label: "\uBC30\uC1A1\uC911", value: `${counts.ing}건` }), _jsx(Stat, { label: "\uBC30\uC1A1 \uC644\uB8CC", value: `${counts.done}건` }), _jsx(Stat, { label: "\uBC29\uBB38 \uC218\uB839", value: `${counts.visit}건` })] }), _jsxs("div", { className: "mb-4 flex flex-wrap items-center gap-2", children: [_jsx(TextField, { value: query, onChange: (value) => { setQuery(value); setPage(1); }, placeholder: "\uC811\uC218\uBC88\uD638, \uC218\uB839\uC778, \uC6B4\uC1A1\uC7A5\uBC88\uD638 \uAC80\uC0C9", className: "w-72" }), _jsx(SelectBox, { value: status, onChange: (value) => { setStatus(value); setPage(1); }, options: statusFilters }), _jsx(SelectBox, { value: method, onChange: (value) => { setMethod(value); setPage(1); }, options: [{ value: "전체", label: "수령 방법 전체" }, { value: "택배", label: "택배" }, { value: "방문 수령", label: "방문 수령" }] }), canManage && _jsx(Button, { className: "ml-auto", onClick: () => { setCreateInitial(null); setCreating(true); }, children: "\uB4F1\uB85D" })] }), loadError !== "" && _jsx("div", { className: "mb-3", children: _jsx(Notice, { tone: "error", children: loadError }) }), actionError !== "" && _jsx("div", { className: "mb-3", children: _jsx(Notice, { tone: "error", children: actionError }) }), actionNotice !== "" && _jsx("div", { className: "mb-3", children: _jsx(Notice, { children: actionNotice }) }), _jsx(DataTable, { columns: columns, rows: rows, rowKey: (row) => String(row.asReceptionId), onRowClick: (row) => {
+                        if (row.method === "택배" && row.shipmentId !== null) {
+                            setInfoRow(null);
+                            setSelectedId(row.shipmentId);
+                            return;
+                        }
+                        setSelectedId(null);
+                        setInfoRow(row);
+                    }, selectedKey: selectedId === null ? undefined : String(rows.find((row) => row.shipmentId === selectedId)?.asReceptionId ?? ""), emptyText: loading ? "불러오는 중" : "배송 내역이 없습니다." }), _jsx(Pagination, { page: page, pageCount: pageCount, onPageChange: setPage }), creating && (_jsx(CreateShipmentModal, { initial: createInitial, onClose: () => {
                     setCreating(false);
                     setCreateInitial(null);
-                }, onRegistered: () => setReloadKey((value) => value + 1) })), selectedId !== null && (_jsx(ShipmentDetailModal, { shipmentId: selectedId, readOnly: !canManage, onClose: () => setSelectedId(null), onChanged: () => setReloadKey((value) => value + 1) })), infoRow !== null && (_jsx(ShipmentRowInfoModal, { row: infoRow, onClose: () => setInfoRow(null) }))] }));
+                }, onRegistered: () => setReloadKey((value) => value + 1) })), selectedId !== null && (_jsx(ShipmentDetailModal, { shipmentId: selectedId, readOnly: !canManage, onClose: () => setSelectedId(null), onChanged: () => setReloadKey((value) => value + 1) })), infoRow !== null && (_jsx(ShipmentRowInfoModal, { row: infoRow, canEdit: canManage, onClose: () => setInfoRow(null), onChanged: () => setReloadKey((value) => value + 1) }))] }));
 }
 function toManagementStatus(value) {
     if (value === "배송 등록 대기")
@@ -217,11 +223,24 @@ function rowActionLabel(row) {
         return "배송 등록";
     if (row.status === "배송 준비 완료")
         return "배송 알림";
-    if (row.status === "배송 중")
-        return "배송 조회";
+    if (row.status === "배송 중" && row.method === "택배")
+        return "배송 완료";
+    if (row.status === "배송 완료")
+        return "상세 보기";
     if (row.status === "방문 수령 대기")
         return row.shipmentId === null ? "수령 등록" : "수령 완료";
     return "상세 보기";
+}
+function shipmentActionClass(label) {
+    if (label === "배송 알림")
+        return "bg-[#005A9C] text-white shadow-none hover:bg-[#004E8A]";
+    if (label === "수령 완료")
+        return "border border-[#60C1E5] bg-white text-[#60C1E5] shadow-none hover:bg-[#F3FBFD]";
+    if (label === "배송 조회")
+        return "bg-[#A0E0EF] text-[#005A9C] shadow-none hover:bg-[#8AD4E6]";
+    if (label === "상세 보기")
+        return "bg-[#F1F5F9] text-[#475569] shadow-none hover:bg-[#E2E8F0]";
+    return undefined;
 }
 function listStatus(item) {
     if (item.returnMethod === "DELIVERY" && item.asReceptionStatus === "AWAITING_SHIPMENT" && item.shipmentId === null) {
@@ -241,13 +260,12 @@ function listStatus(item) {
         return "방문 수령 완료";
     return null;
 }
-function toRow(item, no) {
+function toRow(item) {
     const status = listStatus(item);
     if (status === null) {
         return null;
     }
     return {
-        no,
         shipmentId: item.shipmentId,
         asReceptionId: item.asReceptionId,
         asId: item.receptionNumber,
@@ -264,7 +282,7 @@ function Stat({ label, value }) {
     return (_jsxs("div", { className: "rounded-xl border border-neutral-200 bg-white p-4 shadow-sm", children: [_jsx("p", { className: "text-sm text-neutral-500", children: label }), _jsx("p", { className: "mt-1 text-2xl font-semibold text-blue-600", children: value })] }));
 }
 function StatusLabel({ value }) {
-    return (_jsx("span", { className: cn((value === "배송 중" || value === "배송중") && "text-blue-600", (value === "배송 완료" || value === "배송완료" || value === "방문 수령 완료" || value === "수령완료") && "text-green-600"), children: value }));
+    return (_jsx("span", { className: shipmentStatusClass(value), children: value }));
 }
 function CreateShipmentModal({ initial, onClose, onRegistered, }) {
     const [asReceptionId, setAsReceptionId] = useState(initial?.asReceptionId ?? null);
@@ -340,7 +358,7 @@ function CreateShipmentModal({ initial, onClose, onRegistered, }) {
                 }, children: [_jsxs("div", { className: "space-y-4", children: [_jsxs("div", { children: [_jsx(FieldLabel, { children: "\uC811\uC218\uBC88\uD638" }), _jsxs("div", { className: "flex items-center gap-2", children: [_jsx(TextField, { value: asId, onChange: setAsId, placeholder: "AS-2026-0000", readOnly: true, className: "min-w-0 flex-1" }), _jsx(Button, { variant: "outline", className: "shrink-0", onClick: () => setPicking(true), children: "\uAC80\uC0C9" })] })] }), _jsx(TextField, { label: "\uACE0\uAC1D\uC774\uB984", value: receiver, onChange: setReceiver, readOnly: true }), _jsx(TextField, { label: "\uC5F0\uB77D\uCC98", value: phone, onChange: setPhone, placeholder: "010-0000-0000", readOnly: true }), _jsx(TextField, { label: "\uAE30\uBCF8 \uC8FC\uC18C", value: address, onChange: setAddress, placeholder: "\uB3C4\uB85C\uBA85 \uC8FC\uC18C", readOnly: true }), _jsx(TextField, { label: "\uC0C1\uC138 \uC8FC\uC18C", value: addressDetail, onChange: setAddressDetail, placeholder: "\uB3D9, \uD638\uC218", readOnly: true }), !pickup && (_jsxs(_Fragment, { children: [_jsxs("label", { className: "block text-sm", children: [_jsx(FieldLabel, { children: "\uD0DD\uBC30\uC0AC" }), _jsx(SelectBox, { className: "w-full", value: carrierCode, onChange: setCarrierCode, options: [
                                                     { value: "", label: "택배사 선택" },
                                                     ...sweetTrackerCarriers.map((item) => ({ value: item.code, label: item.name })),
-                                                ] })] }), _jsx(TextField, { label: "\uC6B4\uC1A1\uC7A5\uBC88\uD638", value: trackingNo, onChange: setTrackingNo, placeholder: "\uC6B4\uC1A1\uC7A5\uBC88\uD638" })] }))] }), error !== "" && _jsx("div", { className: "mt-3", children: _jsx(Notice, { tone: "error", children: error }) }), notice !== "" && _jsx("div", { className: "mt-3", children: _jsx(Notice, { children: notice }) }), _jsx("div", { className: "mt-4 flex justify-end gap-2", children: pickup ? (_jsx(Button, { disabled: submitting || asReceptionId === null, onClick: () => void register(false), children: "\uBC29\uBB38 \uC218\uB839 \uB4F1\uB85D" })) : (_jsxs(_Fragment, { children: [_jsx(Button, { variant: "outline", disabled: submitting, onClick: () => void register(false), children: "\uC6B4\uC1A1\uC7A5 \uB4F1\uB85D" }), _jsx(Button, { disabled: submitting || !deliveryReady, onClick: () => void register(true), children: "\uBC30\uC1A1 \uC54C\uB9BC" })] })) })] }), picking && (_jsx(ReceptionPickModal, { query: lookupQuery, onQueryChange: setLookupQuery, onClose: () => setPicking(false), onApply: (row) => {
+                                                ] })] }), _jsx(TextField, { label: "\uC6B4\uC1A1\uC7A5\uBC88\uD638", value: trackingNo, onChange: setTrackingNo, placeholder: "\uC6B4\uC1A1\uC7A5\uBC88\uD638" })] }))] }), error !== "" && _jsx("div", { className: "mt-3", children: _jsx(Notice, { tone: "error", children: error }) }), notice !== "" && _jsx("div", { className: "mt-3", children: _jsx(Notice, { children: notice }) }), _jsx("div", { className: "mt-4 flex justify-end gap-2", children: pickup ? (_jsx(Button, { disabled: submitting || asReceptionId === null, onClick: () => void register(false), children: "\uBC29\uBB38 \uC218\uB839 \uB4F1\uB85D" })) : (_jsxs(_Fragment, { children: [_jsx(Button, { variant: "outline", disabled: submitting, onClick: () => void register(false), children: "\uC6B4\uC1A1\uC7A5 \uB4F1\uB85D" }), _jsx(Button, { className: shipmentActionClass("배송 알림"), disabled: submitting || !deliveryReady, onClick: () => void register(true), children: "\uBC30\uC1A1 \uC54C\uB9BC" })] })) })] }), picking && (_jsx(ReceptionPickModal, { query: lookupQuery, onQueryChange: setLookupQuery, onClose: () => setPicking(false), onApply: (row) => {
                     setAsReceptionId(row.id);
                     setShipmentId(null);
                     setReturnMethod(row.returnMethod);
@@ -480,7 +498,7 @@ function ShipmentDetailModal({ shipmentId, readOnly, onClose, onChanged, }) {
             setBusy(false);
         }
     }
-    return (_jsxs(Modal, { title: "\uBC30\uC1A1 \uC0C1\uC138", onClose: onClose, children: [detail === null ? (_jsx("p", { className: "text-sm text-neutral-500", children: error === "" ? "불러오는 중" : error })) : (_jsxs("div", { className: "space-y-4", children: [_jsx(TextField, { label: "\uC811\uC218\uBC88\uD638", value: detail.receptionNumber, onChange: () => undefined, readOnly: true }), _jsx(TextField, { label: "\uC218\uB839\uC778", value: detail.recipientName, onChange: () => undefined, readOnly: true }), !visit && (_jsxs(_Fragment, { children: [_jsx(TextField, { label: "\uAE30\uBCF8 \uC8FC\uC18C", value: detail.address ?? "", onChange: () => undefined, readOnly: true }), _jsx(TextField, { label: "\uC0C1\uC138 \uC8FC\uC18C", value: detail.addressDetail ?? "", onChange: () => undefined, readOnly: true }), editable ? (_jsxs("label", { className: "block text-sm", children: [_jsx(FieldLabel, { children: "\uD0DD\uBC30\uC0AC" }), _jsx(SelectBox, { className: "w-full", value: carrierCode, onChange: setCarrierCode, options: sweetTrackerCarriers.map((item) => ({ value: item.code, label: item.name })) })] })) : (_jsx(TextField, { label: "\uD0DD\uBC30\uC0AC", value: carrierLabel(detail.courier, detail.courierCode), onChange: () => undefined, readOnly: true }))] })), _jsxs("label", { className: "block text-sm", children: [_jsx(FieldLabel, { children: "\uC0C1\uD0DC" }), _jsx("div", { className: "rounded-lg border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm", children: _jsx(StatusLabel, { value: shipmentStatusLabel(detail.status, detail.returnMethod) }) })] }), visit && _jsx(TextField, { label: "\uBC29\uBB38 \uC218\uB839 \uC77C\uC2DC", value: formatShipmentTime(detail.completedAt), onChange: () => undefined, readOnly: true }), !visit && (_jsxs(_Fragment, { children: [_jsx(TextField, { label: "\uC6B4\uC1A1\uC7A5\uBC88\uD638", value: trackingNo, onChange: setTrackingNo, readOnly: !editable }), _jsx(ShipmentHistory, { detail: detail })] }))] })), detail !== null && error !== "" && _jsx("div", { className: "mt-3", children: _jsx(Notice, { tone: "error", children: error }) }), notice !== "" && _jsx("div", { className: "mt-3", children: _jsx(Notice, { children: notice }) }), detail !== null && !readOnly && (_jsxs("div", { className: "mt-4 flex justify-end gap-2", children: [!visit && !editable && (_jsx(Button, { variant: "outline", disabled: busy, onClick: () => void run(() => refreshShipmentTracking(shipmentId), "배송 이력을 갱신했습니다."), children: "\uBC30\uC1A1 \uC870\uD68C" })), editable && (_jsx(Button, { variant: "outline", disabled: busy || carrierCode === "" || trackingNo.trim() === "", onClick: () => void run(() => updateShipmentTracking(shipmentId, carrierCode, trackingNo.trim()).then(() => undefined), "운송장번호를 수정했습니다."), children: "\uC6B4\uC1A1\uC7A5 \uC218\uC815" })), visit ? (_jsx(Button, { disabled: busy || detail.status !== "READY", onClick: () => void run(() => markShipmentPickedUp(shipmentId).then(() => undefined), "수령 완료로 처리했습니다."), children: "\uC218\uB839 \uC644\uB8CC" })) : !editable && (_jsx(Button, { disabled: busy || detail.status !== "SHIPPING", onClick: () => void run(() => markShipmentDelivered(shipmentId).then(() => undefined), "배송 완료로 처리했습니다."), children: "\uBC30\uC1A1 \uC644\uB8CC" }))] }))] }));
+    return (_jsxs(Modal, { title: "\uBC30\uC1A1 \uC0C1\uC138", onClose: onClose, children: [detail === null ? (_jsx("p", { className: "text-sm text-neutral-500", children: error === "" ? "불러오는 중" : error })) : (_jsxs("div", { className: "space-y-4", children: [_jsx(TextField, { label: "\uC811\uC218\uBC88\uD638", value: detail.receptionNumber, onChange: () => undefined, readOnly: true }), _jsx(TextField, { label: "\uC218\uB839\uC778", value: detail.recipientName, onChange: () => undefined, readOnly: true }), !visit && (_jsxs(_Fragment, { children: [_jsx(TextField, { label: "\uAE30\uBCF8 \uC8FC\uC18C", value: detail.address ?? "", onChange: () => undefined, readOnly: true }), _jsx(TextField, { label: "\uC0C1\uC138 \uC8FC\uC18C", value: detail.addressDetail ?? "", onChange: () => undefined, readOnly: true }), editable ? (_jsxs("label", { className: "block text-sm", children: [_jsx(FieldLabel, { children: "\uD0DD\uBC30\uC0AC" }), _jsx(SelectBox, { className: "w-full", value: carrierCode, onChange: setCarrierCode, options: sweetTrackerCarriers.map((item) => ({ value: item.code, label: item.name })) })] })) : (_jsx(TextField, { label: "\uD0DD\uBC30\uC0AC", value: carrierLabel(detail.courier, detail.courierCode), onChange: () => undefined, readOnly: true }))] })), _jsxs("label", { className: "block text-sm", children: [_jsx(FieldLabel, { children: "\uC0C1\uD0DC" }), _jsx("div", { className: "rounded-lg border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm", children: _jsx(StatusLabel, { value: shipmentStatusLabel(detail.status, detail.returnMethod) }) })] }), visit && _jsx(TextField, { label: "\uBC29\uBB38 \uC218\uB839 \uC77C\uC2DC", value: formatShipmentTime(detail.completedAt), onChange: () => undefined, readOnly: true }), !visit && (_jsxs(_Fragment, { children: [_jsx(TextField, { label: "\uC6B4\uC1A1\uC7A5\uBC88\uD638", value: trackingNo, onChange: setTrackingNo, readOnly: !editable }), _jsx(ShipmentHistory, { detail: detail })] }))] })), detail !== null && error !== "" && _jsx("div", { className: "mt-3", children: _jsx(Notice, { tone: "error", children: error }) }), notice !== "" && _jsx("div", { className: "mt-3", children: _jsx(Notice, { children: notice }) }), detail !== null && !readOnly && (_jsxs("div", { className: "mt-4 flex justify-end gap-2", children: [!visit && editable && (_jsx(Button, { className: shipmentActionClass("배송 알림"), disabled: busy, onClick: () => void run(() => markShipmentShipping(shipmentId).then(() => undefined), "배송을 시작했습니다."), children: "\uBC30\uC1A1 \uC54C\uB9BC" })), !visit && !editable && (_jsx(Button, { className: detail.status === "SHIPPING" ? "bg-[#005A9C] text-white shadow-none hover:bg-[#004E8A]" : shipmentActionClass("배송 조회"), disabled: busy, onClick: () => void run(() => refreshShipmentTracking(shipmentId), "배송 이력을 갱신했습니다."), children: "\uBC30\uC1A1 \uC870\uD68C" })), editable && (_jsx(Button, { variant: "outline", disabled: busy || carrierCode === "" || trackingNo.trim() === "", onClick: () => void run(() => updateShipmentTracking(shipmentId, carrierCode, trackingNo.trim()).then(() => undefined), "운송장번호를 수정했습니다."), children: "\uC6B4\uC1A1\uC7A5 \uC218\uC815" })), visit ? (_jsx(Button, { className: shipmentActionClass("수령 완료"), disabled: busy || detail.status !== "READY", onClick: () => void run(() => markShipmentPickedUp(shipmentId).then(() => undefined), "수령 완료로 처리했습니다."), children: "\uC218\uB839 \uC644\uB8CC" })) : !editable && (_jsx(Button, { variant: detail.status === "SHIPPING" ? "outline" : "primary", disabled: busy || detail.status !== "SHIPPING", onClick: () => void run(() => markShipmentDelivered(shipmentId).then(() => undefined), "배송 완료로 처리했습니다."), children: "\uBC30\uC1A1 \uC644\uB8CC" }))] }))] }));
 }
 function ShipmentHistory({ detail }) {
     return (_jsxs("div", { className: "rounded-lg border border-neutral-300 bg-white px-4 py-3", children: [_jsx(FieldLabel, { children: "\uBC30\uC1A1 \uC774\uB825" }), detail.events.length === 0 ? (_jsx("p", { className: "text-sm text-neutral-500", children: "\uBC30\uC1A1 \uC774\uB825\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." })) : (_jsx("ol", { children: detail.events.map((item, index) => {
@@ -489,27 +507,37 @@ function ShipmentHistory({ detail }) {
                     return (_jsxs("li", { className: "flex gap-3", children: [_jsxs("div", { className: "flex w-4 flex-col items-center", children: [_jsx("span", { className: "text-sm font-semibold leading-5 text-neutral-900", children: index + 1 }), !last && _jsx("span", { className: "mt-1 w-px flex-1 bg-neutral-300" })] }), _jsxs("div", { className: cn("min-w-0", last ? "pb-0" : "pb-4"), children: [_jsx("p", { className: "text-sm font-semibold leading-5 text-neutral-900", children: title }), _jsx("p", { className: "mt-1 text-xs text-neutral-500", children: formatShipmentTime(item.occurredAt) })] })] }, item.id));
                 }) }))] }));
 }
-function ShipmentRowInfoModal({ row, onClose }) {
+function ShipmentRowInfoModal({ row, canEdit, onClose, onChanged }) {
     const delivery = row.method === "택배";
     const showPickedUpAt = row.method === "방문 수령" && row.status === "방문 수령 완료";
-    const [email, setEmail] = useState("");
+    const editable = canEdit && delivery && row.shipmentId !== null;
+    const [status, setStatus] = useState(row.status);
     const [pickedUpAt, setPickedUpAt] = useState(null);
+    const [carrierCode, setCarrierCode] = useState("");
+    const [trackingNo, setTrackingNo] = useState(row.trackingNo === "-" ? "" : row.trackingNo);
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [notice, setNotice] = useState("");
     const [error, setError] = useState("");
     useEffect(() => {
         const controller = new AbortController();
         setLoading(true);
-        const emailRequest = fetchReception(row.asReceptionId, controller.signal).then((detail) => detail.customer.email);
         const timeRequest = showPickedUpAt && row.shipmentId !== null
             ? fetchShipmentDetail(row.shipmentId, controller.signal).then((detail) => detail.completedAt)
             : Promise.resolve(null);
-        Promise.all([emailRequest, timeRequest])
-            .then(([nextEmail, completedAt]) => {
+        const shipmentRequest = delivery && row.shipmentId !== null
+            ? fetchShipmentDetail(row.shipmentId, controller.signal)
+            : Promise.resolve(null);
+        Promise.all([timeRequest, shipmentRequest])
+            .then(([completedAt, shipment]) => {
             if (controller.signal.aborted) {
                 return;
             }
-            setEmail(nextEmail.trim() === "" ? "-" : nextEmail);
             setPickedUpAt(completedAt);
+            if (shipment !== null) {
+                setCarrierCode(shipment.courierCode ?? "");
+                setTrackingNo(shipment.trackingNumber ?? "");
+            }
             setError("");
         })
             .catch((caught) => {
@@ -523,8 +551,50 @@ function ShipmentRowInfoModal({ row, onClose }) {
             }
         });
         return () => controller.abort();
-    }, [row, showPickedUpAt]);
-    return (_jsxs(Modal, { title: "\uBC30\uC1A1 \uC815\uBCF4", onClose: onClose, children: [loading ? (_jsx("p", { className: "text-sm text-neutral-500", children: error === "" ? "불러오는 중" : error })) : (_jsxs("div", { className: "space-y-4", children: [_jsx(TextField, { label: "\uC811\uC218\uBC88\uD638", value: row.asId, onChange: () => undefined, readOnly: true }), _jsx(TextField, { label: "\uC218\uB839 \uBC29\uBC95", value: row.method, onChange: () => undefined, readOnly: true }), _jsx(TextField, { label: "\uC218\uB839\uC778", value: row.receiver, onChange: () => undefined, readOnly: true }), _jsx(TextField, { label: "\uC5F0\uB77D\uCC98", value: row.phone, onChange: () => undefined, readOnly: true }), _jsx(TextField, { label: "\uC774\uBA54\uC77C", value: email === "" ? "-" : email, onChange: () => undefined, readOnly: true }), delivery && (_jsxs(_Fragment, { children: [_jsx(TextField, { label: "\uD0DD\uBC30\uC0AC", value: row.carrier, onChange: () => undefined, readOnly: true }), _jsx(TextField, { label: "\uC6B4\uC1A1\uC7A5\uBC88\uD638", value: row.trackingNo, onChange: () => undefined, readOnly: true })] })), _jsxs("label", { className: "block text-sm", children: [_jsx(FieldLabel, { children: "\uC0C1\uD0DC" }), _jsx("div", { className: "rounded-lg border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm", children: _jsx(StatusLabel, { value: row.status }) })] }), showPickedUpAt && (_jsx(TextField, { label: "\uBC29\uBB38 \uC218\uB839 \uC77C\uC2DC", value: formatShipmentTime(pickedUpAt), onChange: () => undefined, readOnly: true }))] })), !loading && error !== "" && _jsx("div", { className: "mt-3", children: _jsx(Notice, { tone: "error", children: error }) })] }));
+    }, [delivery, row, showPickedUpAt]);
+    const canCompletePickup = canEdit && row.method === "방문 수령" && status === "방문 수령 대기";
+    async function completePickup() {
+        if (!canCompletePickup || saving) {
+            return;
+        }
+        setSaving(true);
+        setNotice("");
+        setError("");
+        try {
+            const shipmentId = row.shipmentId ?? (await createPickup(row.asReceptionId)).id;
+            const completed = await markShipmentPickedUp(shipmentId);
+            setStatus("방문 수령 완료");
+            setPickedUpAt(completed.completedAt);
+            setNotice("수령 완료로 처리했습니다.");
+            onChanged();
+        }
+        catch (caught) {
+            setError(caught instanceof Error ? caught.message : "수령 완료로 처리하지 못했습니다.");
+        }
+        finally {
+            setSaving(false);
+        }
+    }
+    async function saveTracking() {
+        if (!editable || row.shipmentId === null || saving) {
+            return;
+        }
+        setSaving(true);
+        setNotice("");
+        setError("");
+        try {
+            await updateShipmentTracking(row.shipmentId, carrierCode, trackingNo.trim());
+            setNotice("운송장 정보를 수정했습니다.");
+            onChanged();
+        }
+        catch (caught) {
+            setError(caught instanceof Error ? caught.message : "운송장 정보를 수정하지 못했습니다.");
+        }
+        finally {
+            setSaving(false);
+        }
+    }
+    return (_jsxs(Modal, { title: "배송 상세", onClose: onClose, children: [loading ? (_jsx("p", { className: "text-sm text-neutral-500", children: error === "" ? "불러오는 중" : error })) : (_jsxs("div", { className: "space-y-4", children: [_jsx(TextField, { label: "접수번호", value: row.asId, onChange: () => undefined, readOnly: true }), _jsx(TextField, { label: "수령인", value: row.receiver, onChange: () => undefined, readOnly: true }), _jsx(TextField, { label: "수령 방법", value: row.method, onChange: () => undefined, readOnly: true }), delivery && editable && (_jsxs(_Fragment, { children: [_jsxs("label", { className: "block text-sm", children: [_jsx(FieldLabel, { children: "택배사" }), _jsx(SelectBox, { className: "w-full", value: carrierCode, onChange: setCarrierCode, options: [{ value: "", label: "택배사 선택" }, ...sweetTrackerCarriers.map((item) => ({ value: item.code, label: item.name }))] })] }), _jsx(TextField, { label: "운송장번호", value: trackingNo, onChange: setTrackingNo, placeholder: "운송장번호" })] })), delivery && !editable && (_jsxs(_Fragment, { children: [_jsx(TextField, { label: "택배사", value: row.carrier, onChange: () => undefined, readOnly: true }), _jsx(TextField, { label: "운송장번호", value: row.trackingNo, onChange: () => undefined, readOnly: true })] })), _jsxs("label", { className: "block text-sm", children: [_jsx(FieldLabel, { children: "상태" }), _jsx("div", { className: "rounded-lg border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm", children: _jsx(StatusLabel, { value: status }) })] }), row.method === "방문 수령" && status === "방문 수령 완료" && (_jsx(TextField, { label: "방문 수령 일시", value: formatShipmentTime(pickedUpAt), onChange: () => undefined, readOnly: true })), editable && (_jsx("div", { className: "flex justify-end", children: _jsx(Button, { disabled: saving || carrierCode === "" || trackingNo.trim() === "", onClick: () => void saveTracking(), children: saving ? "저장 중…" : "저장" }) }))] })), !loading && notice !== "" && _jsx("div", { className: "mt-3", children: _jsx(Notice, { children: notice }) }), !loading && error !== "" && _jsx("div", { className: "mt-3", children: _jsx(Notice, { tone: "error", children: error }) }), canCompletePickup && !loading && (_jsx("div", { className: "mt-4 flex justify-end", children: _jsx(Button, { className: shipmentActionClass("수령 완료"), disabled: saving, onClick: () => void completePickup(), children: saving ? "처리 중…" : "수령 완료" }) }))] }));
 }
 function formatShipmentTime(value) {
     if (value === null || value === "") {

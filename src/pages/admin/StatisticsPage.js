@@ -78,7 +78,7 @@ function TechnicianBars({ loading, rows }) {
     if (top.length === 0) {
         return _jsx("p", { className: "text-sm text-neutral-500", children: "\uC870\uD68C \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4." });
     }
-    return (_jsx("ul", { className: "space-y-3", children: top.map((row) => (_jsxs("li", { children: [_jsxs("div", { className: "mb-1 flex justify-between text-sm", children: [_jsx("span", { children: row.technicianName }), _jsxs("span", { children: [row.assignedCount.toLocaleString("ko-KR"), "\uAC74"] })] }), _jsx("div", { className: "h-2 rounded bg-neutral-100", children: _jsx("div", { className: "h-2 rounded bg-blue-600", style: { width: `${(row.assignedCount / max) * 100}%` } }) })] }, row.technicianId))) }));
+    return (_jsx("ul", { className: "space-y-3", children: top.map((row) => (_jsxs("li", { children: [_jsxs("div", { className: "mb-1 flex justify-between text-sm", children: [_jsx("span", { children: row.technicianName }), _jsxs("span", { children: [row.assignedCount.toLocaleString("ko-KR"), "\uAC74"] })] }), _jsx("div", { className: "h-2 rounded bg-neutral-100", children: _jsx("div", { className: "h-2 rounded bg-blue-400", style: { width: `${(row.assignedCount / max) * 100}%` } }) })] }, row.technicianId))) }));
 }
 function ModelPreview({ loading, rows }) {
     const top = [...rows].sort((left, right) => right.receptionCount - left.receptionCount).slice(0, 5);

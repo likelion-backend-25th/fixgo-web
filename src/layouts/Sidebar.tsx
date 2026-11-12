@@ -52,7 +52,7 @@ export function Sidebar({ open, onNavigate }: SidebarProps) {
                     className={cn(
                       "my-0.5 block rounded-lg px-2.5 py-2 text-sm",
                       active
-                        ? "bg-blue-50 font-medium text-blue-600"
+                        ? "bg-blue-600 font-medium text-white"
                         : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900",
                     )}
                   >

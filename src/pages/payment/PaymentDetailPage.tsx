@@ -322,7 +322,7 @@ function RefundForm({
         {needsAccount && (
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="block text-sm">
-              <span className="mb-1.5 block text-xs font-medium text-neutral-600">은행</span>
+              <span className="form-label mb-1.5 block">은행</span>
               <SelectBox className="w-full" value={bank} onChange={setBank} options={bankOptions} />
             </label>
             <TextField label="계좌번호" value={accountNumber} onChange={setAccountNumber} placeholder="숫자만 입력" />

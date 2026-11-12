@@ -98,6 +98,30 @@ export function shipmentStatusLabel(status: ShipmentStatus, method: ShipmentRetu
   return "수령완료";
 }
 
+// 상태 색은 브랜드 색과 분리한다. 완료와 진행 중이 같은 색이면 구분되지 않는다.
+export function shipmentStatusClass(status: string): string {
+  const tone = shipmentStatusTone(status);
+  return `inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${tone}`;
+}
+
+function shipmentStatusTone(status: string): string {
+  if (status === "배송 준비 완료") {
+    return "bg-[#FFF1E0] text-[#E07A2F]";
+  }
+  if (status === "배송 중" || status === "배송중") {
+    return "bg-[#E7F4FC] text-[#3B8FD6]";
+  }
+  if (
+    status === "배송 완료"
+    || status === "배송완료"
+    || status === "방문 수령 완료"
+    || status === "수령완료"
+  ) {
+    return "bg-[#E7F6EC] text-[#3D9A5F]";
+  }
+  return "bg-[#EEF2F6] text-[#64748B]";
+}
+
 export function shipmentEventLabel(status: ShipmentEventStatus): string {
   if (status === "REGISTERED") return "운송장 등록";
   if (status === "PICKED_UP") return "집화 완료";

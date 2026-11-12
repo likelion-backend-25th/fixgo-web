@@ -35,7 +35,7 @@ export function CostListPage() {
   }, []);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
       {error !== "" && <Notice tone="error">{error}</Notice>}
       <RateTable title="공임비" rateType="LABOR_RATE" rows={rows} loading={loading} />
       <RateTable title="점검비" rateType="INSPECTION_COST" rows={rows} loading={loading} />
@@ -64,7 +64,7 @@ function RateTable({
 
   return (
     <section>
-      <h2 className="mb-3 text-lg font-semibold">{title}</h2>
+      <h2 className="section-title mb-3">{title}</h2>
       <DataTable
         columns={columns}
         rows={visible}

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { SelectBox, TextArea, TextField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
-import { Notice } from "@/components/ui/Panel";
+import { FormActions, Notice } from "@/components/ui/Panel";
 import { isAbortError } from "@/lib/apiClient";
 import { categoryLabel, fetchProduct, startMyInspection } from "@/lib/asReceptionApi";
 import {
@@ -389,7 +389,7 @@ function InspectionForm({
               부품 단종처럼 수리가 불가능하거나 고객이 취소한 경우입니다. 제출하면 {returnWaitingLabel}로 넘어갑니다.
             </p>
             <label className="block text-sm">
-              <span className="mb-1.5 block text-xs font-medium text-neutral-600">카테고리</span>
+              <span className="form-label mb-1.5 block">카테고리</span>
               <SelectBox
                 aria-label="중단 카테고리"
                 value={rejectCategory}
@@ -418,14 +418,14 @@ function InspectionForm({
         <div className="mt-2 flex justify-between border-t border-blue-200 pt-2 font-semibold"><span>청구 금액</span><span>{judgment === null ? "미판정" : won(charge)}</span></div>
       </div>
       {diagnosing && (
-        <div className="flex justify-end gap-2">
+        <FormActions>
           <Button variant="outline" disabled={submitting} onClick={() => setAbortOpen(true)}>
             A/S 중단
           </Button>
           <Button disabled={submitting || judgment === null} onClick={() => void complete()}>
             {submitting ? "점검 완료 처리 중…" : "점검 완료"}
           </Button>
-        </div>
+        </FormActions>
       )}
       {presetOpen && (
         <PresetPickerModal
@@ -701,7 +701,7 @@ function LineTable({
 }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
-      <table className="w-full min-w-[640px] text-sm">
+      <table className="w-full text-sm">
         <thead className="bg-neutral-50 text-left text-xs text-neutral-500">
           <tr>
             {["구분", "항목", "시간/수량", "단가", "금액", ""].map((header) => (

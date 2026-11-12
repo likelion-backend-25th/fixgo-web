@@ -1,10 +1,10 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 const TONE_CLASS = {
-    blue: "stroke-blue-600",
+    blue: "stroke-blue-400",
     green: "stroke-green-600",
 };
 export function MonthlyTrendChart({ title, labels, series, loading, formatValue }) {
-    return (_jsxs("div", { className: "rounded-xl border border-neutral-200 bg-white p-4 shadow-sm", children: [_jsxs("div", { className: "mb-2 flex items-center justify-between gap-3", children: [_jsx("p", { className: "text-sm font-medium", children: title }), _jsx("ul", { className: "flex gap-3 text-xs text-neutral-500", children: series.map((item) => (_jsxs("li", { className: "flex items-center gap-1", children: [_jsx("span", { className: `inline-block size-2.5 ${item.tone === "blue" ? "bg-blue-600" : "bg-green-600"}` }), item.name] }, item.name))) })] }), loading ? (_jsx("p", { className: "py-16 text-center text-sm text-neutral-500", children: "\uCD94\uC774\uB97C \uBD88\uB7EC\uC624\uB294 \uC911\uC785\uB2C8\uB2E4." })) : labels.length === 0 ? (_jsx("p", { className: "py-16 text-center text-sm text-neutral-500", children: "\uC870\uD68C \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4." })) : (_jsx(TrendPlot, { labels: labels, series: series, formatValue: formatValue }))] }));
+    return (_jsxs("div", { className: "rounded-xl border border-neutral-200 bg-white p-4 shadow-sm", children: [_jsxs("div", { className: "mb-2 flex items-center justify-between gap-3", children: [_jsx("p", { className: "text-sm font-medium", children: title }), _jsx("ul", { className: "flex gap-3 text-xs text-neutral-500", children: series.map((item) => (_jsxs("li", { className: "flex items-center gap-1", children: [_jsx("span", { className: `inline-block size-2.5 ${item.tone === "blue" ? "bg-blue-400" : "bg-green-600"}` }), item.name] }, item.name))) })] }), loading ? (_jsx("p", { className: "py-16 text-center text-sm text-neutral-500", children: "\uCD94\uC774\uB97C \uBD88\uB7EC\uC624\uB294 \uC911\uC785\uB2C8\uB2E4." })) : labels.length === 0 ? (_jsx("p", { className: "py-16 text-center text-sm text-neutral-500", children: "\uC870\uD68C \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4." })) : (_jsx(TrendPlot, { labels: labels, series: series, formatValue: formatValue }))] }));
 }
 function TrendPlot({ labels, series, formatValue, }) {
     const values = series.flatMap((item) => item.values);

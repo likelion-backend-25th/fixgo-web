@@ -8,7 +8,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { SortMenu } from "@/components/ui/SortMenu";
 import { formatDate, includesText } from "@/lib/format";
 import { compareText } from "@/lib/guards";
-import { shipmentMethodLabel } from "@/lib/shipmentApi";
+import { shipmentMethodLabel, shipmentStatusClass } from "@/lib/shipmentApi";
 import { fetchShipmentHistory } from "@/lib/statisticsApi";
 import { PeriodFilter, StatisticsBackLink } from "@/pages/admin/statistics/PeriodFilter";
 import { useStatisticsPage } from "@/pages/admin/statistics/useStatisticsPage";
@@ -107,9 +107,9 @@ function ShipmentHistorySection({
     setSortDir("asc");
   }
   return (
-    <section className="mt-6">
+    <section className="mt-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold text-neutral-900">배송 목록</h2>
+        <h2 className="section-title">배송 목록</h2>
         <form
           className="flex flex-wrap items-center gap-2"
           onSubmit={(event) => {
@@ -144,9 +144,10 @@ function shipmentColumns(
     shipmentColumn("number", "접수번호", sortKey, sortDir, toggleSort, (row) => row.receptionNumber),
     shipmentColumn("customer", "고객", sortKey, sortDir, toggleSort, (row) => row.customerName),
     shipmentColumn("method", "방식", sortKey, sortDir, toggleSort, (row) => shipmentMethodLabel(row.returnMethod)),
-    shipmentColumn("status", "상태", sortKey, sortDir, toggleSort, (row) => (
-      <span className={shipmentStatusClass(historyListStatus(row))}>{historyListStatus(row) ?? "-"}</span>
-    )),
+    shipmentColumn("status", "상태", sortKey, sortDir, toggleSort, (row) => {
+      const status = historyListStatus(row);
+      return status === null ? "-" : <span className={shipmentStatusClass(status)}>{status}</span>;
+    }),
     shipmentColumn("date", "등록일", sortKey, sortDir, toggleSort, (row) => formatDate(row.createdAt)),
   ];
 }
@@ -274,16 +275,6 @@ function shipmentEmptyText(loading: boolean, error: string): string {
     return "배송 내역을 불러오지 못했습니다.";
   }
   return "해당 기간의 배송 내역이 없습니다.";
-}
-
-function shipmentStatusClass(status: ShipmentListStatus | null): string {
-  if (status === "배송 준비 완료" || status === "배송 등록 대기" || status === "방문 수령 대기") {
-    return "text-orange-500";
-  }
-  if (status === "배송 중") {
-    return "text-blue-600";
-  }
-  return "text-neutral-500";
 }
 
 export function summarizeShipmentMethods(rows: ShipmentHistoryItem[]): {
