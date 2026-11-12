@@ -96,6 +96,7 @@ export function ShipmentListPage() {
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [infoRow, setInfoRow] = useState<ShipmentRow | null>(null);
   const [creating, setCreating] = useState(false);
   const [createInitial, setCreateInitial] = useState<CreateInitial | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -178,13 +179,13 @@ export function ShipmentListPage() {
             return null;
           }
           return (
-            <div className="flex justify-end">
+            <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
               <Button variant="outline" onClick={() => setSelectedId(shipmentId)}>상세 보기</Button>
             </div>
           );
         }
         return (
-          <div className="flex justify-end gap-2 whitespace-nowrap">
+          <div className="flex justify-end gap-2 whitespace-nowrap" onClick={(event) => event.stopPropagation()}>
             {row.status === "배송 준비 완료" && shipmentId !== null && (
               <Button
                 variant="outline"
@@ -288,6 +289,7 @@ export function ShipmentListPage() {
         columns={columns}
         rows={rows}
         rowKey={(row) => String(row.asReceptionId)}
+        onRowClick={setInfoRow}
         selectedKey={selectedId === null ? undefined : String(rows.find((row) => row.shipmentId === selectedId)?.asReceptionId ?? "")}
         emptyText={loading ? "불러오는 중" : "배송 내역이 없습니다."}
       />
@@ -309,6 +311,9 @@ export function ShipmentListPage() {
           onClose={() => setSelectedId(null)}
           onChanged={() => setReloadKey((value) => value + 1)}
         />
+      )}
+      {infoRow !== null && (
+        <ShipmentRowInfoModal row={infoRow} onClose={() => setInfoRow(null)} />
       )}
     </div>
   );
@@ -756,6 +761,9 @@ function ShipmentDetailModal({
               <StatusLabel value={shipmentStatusLabel(detail.status, detail.returnMethod)} />
             </div>
           </label>
+          {visit && (
+            <TextField label="방문 수령 일시" value={formatShipmentTime(detail.completedAt)} onChange={() => undefined} readOnly />
+          )}
           {!visit && (
             <>
               <TextField label="운송장번호" value={trackingNo} onChange={setTrackingNo} readOnly={!editable} />
@@ -837,6 +845,77 @@ function ShipmentHistory({ detail }: { detail: ShipmentDetail }) {
         </ol>
       )}
     </div>
+  );
+}
+
+function ShipmentRowInfoModal({ row, onClose }: { row: ShipmentRow; onClose: () => void }) {
+  const delivery = row.method === "택배";
+  const showPickedUpAt = row.method === "방문 수령" && row.status === "방문 수령 완료";
+  const [email, setEmail] = useState("");
+  const [pickedUpAt, setPickedUpAt] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    const emailRequest = fetchReception(row.asReceptionId, controller.signal).then((detail) => detail.customer.email);
+    const timeRequest = showPickedUpAt && row.shipmentId !== null
+      ? fetchShipmentDetail(row.shipmentId, controller.signal).then((detail) => detail.completedAt)
+      : Promise.resolve(null);
+    // 이메일은 접수 고객에만 있고, 방문 수령 일시는 배송 상세의 completedAt에만 있다.
+    Promise.all([emailRequest, timeRequest])
+      .then(([nextEmail, completedAt]) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setEmail(nextEmail.trim() === "" ? "-" : nextEmail);
+        setPickedUpAt(completedAt);
+        setError("");
+      })
+      .catch((caught: unknown) => {
+        if (!isAbortError(caught)) {
+          setError(caught instanceof Error ? caught.message : "배송 정보를 불러오지 못했습니다.");
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+    return () => controller.abort();
+  }, [row, showPickedUpAt]);
+
+  return (
+    <Modal title="배송 정보" onClose={onClose}>
+      {loading ? (
+        <p className="text-sm text-neutral-500">{error === "" ? "불러오는 중" : error}</p>
+      ) : (
+        <div className="space-y-4">
+          <TextField label="접수번호" value={row.asId} onChange={() => undefined} readOnly />
+          <TextField label="수령 방법" value={row.method} onChange={() => undefined} readOnly />
+          <TextField label="수령인" value={row.receiver} onChange={() => undefined} readOnly />
+          <TextField label="연락처" value={row.phone} onChange={() => undefined} readOnly />
+          <TextField label="이메일" value={email === "" ? "-" : email} onChange={() => undefined} readOnly />
+          {delivery && (
+            <>
+              <TextField label="택배사" value={row.carrier} onChange={() => undefined} readOnly />
+              <TextField label="운송장번호" value={row.trackingNo} onChange={() => undefined} readOnly />
+            </>
+          )}
+          <label className="block text-sm">
+            <FieldLabel>상태</FieldLabel>
+            <div className="rounded-lg border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm">
+              <StatusLabel value={row.status} />
+            </div>
+          </label>
+          {showPickedUpAt && (
+            <TextField label="방문 수령 일시" value={formatShipmentTime(pickedUpAt)} onChange={() => undefined} readOnly />
+          )}
+        </div>
+      )}
+      {!loading && error !== "" && <div className="mt-3"><Notice tone="error">{error}</Notice></div>}
+    </Modal>
   );
 }
 
