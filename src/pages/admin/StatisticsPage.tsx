@@ -90,17 +90,7 @@ export function StatisticsPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Link to={`/admin/statistics/shipments?${query}`} className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm hover:border-blue-400">
           <p className="mb-3 text-sm font-medium">배송 현황</p>
-          <p className="mb-2 text-xs font-medium text-neutral-500">택배</p>
-          <div className="grid grid-cols-3 gap-3 text-sm">
-            <Metric label="대기" value={countText(shipments.loading, shipmentSummary?.delivery.ready, "건")} />
-            <Metric label="배송중" value={countText(shipments.loading, shipmentSummary?.delivery.shipping, "건")} />
-            <Metric label="완료" value={countText(shipments.loading, shipmentSummary?.delivery.completed, "건")} />
-          </div>
-          <p className="mb-2 mt-3 text-xs font-medium text-neutral-500">방문 수령</p>
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <Metric label="대기" value={countText(shipments.loading, shipmentSummary?.pickup.ready, "건")} />
-            <Metric label="완료" value={countText(shipments.loading, shipmentSummary?.pickup.completed, "건")} />
-          </div>
+          <ShipmentOverview loading={shipments.loading} summary={shipmentSummary} />
         </Link>
         <Link to={`/admin/statistics/repair_cost?${query}`} className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm hover:border-blue-400">
           <p className="mb-3 text-sm font-medium">수리비 수납</p>
@@ -188,6 +178,60 @@ function Metric({ label, value }: { label: string; value: string }) {
       <p className="text-neutral-500">{label}</p>
       <p className="mt-1 font-semibold text-blue-600">{value}</p>
     </div>
+  );
+}
+
+function ShipmentOverview({
+  loading,
+  summary,
+}: {
+  loading: boolean;
+  summary: ReturnType<typeof summarizeShipmentMethods> | null;
+}) {
+  const rows = [
+    {
+      label: "택배",
+      ready: countText(loading, summary?.delivery.ready, "건"),
+      shipping: countText(loading, summary?.delivery.shipping, "건"),
+      completed: countText(loading, summary?.delivery.completed, "건"),
+    },
+    {
+      label: "방문 수령",
+      ready: countText(loading, summary?.pickup.ready, "건"),
+      shipping: "-",
+      completed: countText(loading, summary?.pickup.completed, "건"),
+    },
+  ];
+
+  return (
+    <table className="w-full table-fixed text-sm">
+      <colgroup>
+        <col className="w-24" />
+        <col />
+        <col />
+        <col />
+      </colgroup>
+      <thead>
+        <tr className="text-neutral-500">
+          <th className="pb-2 text-left font-normal" />
+          <th className="pb-2 text-right font-normal">대기</th>
+          <th className="pb-2 text-right font-normal">배송중</th>
+          <th className="pb-2 text-right font-normal">완료</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr key={row.label} className="border-t border-neutral-100">
+            <td className="whitespace-nowrap py-2 pr-3 text-neutral-600">{row.label}</td>
+            <td className="py-2 text-right font-semibold text-blue-600 tabular-nums">{row.ready}</td>
+            <td className={`py-2 text-right tabular-nums ${row.shipping === "-" ? "text-neutral-300" : "font-semibold text-blue-600"}`}>
+              {row.shipping}
+            </td>
+            <td className="py-2 text-right font-semibold text-blue-600 tabular-nums">{row.completed}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
