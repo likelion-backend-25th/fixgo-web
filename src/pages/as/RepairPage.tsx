@@ -5,6 +5,7 @@ import { formatDateTime, won } from "@/lib/format";
 import { isAbortError } from "@/lib/apiClient";
 import { applyRepairPartStock } from "@/lib/partApi";
 import {
+  completeMyRepair,
   completeRepair,
   fetchRepairDetail,
   fetchRepairWorks,
@@ -112,10 +113,18 @@ function RepairView({
 
   const needsReturnRecovery = completed && reception.status === "REPAIR_IN_PROGRESS"
     && (detail.warrantyResult !== "PAID" || detail.finalAmount <= 0);
-  const canComplete = (role === "ADMIN" || role === "MANAGER")
-    && (detail?.status === "REPAIRING" || needsReturnRecovery);
+
+  const isManagerRole = role === "ADMIN" || role === "MANAGER";
+  const canComplete =
+    (role === "TECHNICIAN" && detail?.status === "REPAIRING") ||
+    (isManagerRole && (detail?.status === "REPAIRING" || needsReturnRecovery));
 
   async function finishRepair(repairId: number) {
+    if (role === "TECHNICIAN") {
+      // 상태 변경과 재고 차감을 백엔드 /complete에서 한 번에 처리한다.
+      await completeMyRepair(repairId);
+      return;
+    }
     await completeRepair(repairId);
     // 수리 완료로 바꿀 때만 사용 부품 재고를 뺀다. 배송·수령 대기 전환은 이미 반영된 재고를 다시 빼지 않는다.
     if (!needsReturnRecovery) {
