@@ -34,6 +34,7 @@ interface DataTableProps<T> {
   sortKey?: string;
   sortDir?: "asc" | "desc";
   onSort?: (key: string) => void;
+  compact?: boolean;
 }
 
 export function DataTable<T>({
@@ -46,14 +47,15 @@ export function DataTable<T>({
   sortKey,
   sortDir = "asc",
   onSort,
+  compact = false,
 }: DataTableProps<T>) {
   return (
     <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
-      <table className="w-full min-w-[720px] border-collapse text-sm">
+      <table className={cn("border-collapse text-sm", compact ? "w-full" : "w-full min-w-[720px]")}>
         <thead className="bg-neutral-50 text-left text-xs font-medium text-neutral-500">
           <tr>
             {columns.map((column) => (
-              <th key={column.key} className={cn("px-4 py-2.5 font-medium", column.className)}>
+              <th key={column.key} className={cn(compact ? "px-3 py-2 font-medium" : "px-4 py-2.5 font-medium", column.className)}>
                 {column.sortable === true && onSort !== undefined ? (
                   <button type="button" className="inline-flex items-center gap-1" onClick={() => onSort(column.key)}>
                     {column.header}
@@ -90,7 +92,7 @@ export function DataTable<T>({
                   )}
                 >
                   {columns.map((column) => (
-                    <td key={column.key} className={cn("px-4 py-3 align-middle text-neutral-800", column.className)}>
+                    <td key={column.key} className={cn(compact ? "px-3 py-2.5 align-middle text-neutral-800" : "px-4 py-3 align-middle text-neutral-800", column.className)}>
                       {column.render(row)}
                     </td>
                   ))}

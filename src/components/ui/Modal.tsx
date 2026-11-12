@@ -8,9 +8,10 @@ interface ModalProps {
   children: ReactNode;
   wide?: boolean;
   compact?: boolean;
+  className?: string;
 }
 
-export function Modal({ title, onClose, children, wide = false, compact = false }: ModalProps) {
+export function Modal({ title, onClose, children, wide = false, compact = false, className }: ModalProps) {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -38,6 +39,7 @@ export function Modal({ title, onClose, children, wide = false, compact = false 
           "w-full rounded-2xl bg-white p-6 shadow-xl",
           compact ? "my-auto" : "my-8",
           wide ? "max-w-5xl" : compact ? "max-w-md" : "max-w-lg",
+          className,
         )}
         onClick={(event) => event.stopPropagation()}
       >

@@ -49,17 +49,7 @@ export async function searchCustomersPage(
   const params = customerSearchParams(query.keyword);
   params.set("page", String(query.page - 1));
   params.set("size", String(query.size));
-
-  // 검색어가 없으면 고객 목록 화면은 전체를 불러오지 않는다.
-  if ([...params.keys()].length === 2) {
-    return {
-      items: [],
-      number: query.page - 1,
-      size: query.size,
-      totalElements: 0,
-      totalPages: 0,
-    };
-  }
+  // 검색어가 없으면 백엔드 기본 정책(id desc, size 20)으로 전체 목록을 페이징한다.
 
   const page = await fetchCustomerPage(params, signal, "고객 목록을 불러오지 못했습니다.", "고객 목록 응답이 올바르지 않습니다.");
   return {

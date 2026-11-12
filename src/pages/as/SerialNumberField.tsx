@@ -6,25 +6,24 @@ import type { ProductSummary } from "@/types/asReception";
 
 interface SerialNumberFieldProps {
   value: string;
-  customerId: number | null;
   invalid?: boolean;
   onChange: (serial: string) => void;
   onPick: (product: ProductSummary) => void;
 }
 
-export function SerialNumberField({ value, customerId, invalid = false, onChange, onPick }: SerialNumberFieldProps) {
+export function SerialNumberField({ value, invalid = false, onChange, onPick }: SerialNumberFieldProps) {
   const [open, setOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<ProductSummary[]>([]);
 
   useEffect(() => {
     const keyword = value.trim();
-    if (!open || customerId === null || keyword === "") {
+    if (!open || keyword === "") {
       setSuggestions([]);
       return;
     }
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      searchProductsBySerial(customerId, keyword, controller.signal)
+      searchProductsBySerial(keyword, controller.signal)
         .then((items) => {
           if (!controller.signal.aborted) {
             setSuggestions(items.slice(0, 8));
@@ -41,7 +40,7 @@ export function SerialNumberField({ value, customerId, invalid = false, onChange
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [customerId, open, value]);
+  }, [open, value]);
 
   function pick(product: ProductSummary) {
     setOpen(false);
@@ -61,7 +60,6 @@ export function SerialNumberField({ value, customerId, invalid = false, onChange
       <TextField
         label="시리얼번호"
         value={value}
-        readOnly={customerId === null}
         invalid={invalid}
         placeholder="시리얼번호 조회 가능합니다"
         onChange={(serial) => {
