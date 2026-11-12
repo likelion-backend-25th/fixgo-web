@@ -4,8 +4,9 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { TextField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Panel";
+import { Pagination } from "@/components/ui/Pagination";
 import { isAbortError } from "@/lib/apiClient";
-import { categoryLabel, fetchAssignableTechnicians, searchCustomers, searchProductsBySerial } from "@/lib/asReceptionApi";
+import { categoryLabel, fetchAssignableTechnicians, searchCustomers, searchProductsBySerialPage } from "@/lib/asReceptionApi";
 import { formatDurationMinutes } from "@/lib/format";
 import { loadDaumPostcode, selectedAddress } from "@/lib/daumPostcode";
 import type { AssignableTechnician, CustomerSummary, ProductSummary, TechnicianSort } from "@/types/asReception";
@@ -139,6 +140,9 @@ function CustomerLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClose
 
 function SerialLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClose" | "onApply">) {
   const [query, setQuery] = useState("");
+  const [applied, setApplied] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageCount, setPageCount] = useState(1);
   const [selected, setSelected] = useState<number | null>(null);
   const [rows, setRows] = useState<ProductSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -150,41 +154,54 @@ function SerialLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClose" 
   ];
 
   useEffect(() => {
-    const serial = query.trim();
-    if (serial === "") {
+    const timer = window.setTimeout(() => {
+      const next = query.trim();
+      setApplied((current) => {
+        if (current === next) {
+          return current;
+        }
+        setPage(1);
+        setSelected(null);
+        return next;
+      });
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  useEffect(() => {
+    if (applied === "") {
       setRows([]);
+      setPageCount(1);
       setError("");
       setLoading(false);
       return;
     }
     const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      setLoading(true);
-      setError("");
-      searchProductsBySerial(serial, controller.signal)
-        .then((items) => {
-          if (!controller.signal.aborted) {
-            setRows(items);
-          }
-        })
-        .catch((cause: unknown) => {
-          if (controller.signal.aborted || isAbortError(cause)) {
-            return;
-          }
-          setRows([]);
-          setError(cause instanceof Error ? cause.message : "제품을 조회하지 못했습니다.");
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) {
-            setLoading(false);
-          }
-        });
-    }, 300);
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [query]);
+    setLoading(true);
+    setError("");
+    searchProductsBySerialPage(applied, page, 20, controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setRows(result.items);
+        setPageCount(Math.max(1, result.totalPages));
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || isAbortError(cause)) {
+          return;
+        }
+        setRows([]);
+        setPageCount(1);
+        setError(cause instanceof Error ? cause.message : "제품을 조회하지 못했습니다.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+    return () => controller.abort();
+  }, [applied, page]);
 
   return (
     <Modal title="시리얼번호 조회" wide onClose={onClose}>
@@ -196,8 +213,12 @@ function SerialLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClose" 
         rowKey={(row) => String(row.id)}
         selectedKey={selected === null ? undefined : String(selected)}
         onRowClick={(row) => setSelected(row.id)}
-        emptyText={query.trim() === "" ? "시리얼번호 일부를 입력해 주세요." : loading ? "제품을 조회하는 중입니다." : "조회 결과가 없습니다."}
+        emptyText={applied === "" ? "시리얼번호 일부를 입력해 주세요." : loading ? "제품을 조회하는 중입니다." : "조회 결과가 없습니다."}
       />
+      <Pagination page={page} pageCount={pageCount} onPageChange={(next) => {
+        setSelected(null);
+        setPage(next);
+      }} />
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>취소</Button>
         <Button
