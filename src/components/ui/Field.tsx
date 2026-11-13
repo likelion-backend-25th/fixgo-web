@@ -70,7 +70,11 @@ export function TextField({
         onChange={(event) => {
           const next = event.target.value;
           setText(next);
-          if (!composing.current && !event.nativeEvent.isComposing) {
+          // nativeEvent는 Event라서 isComposing은 InputEvent일 때만 있다.
+          const nativeEvent = event.nativeEvent;
+          const stillComposing =
+            nativeEvent instanceof InputEvent && nativeEvent.isComposing;
+          if (!composing.current && !stillComposing) {
             onChange(next);
           }
         }}
