@@ -798,7 +798,9 @@ function ShipmentDetailModal({
           )}
           {!visit && !editable && (
             <Button
-              className={detail.status === "SHIPPING" ? "bg-[#005A9C] text-white shadow-none hover:bg-[#004E8A]" : shipmentActionClass("배송 조회")}
+              className={detail.status === "SHIPPING"
+                ? "bg-[#005A9C] text-white shadow-none hover:bg-[#004E8A]"
+                : "border border-[#60C1E5] bg-white text-[#60C1E5] shadow-none hover:bg-[#F3FBFD]"}
               disabled={busy}
               onClick={() => void run(() => refreshShipmentTracking(shipmentId), "배송 이력을 갱신했습니다.")}
             >
