@@ -101,7 +101,9 @@ function depositColumns(
   toggleSort: (key: DepositSortKey) => void,
 ): Column<PaymentListItem>[] {
   return [
-    column("number", "접수번호", sortKey, sortDir, toggleSort, (row) => row.asReceptionNumber),
+    column("number", "접수번호", sortKey, sortDir, toggleSort, (row) => (
+      <span className="text-[#005A9C]">{row.asReceptionNumber}</span>
+    )),
     column("customer", "고객", sortKey, sortDir, toggleSort, (row) => row.customerName),
     column("model", "모델", sortKey, sortDir, toggleSort, (row) => row.modelName ?? "-"),
     column("amount", "견적금액", sortKey, sortDir, toggleSort, (row) => won(row.amount)),
@@ -320,7 +322,9 @@ function historyColumns(
   toggleSort: (key: HistorySortKey) => void,
 ): Column<PaymentHistoryItem>[] {
   return [
-    historyColumn("number", "접수번호", sortKey, sortDir, toggleSort, (row) => row.receptionNumber),
+    historyColumn("number", "접수번호", sortKey, sortDir, toggleSort, (row) => (
+      <span className="text-[#005A9C]">{row.receptionNumber}</span>
+    )),
     historyColumn("customer", "고객", sortKey, sortDir, toggleSort, (row) => row.customerName),
     historyColumn("amount", "금액", sortKey, sortDir, toggleSort, (row) => won(row.amount)),
     historyColumn("status", "상태", sortKey, sortDir, toggleSort, (row) => (

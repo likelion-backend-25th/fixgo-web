@@ -62,7 +62,7 @@ export function Sidebar({ open, collapsed, onNavigate, onToggle }: SidebarProps)
                   to={item.to}
                   onClick={onNavigate}
                   className={cn(
-                    "my-0.5 block rounded-md px-2 py-2 text-sm",
+                    "my-0.5 block rounded-md py-2 pr-2 pl-6 text-sm",
                     active
                       ? "bg-[#E7F4FB] font-semibold text-[#005A9C]"
                       : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900",

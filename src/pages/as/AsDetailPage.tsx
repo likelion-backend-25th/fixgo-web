@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useParams } from "react-router";
+import { useLocation, useParams } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { Notice, Panel } from "@/components/ui/Panel";
 import { isAbortError } from "@/lib/apiClient";
@@ -22,7 +22,7 @@ import { useSessionStore } from "@/stores/useSessionStore";
 import { DocumentModal, type DocumentKind } from "@/pages/as/DocumentModal";
 import { ReceptionEditPanel } from "@/pages/as/ReceptionEditPanel";
 import { TechnicianAssignPanel } from "@/pages/as/TechnicianAssignPanel";
-import type { AsReceptionDetail, AsReceptionStatus, AsStatusHistory, CustomerPortalLink, ProductSummary, ReceptionRepair } from "@/types/asReception";
+import type { AsReceptionDetail, AsReceptionStatus, AsStatusHistory, CustomerPortalLink, ProductSummary } from "@/types/asReception";
 import type { AsRecord } from "@/types/screen";
 
 export function AsDetailPage() {
@@ -31,7 +31,6 @@ export function AsDetailPage() {
   const receptionId = Number(asRequestId);
   const validId = Number.isInteger(receptionId) && receptionId > 0;
   const [detail, setDetail] = useState<AsReceptionDetail | null>(null);
-  const [repair, setRepair] = useState<ReceptionRepair | null>(null);
   const [product, setProduct] = useState<ProductSummary | null>(null);
   const [history, setHistory] = useState<AsStatusHistory[]>([]);
   const [loading, setLoading] = useState(validId);
@@ -50,7 +49,7 @@ export function AsDetailPage() {
     setLoading(true);
     setError("");
 
-    // 상세와 이력을 같이 읽고, 모델명은 제품 API로 보완한다. 기사 화면은 이력을 쓰지 않는다.
+    // 상세와 이력을 같이 읽고, 모델명은 제품 API로 보완한다.
     Promise.all([
       isTechnician
         ? fetchMyReception(receptionId, controller.signal)
@@ -58,14 +57,13 @@ export function AsDetailPage() {
             reception,
             repair: null,
           })),
-      isTechnician ? Promise.resolve([]) : fetchReceptionHistory(receptionId, controller.signal),
+      fetchReceptionHistory(receptionId, controller.signal),
     ])
       .then(async ([loaded, nextHistory]) => {
         if (controller.signal.aborted) {
           return;
         }
         setDetail(loaded.reception);
-        setRepair(loaded.repair);
         setHistory(nextHistory);
         try {
           const nextProduct = await fetchProduct(loaded.reception.product.id, controller.signal);
@@ -83,7 +81,6 @@ export function AsDetailPage() {
           return;
         }
         setDetail(null);
-        setRepair(null);
         setHistory([]);
         setError(cause instanceof Error ? cause.message : "접수 정보를 불러오지 못했습니다.");
       })
@@ -107,10 +104,6 @@ export function AsDetailPage() {
     <div className="space-y-4">
       {notice !== "" && <Notice>{notice}</Notice>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
-      {isTechnician && repair?.status === "REJECTED"
-        && (detail.status === "AWAITING_SHIPMENT" || detail.status === "AWAITING_PICKUP") && (
-        <Notice>{`A/S를 중단했습니다. ${detail.returnMethod === "PICKUP" ? "수령 대기" : "배송 대기"}로 넘어가 점검이 끝났습니다.`}</Notice>
-      )}
       <Panel title="고객 정보">
         <div className="grid gap-x-8 gap-y-4 sm:grid-cols-3">
           <Field label="고객명" value={detail.customer.name} />
@@ -158,36 +151,27 @@ export function AsDetailPage() {
           setVersion((current) => current + 1);
         }}
       />
-      {!isTechnician && (
-        <>
-          {(role === "ADMIN" || role === "MANAGER") && (
-            <Link className="text-sm font-medium text-blue-600 hover:underline" to={`/as/${detail.id}/repair`}>
-              수리 진행 보기
-            </Link>
-          )}
-          <StatusPanel detail={detail} history={history} />
-          <Panel title="상태 변경 이력">
-            {history.length === 0 ? (
-              <p className="text-sm text-neutral-500">상태 변경 이력이 없습니다.</p>
-            ) : (
-              <ul className="space-y-3">
-                {history.map((item) => (
-                  <li key={item.id} className="text-sm">
-                    <p className="font-medium">
-                      {historyStatusLabel(item.fromStatus)} → {historyStatusLabel(item.toStatus)}
-                    </p>
-                    <p className="mt-1 text-neutral-500">
-                      {formatDateTime(item.createdAt)} · {item.changedBy ?? "-"} · {item.reason ?? "-"}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Panel>
-          <CustomerLinkPanel receptionId={detail.id} />
-          <DocumentSection detail={detail} product={product} />
-        </>
-      )}
+      <StatusPanel detail={detail} history={history} />
+      <Panel title="상태 변경 이력">
+        {history.length === 0 ? (
+          <p className="text-sm text-neutral-500">상태 변경 이력이 없습니다.</p>
+        ) : (
+          <ul className="space-y-3">
+            {history.map((item) => (
+              <li key={item.id} className="text-sm">
+                <p className="font-medium">
+                  {historyStatusLabel(item.fromStatus)} → {historyStatusLabel(item.toStatus)}
+                </p>
+                <p className="mt-1 text-neutral-500">
+                  {formatDateTime(item.createdAt)} · {item.changedBy ?? "-"} · {item.reason ?? "-"}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
+      <CustomerLinkPanel receptionId={detail.id} />
+      <DocumentSection detail={detail} product={product} />
     </div>
   );
 }

@@ -180,7 +180,7 @@ function AccountControls({ member, pending, onStatus, onRole }: {
 
 const receptionColumns: Column<AsReceptionListItem>[] = [
   { key: "receptionNumber", header: "접수번호", render: (row) => (
-    <Link className="text-blue-600" to={`/as/details/${row.id}`}>{row.receptionNumber}</Link>
+    <Link className="text-[#005A9C]" to={`/as/details/${row.id}`}>{row.receptionNumber}</Link>
   ) },
   { key: "customer", header: "고객명", render: (row) => row.customerName },
   { key: "model", header: "모델명", render: (row) => row.modelName ?? "-" },

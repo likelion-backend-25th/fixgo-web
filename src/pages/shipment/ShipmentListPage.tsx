@@ -489,7 +489,7 @@ function CreateShipmentModal({
         <div>
           <FieldLabel>접수번호</FieldLabel>
           <div className="flex items-center gap-2">
-            <TextField value={asId} onChange={setAsId} placeholder="AS-2026-0000" readOnly className="min-w-0 flex-1" />
+            <TextField value={asId} onChange={setAsId} placeholder="AS-2026-0000" readOnly className="min-w-0 flex-1 [&_input]:text-[#005A9C]" />
             <Button variant="outline" className="shrink-0" onClick={() => setPicking(true)}>검색</Button>
           </div>
         </div>
@@ -745,7 +745,7 @@ function ShipmentDetailModal({
         <p className="text-sm text-neutral-500">{error === "" ? "불러오는 중" : error}</p>
       ) : (
         <div className="space-y-4">
-          <TextField label="접수번호" value={detail.receptionNumber} onChange={() => undefined} readOnly />
+          <TextField label="접수번호" value={detail.receptionNumber} onChange={() => undefined} readOnly className="[&_input]:text-[#005A9C]" />
           <TextField label="수령인" value={detail.recipientName} onChange={() => undefined} readOnly />
           {!visit && (
             <>
@@ -976,7 +976,7 @@ function ShipmentRowInfoModal({
         <p className="text-sm text-neutral-500">{error === "" ? "불러오는 중" : error}</p>
       ) : (
         <div className="space-y-4">
-          <TextField label="접수번호" value={row.asId} onChange={() => undefined} readOnly />
+          <TextField label="접수번호" value={row.asId} onChange={() => undefined} readOnly className="[&_input]:text-[#005A9C]" />
           <TextField label="수령인" value={row.receiver} onChange={() => undefined} readOnly />
           <TextField label="수령 방법" value={row.method} onChange={() => undefined} readOnly />
           {delivery && editable && (

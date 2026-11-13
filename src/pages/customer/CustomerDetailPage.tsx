@@ -120,7 +120,7 @@ export function CustomerDetailPage() {
       key: "id",
       header: "접수번호",
       render: (row) => (
-        <Link className="text-blue-600" to={`/as/details/${row.id}`}>
+        <Link className="text-[#005A9C]" to={`/as/details/${row.id}`}>
           {row.receptionNumber}
         </Link>
       ),

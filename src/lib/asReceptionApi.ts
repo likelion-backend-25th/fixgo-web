@@ -75,6 +75,19 @@ export function receptionStatusLabel(status: AsReceptionStatus): string {
   return "완료";
 }
 
+export function receptionStatusColor(status: AsReceptionStatus): string {
+  if (status === "INSPECTION" || status === "REPAIR_IN_PROGRESS") {
+    return "text-[#005A9C]";
+  }
+  if (status === "AWAITING_QUOTE_APPROVAL" || status === "AWAITING_PAYMENT") {
+    return "text-[#B45309]";
+  }
+  if (status === "COMPLETED") {
+    return "text-[#15803D]";
+  }
+  return "text-[#64748B]";
+}
+
 export function returnMethodLabel(method: ReturnMethod): string {
   return method === "PICKUP" ? "방문" : "택배";
 }

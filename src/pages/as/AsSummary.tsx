@@ -1,10 +1,11 @@
+import type { ReactNode } from "react";
 import { InfoField, Panel } from "@/components/ui/Panel";
 import { returnMethodLabel } from "@/lib/asReceptionApi";
 import { formatDateTime } from "@/lib/format";
 import { useHeadingMeta } from "@/layouts/RootLayout";
 import type { AsReceptionDetail } from "@/types/asReception";
 
-export function AsSummary({ record }: { record: AsReceptionDetail }) {
+export function AsSummary({ record, action }: { record: AsReceptionDetail; action?: ReactNode }) {
   useHeadingMeta(record.receptionNumber);
 
   return (
@@ -29,6 +30,7 @@ export function AsSummary({ record }: { record: AsReceptionDetail }) {
           <div className="min-h-24 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm">{record.memo}</div>
         </div>
       </div>
+      {action !== undefined && <div className="mt-4 flex justify-end">{action}</div>}
     </Panel>
   );
 }

@@ -21,6 +21,25 @@ import { PresetFormModal } from "./PresetFormModal";
 
 type PresetTab = "symptom" | "repair";
 
+const presetTabs: { value: PresetTab; label: string }[] = [
+  { value: "symptom", label: "고장 증상 프리셋" },
+  { value: "repair", label: "수리 프리셋" },
+];
+
+function tabClass(selected: boolean): string {
+  return selected
+    ? "-mb-px border-b-[3px] border-[#005A9C] px-1 pb-2 text-sm font-semibold text-[#005A9C]"
+    : "-mb-px border-b-[3px] border-transparent px-1 pb-2 text-sm text-[#64748B]";
+}
+
+function formatPresetDate(value: string): string {
+  const matched = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (matched === null) {
+    return value;
+  }
+  return `${matched[1]}-${matched[2]}-${matched[3]}`;
+}
+
 export function PresetListPage() {
   const [tab, setTab] = useState<PresetTab>("repair"); // 와이어프레임 기본: 수리 프리셋
   const [query, setQuery] = useState("");
@@ -82,28 +101,37 @@ export function PresetListPage() {
     {
       key: "name",
       header: "작업명",
-      render: (row) => row.name,
+      width: "25%",
+      className: "px-4 text-left",
+      render: (row) => <span className="text-[#005A9C]">{row.name}</span>,
     },
     {
       key: "description",
       header: "작업 설명",
+      width: "32%",
+      className: "px-4 text-left",
       render: (row) => row.description || "-",
     },
     {
       key: "estimatedMinutes",
       header: "표준 작업시간",
-      render: (row) => `${row.estimatedMinutes}분`,
+      width: "13%",
+      className: "px-4 text-right",
+      render: (row) => `${row.estimatedMinutes.toLocaleString("ko-KR")}분`,
     },
     {
       key: "basePrice",
       header: "기본 부품 금액",
+      width: "17%",
+      className: "px-4 text-right",
       render: (row) => `${row.basePrice.toLocaleString("ko-KR")}원`,
     },
     {
       key: "updatedAt",
       header: "최종 수정일",
-      render: (row) =>
-        new Date(row.updatedAt).toLocaleDateString("ko-KR"),
+      width: "13%",
+      className: "px-4 text-right",
+      render: (row) => formatPresetDate(row.updatedAt),
     },
   ];
 
@@ -143,21 +171,22 @@ export function PresetListPage() {
 
       {error !== "" && <Notice tone="error">{error}</Notice>}
 
+      <div className="mb-4 border-b border-neutral-200">
+        <div className="flex gap-6">
+          {presetTabs.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              className={tabClass(tab === item.value)}
+              onClick={() => handleTabChange(item.value)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Button
-          variant={tab === "symptom" ? undefined : "ghost"}
-          onClick={() => handleTabChange("symptom")}
-        >
-          고장 증상 프리셋
-        </Button>
-
-        <Button
-          variant={tab === "repair" ? undefined : "ghost"}
-          onClick={() => handleTabChange("repair")}
-        >
-          수리 프리셋
-        </Button>
-
         <TextField
           value={query}
           onChange={setQuery}

@@ -8,7 +8,7 @@ import { Notice } from "@/components/ui/Panel";
 import { Pagination } from "@/components/ui/Pagination";
 import { SortMenu } from "@/components/ui/SortMenu";
 import { isAbortError } from "@/lib/apiClient";
-import { isReceptionStatus, receptionStatusLabel } from "@/lib/asReceptionApi";
+import { isReceptionStatus, receptionStatusColor, receptionStatusLabel } from "@/lib/asReceptionApi";
 import { formatDate, includesText } from "@/lib/format";
 import { compareText } from "@/lib/guards";
 import { fetchLongPendingReceptions } from "@/lib/longPendingApi";
@@ -83,11 +83,13 @@ export function IncompletePage() {
     {
       key: "as",
       header: <SortMenu label="접수번호" active={sortKey === "number"} direction={sortDir} onToggle={() => toggleSort("number")} />,
-      render: (row) => row.receptionNumber,
+      render: (row) => <span className="text-[#005A9C]">{row.receptionNumber}</span>,
     },
     { key: "customer", header: "고객명", render: (row) => row.customerName },
     { key: "model", header: "모델", render: (row) => row.modelName },
-    { key: "status", header: "현재 상태", render: (row) => receptionStatusLabel(row.status) },
+    { key: "status", header: "현재 상태", render: (row) => (
+      <span className={receptionStatusColor(row.status)}>{receptionStatusLabel(row.status)}</span>
+    ) },
     { key: "tech", header: "담당 기사", render: (row) => row.technicianName ?? "-" },
     {
       key: "elapsed",
