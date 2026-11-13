@@ -153,6 +153,14 @@ table td {
   justify-content: flex-end;
 }
 
+.page-container:has(.email-history-page) {
+  max-width: 1100px;
+}
+
+.page-container:has(.member-list-page) {
+  max-width: 1000px;
+}
+
 /* 이메일 발송 내역은 컬럼 비율을 고정하고, 발송일과 발송 상태는 가운데에 둔다. */
 .email-history-table {
   table-layout: fixed;

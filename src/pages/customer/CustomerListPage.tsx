@@ -22,6 +22,7 @@ import type {
 } from "@/types/customer";
 
 const PAGE_SIZE = 20;
+const columnCell = "px-4 text-left";
 
 export function CustomerListPage() {
   const navigate = useNavigate();
@@ -73,18 +74,24 @@ export function CustomerListPage() {
   }, [appliedKeyword, page, reloadKey]);
 
   const columns: Column<CustomerDetail>[] = [
-    { key: "name", header: "고객명", render: (row) => row.name },
-    { key: "phone", header: "연락처", render: (row) => row.phone },
-    { key: "email", header: "이메일", render: (row) => row.email },
-    { key: "date", header: "등록일", render: (row) => formatDate(row.createdAt) },
+    {
+      key: "name",
+      header: "고객명",
+      width: "18%",
+      className: columnCell,
+      render: (row) => <span className="text-[#005A9C]">{row.name}</span>,
+    },
+    { key: "phone", header: "연락처", width: "24%", className: columnCell, render: (row) => row.phone },
+    { key: "email", header: "이메일", width: "38%", className: columnCell, render: (row) => row.email },
+    { key: "date", header: "등록일", width: "20%", className: columnCell, render: (row) => formatDate(row.createdAt) },
   ];
 
   return (
-    <div>
+    <div className="mx-auto w-full max-w-[1100px]">
       {error !== "" && <div className="mb-3"><Notice tone="error">{error}</Notice></div>}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <TextField value={query} onChange={(value) => filters.replace({ q: value, page: null })} placeholder="고객명, 연락처 검색" className="w-64" />
-        <Button className="ml-auto" onClick={() => setOpen(true)}>엑셀 일괄 등록</Button>
+      <div className="mb-4 flex w-full items-center justify-between gap-2">
+        <TextField value={query} onChange={(value) => filters.replace({ q: value, page: null })} placeholder="고객명, 연락처 검색" className="w-64 shrink-0" />
+        <Button className="shrink-0" onClick={() => setOpen(true)}>엑셀 일괄 등록</Button>
       </div>
       <DataTable
         columns={columns}

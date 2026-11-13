@@ -82,7 +82,12 @@ export function ProductListPage() {
   }, [rows, sortDir, sortKey]);
 
   const columns: Column<ProductModel>[] = [
-    { key: "modelName", header: "모델명", sortable: true, render: (row) => row.modelName },
+    {
+      key: "modelName",
+      header: "모델명",
+      sortable: true,
+      render: (row) => <span className="text-[#005A9C]">{row.modelName}</span>,
+    },
     { key: "productName", header: "제품명", sortable: true, render: (row) => row.name },
     { key: "group", header: "제품군", sortable: true, render: (row) => categoryToLabel(row.category) },
     { key: "warranty", header: "보증", sortable: true, render: (row) => `${row.warrantyMonths}개월` },

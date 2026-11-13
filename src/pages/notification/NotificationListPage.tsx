@@ -119,24 +119,24 @@ export function NotificationListPage() {
   }, [applied, page]);
 
   const columns: Column<EmailHistoryItem>[] = [
-    { key: "name", header: "고객명", width: "12%", render: (row) => row.customerName ?? "-" },
-    { key: "email", header: "수신 이메일", width: "27%", render: (row) => row.recipientEmail },
-    { key: "body", header: "제목", width: "31%", render: (row) => row.messageTitle },
-    { key: "at", header: "발송일", width: "20%", className: "text-center", render: (row) => displaySentAt(row.sentAt) },
+    { key: "name", header: "고객명", width: "13%", className: "px-4 text-left", render: (row) => row.customerName ?? "-" },
+    { key: "email", header: "수신 이메일", width: "28%", className: "px-4 text-left", render: (row) => row.recipientEmail },
+    { key: "body", header: "제목", width: "29%", className: "px-4 text-left", render: (row) => row.messageTitle },
+    { key: "at", header: "발송일", width: "20%", className: "px-4 text-center", render: (row) => displaySentAt(row.sentAt) },
     {
       key: "status",
       header: "발송 상태",
       width: "10%",
-      className: "text-center",
+      className: "px-4 text-center",
       render: (row) => <span className={statusClass(row.status)}>{statusLabel(row.status)}</span>,
     },
   ];
 
   return (
-    <div>
+    <div className="email-history-page">
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <p className="text-sm text-neutral-500">전체 {total}건</p>
-        <TextField value={query} onChange={setQuery} placeholder="고객명, 이메일 검색" className="w-56" />
+        <p className="text-sm leading-9 text-neutral-500">전체 {total}건</p>
+        <TextField value={query} onChange={setQuery} placeholder="고객명, 이메일 검색" className="w-56 [&_input]:h-9" />
         <SelectBox
           value={status}
           onChange={(value) => {
@@ -152,11 +152,12 @@ export function NotificationListPage() {
             { value: "SENT", label: "성공" },
             { value: "FAILED", label: "실패" },
           ]}
+          className="h-9"
         />
-        <div className="ml-auto flex items-center gap-2">
-          <TextField type="date" value={from} onChange={setFrom} className="w-40" />
+        <div className="flex items-center gap-2">
+          <TextField type="date" value={from} onChange={setFrom} className="w-40 [&_input]:h-9" />
           <span className="text-sm text-neutral-500">~</span>
-          <TextField type="date" value={to} onChange={setTo} className="w-40" />
+          <TextField type="date" value={to} onChange={setTo} className="w-40 [&_input]:h-9" />
         </div>
       </div>
       {dateInvalid && <Notice tone="error">시작일은 종료일보다 늦을 수 없습니다.</Notice>}
