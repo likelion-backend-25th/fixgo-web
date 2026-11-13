@@ -167,7 +167,7 @@ export function PresetListPage() {
 
   return (
     <div>
-      {notice !== "" && <Notice>{notice}</Notice>}
+      {notice !== "" && <Notice transient onDismiss={() => setNotice("")}>{notice}</Notice>}
 
       {error !== "" && <Notice tone="error">{error}</Notice>}
 

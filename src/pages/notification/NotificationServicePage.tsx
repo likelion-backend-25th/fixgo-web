@@ -196,7 +196,7 @@ export function NotificationServicePage() {
         <Kpi label="발송 실패" value={`${counts.failed}건`} />
       </div>
       {statsError !== "" && <Notice tone="error">{statsError}</Notice>}
-      {notice !== "" && <Notice>{notice}</Notice>}
+      {notice !== "" && <Notice transient onDismiss={() => setNotice("")}>{notice}</Notice>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
       <div className="grid items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_28rem]">
         <section className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">

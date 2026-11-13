@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/cn";
 
@@ -50,8 +50,14 @@ interface NoticeProps {
   tone?: "info" | "error";
   /** 본문에 고정할 설명문은 false. 막히거나 실패한 안내는 스크롤을 따라간다. */
   follow?: boolean;
+  /** 버튼 결과 안내. 잠시 후 흐려지며 사라진다. */
+  transient?: boolean;
+  onDismiss?: () => void;
   children: string;
 }
+
+const NOTICE_LINGER_MS = 3000;
+const NOTICE_FADE_MS = 500;
 
 const noticeToneClass = {
   error: "border-red-200 bg-red-50 text-red-700",
@@ -129,12 +135,39 @@ function scrolledPast(
   return pinned ? top < stick + 8 : top < stick - 8;
 }
 
-export function Notice({ tone = "info", follow = true, children }: NoticeProps) {
+export function Notice({ tone = "info", follow = true, transient = false, onDismiss, children }: NoticeProps) {
   const anchorRef = useRef<HTMLDivElement>(null);
   const bannerRef = useRef<HTMLParagraphElement>(null);
   const pinnedRef = useRef(false);
+  const onDismissRef = useRef(onDismiss);
   const [pinned, setPinned] = useState(false);
-  const box = cn("rounded-lg border px-3.5 py-2.5 text-sm", noticeToneClass[tone]);
+  const [fading, setFading] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  const box = cn(
+    "rounded-lg border px-3.5 py-2.5 text-sm",
+    noticeToneClass[tone],
+    transient && "transition-opacity duration-500",
+    transient && fading && "opacity-0",
+  );
+  onDismissRef.current = onDismiss;
+
+  useEffect(() => {
+    if (!transient) {
+      return;
+    }
+    setFading(false);
+    setHidden(false);
+    // 안내를 읽은 뒤 흐려지게 하고, 전환이 끝난 다음 치운다.
+    const fadeTimer = window.setTimeout(() => setFading(true), NOTICE_LINGER_MS);
+    const hideTimer = window.setTimeout(() => {
+      setHidden(true);
+      onDismissRef.current?.();
+    }, NOTICE_LINGER_MS + NOTICE_FADE_MS);
+    return () => {
+      window.clearTimeout(fadeTimer);
+      window.clearTimeout(hideTimer);
+    };
+  }, [children, transient]);
 
   useLayoutEffect(() => {
     if (!follow) return;
@@ -192,6 +225,10 @@ export function Notice({ tone = "info", follow = true, children }: NoticeProps) 
       placeNoticePins();
     };
   }, [pinned, children]);
+
+  if (hidden) {
+    return null;
+  }
 
   if (!follow) {
     return (

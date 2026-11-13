@@ -90,7 +90,7 @@ export function PartListPage() {
 
   return (
     <div>
-      {notice !== "" && <Notice>{notice}</Notice>}
+      {notice !== "" && <Notice transient onDismiss={() => setNotice("")}>{notice}</Notice>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <TextField value={query} onChange={setQuery} placeholder="부품명" className="w-64" />

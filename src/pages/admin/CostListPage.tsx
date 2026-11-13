@@ -41,7 +41,7 @@ export function CostListPage() {
 
   return (
     <div className="space-y-4">
-      {notice !== "" && <Notice>{notice}</Notice>}
+      {notice !== "" && <Notice transient onDismiss={() => setNotice("")}>{notice}</Notice>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
       <RateTable title="공임비" rateType="LABOR_RATE" rows={rows} loading={loading} onSelect={setEditing} />
       <RateTable title="점검비" rateType="INSPECTION_COST" rows={rows} loading={loading} onSelect={setEditing} />

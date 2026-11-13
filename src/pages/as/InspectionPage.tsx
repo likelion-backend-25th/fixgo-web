@@ -350,7 +350,15 @@ function InspectionForm({
 
   return (
     <div className="space-y-4">
-      {notice !== "" && <Notice tone={noticeTone}>{notice}</Notice>}
+      {notice !== "" && (
+        <Notice
+          tone={noticeTone}
+          transient={noticeTone === "info"}
+          onDismiss={noticeTone === "info" ? () => setNotice("") : undefined}
+        >
+          {notice}
+        </Notice>
+      )}
       <AsSummary record={record} />
       <ProgressTabs receptionId={record.id} current="inspection" />
       {diagnosing ? (
