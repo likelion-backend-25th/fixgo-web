@@ -159,7 +159,11 @@ export function ShipmentListPage() {
     }
   }
   const columns: Column<ShipmentRow>[] = [
-    { key: "as", header: "접수번호", render: (row) => row.asId },
+    {
+      key: "as",
+      header: "접수번호",
+      render: (row) => <span className="text-[#005A9C]">{row.asId}</span>,
+    },
     { key: "method", header: "수령 방법", render: (row) => row.method },
     { key: "receiver", header: "수령인", render: (row) => row.receiver },
     { key: "phone", header: "연락처", render: (row) => row.phone },
@@ -599,7 +603,12 @@ function ReceptionPickModal({
       .finally(() => setApplying(false));
   }
   const columns: Column<ReceptionPick>[] = [
-    { key: "id", header: "접수번호", className: "w-[1%] whitespace-nowrap pl-[38.5px]", render: (row) => row.receptionNumber },
+    {
+      key: "id",
+      header: "접수번호",
+      className: "w-[1%] whitespace-nowrap pl-[38.5px]",
+      render: (row) => <span className="text-[#005A9C]">{row.receptionNumber}</span>,
+    },
     // 접수번호 왼쪽·상태 오른쪽은 고정. 가장 긴 값 기준으로 세 간격이 같도록 가운데 열만 밀어 둔다.
     { key: "customer", header: "고객명", className: "w-[1%] whitespace-nowrap pl-[41.37px]", render: (row) => row.customerName },
     { key: "phone", header: "연락처", className: "w-[1%] whitespace-nowrap pl-[41.36px]", render: (row) => row.phone },

@@ -565,6 +565,7 @@ function ReceptionAsListPage() {
         sortDir={sortDir}
         onSort={onSort}
         emptyText={tableMessage(loading, error)}
+        tableClassName="min-w-[1100px]"
         onRowClick={(row) => navigate(`/as/details/${row.id}`)}
       />
       <Pagination page={page} pageCount={pageCount} onPageChange={filters.setPage} />
@@ -661,11 +662,50 @@ function isReturnWaiting(status: AsReceptionListItem["receptionStatus"]): boolea
 }
 
 const deskColumns: Column<AsReceptionListItem>[] = [
-  { key: "receptionNumber", header: "접수번호", sortable: true, render: (row) => row.receptionNumber },
-  { key: "customerName", header: "고객", sortable: true, render: (row) => row.customerName },
-  { key: "phone", header: "연락처", render: (row) => row.customerPhone },
-  { key: "modelName", header: "모델", sortable: true, render: (row) => row.modelName ?? "-" },
-  { key: "status", header: "상태", sortable: true, render: (row) => statusText(row) },
-  { key: "technician", header: "담당", render: (row) => row.technicianName ?? "-" },
-  { key: "createdAt", header: "접수일", sortable: true, render: (row) => formatDateTime(row.createdAt) },
+  {
+    key: "receptionNumber",
+    header: "접수번호",
+    width: "18%",
+    sortable: true,
+    render: (row) => <span className="text-[#005A9C]">{row.receptionNumber}</span>,
+  },
+  { key: "customerName", header: "고객명", width: "10%", sortable: true, render: (row) => row.customerName },
+  { key: "phone", header: "연락처", width: "17%", render: (row) => row.customerPhone },
+  { key: "modelName", header: "모델명", width: "17%", sortable: true, render: (row) => row.modelName ?? "-" },
+  {
+    key: "status",
+    header: "상태",
+    width: "13%",
+    className: "text-center whitespace-nowrap",
+    sortable: true,
+    render: (row) => <span className={receptionStatusColor(row.receptionStatus)}>{statusText(row)}</span>,
+  },
+  {
+    key: "technician",
+    header: "담당 기사",
+    width: "10%",
+    className: "text-center whitespace-nowrap",
+    render: (row) => row.technicianName ?? "-",
+  },
+  {
+    key: "createdAt",
+    header: "접수일",
+    width: "15%",
+    className: "text-center whitespace-nowrap",
+    sortable: true,
+    render: (row) => formatDateTime(row.createdAt),
+  },
 ];
+
+function receptionStatusColor(status: AsReceptionStatus): string {
+  if (status === "INSPECTION" || status === "REPAIR_IN_PROGRESS") {
+    return "text-[#005A9C]";
+  }
+  if (status === "AWAITING_QUOTE_APPROVAL" || status === "AWAITING_PAYMENT") {
+    return "text-[#B45309]";
+  }
+  if (status === "COMPLETED") {
+    return "text-[#15803D]";
+  }
+  return "text-[#64748B]";
+}

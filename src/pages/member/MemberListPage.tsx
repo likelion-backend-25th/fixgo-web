@@ -56,14 +56,32 @@ export function MemberListPage() {
   const slice = filtered.slice((safePage - 1) * 20, safePage * 20);
 
   const columns: Column<MemberSummary>[] = [
-    { key: "name", header: "이름", sortable: true, render: (row) => row.name },
-    { key: "email", header: "이메일", sortable: true, render: (row) => row.email },
-    { key: "role", header: "역할", sortable: true, render: (row) => memberRoleLabel(row.role) },
-    { key: "status", header: "상태", sortable: true, render: (row) => memberStatusLabel(row.status) },
+    {
+      key: "name",
+      header: "이름",
+      sortable: true,
+      className: "px-4 text-left",
+      render: (row) => <span className="text-[#005A9C]">{row.name}</span>,
+    },
+    { key: "email", header: "이메일", sortable: true, className: "px-4 text-left", render: (row) => row.email },
+    {
+      key: "role",
+      header: "역할",
+      sortable: true,
+      className: "px-4 text-center",
+      render: (row) => <span className="text-[#1E293B]">{memberRoleLabel(row.role)}</span>,
+    },
+    {
+      key: "status",
+      header: "상태",
+      sortable: true,
+      className: "px-4 text-center",
+      render: (row) => <span className={statusColor(row.status)}>{memberStatusLabel(row.status)}</span>,
+    },
   ];
 
   return (
-    <div>
+    <div className="member-list-page">
       {notice !== "" && <Notice>{notice}</Notice>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -121,6 +139,10 @@ function textOf(row: MemberSummary, key: string): string {
   if (key === "role") return memberRoleLabel(row.role);
   if (key === "status") return memberStatusLabel(row.status);
   return row.name;
+}
+
+function statusColor(status: MemberSummary["status"]): string {
+  return status === "ACTIVE" ? "text-[#15803D]" : "text-[#DC2626]";
 }
 
 function IssueAccountModal({ onClose, onIssued }: { onClose: () => void; onIssued: (member: MemberSummary) => void }) {
