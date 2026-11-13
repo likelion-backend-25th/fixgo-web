@@ -13,7 +13,7 @@ interface MonthlyTrendChartProps {
 }
 
 const TONE_CLASS = {
-  blue: "stroke-blue-600",
+  blue: "stroke-blue-400",
   green: "stroke-green-600",
 } as const;
 
@@ -25,7 +25,7 @@ export function MonthlyTrendChart({ title, labels, series, loading, formatValue 
         <ul className="flex gap-3 text-xs text-neutral-500">
           {series.map((item) => (
             <li key={item.name} className="flex items-center gap-1">
-              <span className={`inline-block size-2.5 ${item.tone === "blue" ? "bg-blue-600" : "bg-green-600"}`} />
+              <span className={`inline-block size-2.5 ${item.tone === "blue" ? "bg-blue-400" : "bg-green-600"}`} />
               {item.name}
             </li>
           ))}

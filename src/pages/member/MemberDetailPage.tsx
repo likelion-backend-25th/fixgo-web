@@ -73,28 +73,29 @@ function MemberDetails({ id }: { id: number }) {
     <div className="space-y-4">
       {notice !== "" && <Notice>{notice}</Notice>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
-      <Panel title="직원 정보">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex items-center gap-4">
-            {record.profileImgUrl === "" ? (
-              <span className="grid size-16 place-items-center rounded-full bg-blue-600 text-xl font-semibold text-white">
-                {record.name.slice(0, 1)}
-              </span>
-            ) : <img src={record.profileImgUrl} alt="" className="size-16 rounded-full object-cover" />}
-            <div className="text-sm leading-7">
-              <p className="text-lg font-semibold">{record.name}</p>
-              <p>{record.email} · {record.phone}</p>
-              <p>{record.address || "-"}</p>
-              <p>{memberRoleLabel(record.role)} · {memberStatusLabel(record.status)}</p>
-            </div>
+      <Panel
+        title="직원 정보"
+        className="p-6"
+        action={isAdmin && !deleted ? (
+          <div className="flex gap-2">
+            <Button variant="outline" disabled={pending} onClick={() => setEditing(true)}>정보 수정</Button>
+            <Button variant="ghost" disabled={pending} onClick={() => setConfirmDelete(true)}>직원 삭제</Button>
           </div>
-          {isAdmin && !deleted && (
-            <div className="flex gap-2">
-              <Button variant="outline" disabled={pending} onClick={() => setEditing(true)}>정보 수정</Button>
-              <Button variant="ghost" disabled={pending} onClick={() => setConfirmDelete(true)}>직원 삭제</Button>
-            </div>
-          )}
+        ) : undefined}
+      >
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+          <InfoItem label="직원명" value={record.name} />
+          <InfoItem label="연락처" value={record.phone} />
+          <InfoItem label="이메일" value={record.email} />
+          <InfoItem label="직원 권한" value={memberRoleLabel(record.role)} />
+          <InfoItem
+            label="계정 상태"
+            value={memberStatusLabel(record.status)}
+            valueClassName={record.status === "ACTIVE" ? "mt-1.5 break-words text-sm text-green-600" : undefined}
+          />
         </div>
+        <div className="my-6 border-t border-neutral-200" />
+        <InfoItem label="주소" value={record.address} />
         {isAdmin && (
           <AccountControls key={`${record.role}:${record.status}`} member={record} pending={pending}
             onStatus={(status) => void applyChange(() => updateMemberStatus(record.email, status), "직원 상태를 변경했습니다.")}
@@ -125,6 +126,25 @@ function MemberDetails({ id }: { id: number }) {
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+
+function InfoItem({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs text-[#64748B]">{label}</p>
+      <p className={valueClassName ?? "mt-1.5 break-words text-sm text-[#1E293B]"}>
+        {value === "" ? "-" : value}
+      </p>
     </div>
   );
 }
@@ -182,12 +202,13 @@ function AssignedReceptions({ memberId }: { memberId: number }) {
     return () => controller.abort();
   }, [memberId]);
   return (
-    <Panel title="최근 배정된 A/S">
+    <div>
+      <h2 className="section-title mb-4">최근 배정된 A/S</h2>
       {error !== "" ? <Notice tone="error">{error}</Notice> : (
         <DataTable columns={receptionColumns} rows={rows ?? []} rowKey={(row) => String(row.id)}
           emptyText={rows === null ? "배정 이력을 불러오는 중입니다." : "배정된 A/S가 없습니다."} />
       )}
-    </Panel>
+    </div>
   );
 }
 
@@ -209,7 +230,7 @@ function EditProfile({ member, onClose, onSaved }: {
     try {
       onSaved(await updateMemberProfile({
         email: form.email, name: form.name.trim(), phone: form.phone.trim(),
-        address: form.address.trim(), profileImgUrl: form.profileImgUrl.trim(),
+        address: form.address.trim(), profileImgUrl: "",
       }));
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : "직원 정보를 저장하지 못했습니다.");
@@ -224,8 +245,6 @@ function EditProfile({ member, onClose, onSaved }: {
         <TextField label="이름" value={form.name} onChange={(name) => setForm({ ...form, name })} />
         <TextField label="전화번호" value={form.phone} onChange={(phone) => setForm({ ...form, phone })} />
         <TextField label="주소" value={form.address} onChange={(address) => setForm({ ...form, address })} />
-        <TextField label="프로필 사진 URL" value={form.profileImgUrl}
-          onChange={(profileImgUrl) => setForm({ ...form, profileImgUrl })} />
         {error !== "" && <Notice tone="error">{error}</Notice>}
         <div className="flex justify-end">
           <Button type="submit" disabled={pending}>{pending ? "저장 중…" : "저장"}</Button>

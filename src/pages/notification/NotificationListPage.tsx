@@ -55,10 +55,8 @@ export function NotificationListPage() {
   const [total, setTotal] = useState(0);
   const [pageCount, setPageCount] = useState(1);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [retryingId, setRetryingId] = useState<number | null>(null);
   const dateInvalid = from !== "" && to !== "" && from > to;
 
   useEffect(() => {
@@ -118,54 +116,17 @@ export function NotificationListPage() {
     return () => controller.abort();
   }, [applied, page]);
 
-  async function retry(id: number) {
-    if (retryingId !== null) {
-      return;
-    }
-    setRetryingId(id);
-    setError("");
-    setNotice("");
-    try {
-      const result = await retryNotificationEmail(id);
-      setRows((current) => current.map((row) => (
-        row.id === id
-          ? { ...row, status: result.status, sentAt: result.sentAt ?? row.sentAt }
-          : row
-      )));
-      if (result.status === "FAILED") {
-        setError("이메일 발송에 실패했습니다.");
-        return;
-      }
-      setNotice("이메일을 다시 발송했습니다.");
-    } catch (cause: unknown) {
-      setError(cause instanceof Error ? cause.message : "이메일 재발송에 실패했습니다.");
-    } finally {
-      setRetryingId(null);
-    }
-  }
-
   const columns: Column<EmailHistoryItem>[] = [
-    { key: "id", header: "번호", render: (row) => row.id },
-    { key: "at", header: "발송일시", render: (row) => displaySentAt(row.sentAt) },
-    { key: "name", header: "고객명", render: (row) => row.customerName ?? "-" },
-    { key: "email", header: "수신 이메일", render: (row) => row.recipientEmail },
-    { key: "body", header: "내용", render: (row) => row.messageTitle },
+    { key: "name", header: "고객명", width: "12%", render: (row) => row.customerName ?? "-" },
+    { key: "email", header: "수신 이메일", width: "27%", render: (row) => row.recipientEmail },
+    { key: "body", header: "제목", width: "31%", render: (row) => row.messageTitle },
+    { key: "at", header: "발송일", width: "20%", className: "text-center", render: (row) => displaySentAt(row.sentAt) },
     {
       key: "status",
       header: "발송 상태",
+      width: "10%",
+      className: "text-center",
       render: (row) => <span className={statusClass(row.status)}>{statusLabel(row.status)}</span>,
-    },
-    {
-      key: "detail",
-      header: "",
-      render: (row) => (
-        <div className="flex items-center gap-2 whitespace-nowrap">
-          <Button onClick={() => setSelectedId(row.id)}>상세 보기</Button>
-          {row.status === "FAILED" && (
-            <Button disabled={retryingId === row.id} onClick={() => void retry(row.id)}>발송</Button>
-          )}
-        </div>
-      ),
     },
   ];
 
@@ -181,23 +142,46 @@ export function NotificationListPage() {
         </div>
       </div>
       {dateInvalid && <Notice tone="error">시작일은 종료일보다 늦을 수 없습니다.</Notice>}
-      {notice !== "" && <Notice>{notice}</Notice>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
       <DataTable
         columns={columns}
         rows={rows}
         rowKey={(row) => String(row.id)}
+        onRowClick={(row) => setSelectedId(row.id)}
+        tableClassName="email-history-table"
         emptyText={loading ? "발송 내역을 불러오는 중입니다." : "조건에 맞는 발송 내역이 없습니다."}
       />
       <Pagination page={page} pageCount={pageCount} onPageChange={setPage} />
-      {selectedId !== null && <EmailDetailModal id={selectedId} onClose={() => setSelectedId(null)} />}
+      {selectedId !== null && (
+        <EmailDetailModal
+          id={selectedId}
+          onClose={() => setSelectedId(null)}
+          onRetried={(result) => {
+            setRows((current) => current.map((row) => (
+              row.id === selectedId
+                ? { ...row, status: result.status, sentAt: result.sentAt ?? row.sentAt }
+                : row
+            )));
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function EmailDetailModal({ id, onClose }: { id: number; onClose: () => void }) {
+function EmailDetailModal({
+  id,
+  onClose,
+  onRetried,
+}: {
+  id: number;
+  onClose: () => void;
+  onRetried: (result: { status: NotificationStatus; sentAt: string | null }) => void;
+}) {
   const [detail, setDetail] = useState<EmailDetail | null>(null);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -216,12 +200,45 @@ function EmailDetailModal({ id, onClose }: { id: number; onClose: () => void }) 
     return () => controller.abort();
   }, [id]);
 
-  const failed = detail?.notificationStatus === "FAILED";
+  async function resend() {
+    if (retrying) {
+      return;
+    }
+    setRetrying(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await retryNotificationEmail(id);
+      setDetail((current) => (
+        current === null
+          ? current
+          : {
+              ...current,
+              notificationStatus: result.status,
+              sentAt: result.sentAt ?? current.sentAt,
+              errorMessage: result.status === "FAILED" ? current.errorMessage : null,
+            }
+      ));
+      onRetried(result);
+      if (result.status === "FAILED") {
+        setError("이메일 발송에 실패했습니다.");
+        return;
+      }
+      setNotice("이메일을 다시 발송했습니다.");
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : "이메일 재발송에 실패했습니다.");
+    } finally {
+      setRetrying(false);
+    }
+  }
+
   const receptionNumber = detail?.receptionNumber?.trim() ?? "";
+  const failed = detail?.notificationStatus === "FAILED";
 
   return (
     <Modal title="이메일 발송 상세" wide onClose={onClose}>
       {error !== "" && <Notice tone="error">{error}</Notice>}
+      {notice !== "" && <Notice>{notice}</Notice>}
       {detail === null && error === "" && <p className="text-sm text-neutral-500">상세를 불러오는 중입니다.</p>}
       {detail !== null && (
         <>
@@ -240,25 +257,39 @@ function EmailDetailModal({ id, onClose }: { id: number; onClose: () => void }) 
           <p className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm">{detail.messageTitle}</p>
           <h3 className="mt-5 mb-2 text-sm font-medium">이메일 내용</h3>
           <p className="whitespace-pre-line rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-3 text-sm">{detail.message}</p>
-          <h3 className="mt-5 mb-2 text-sm font-medium">발송 결과</h3>
-          <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
-            <table className="w-full border-collapse text-sm">
-              <thead className="bg-neutral-100 text-left">
-                <tr>
-                  {["결과", "발송 시각"].map((header) => (
-                    <th key={header} className="px-3 py-2 font-medium">{header}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-t border-neutral-200">
-                  <td className={cn("px-3 py-2", failed ? "text-red-600" : "text-green-600")}>{failed ? "실패" : statusLabel(detail.notificationStatus)}</td>
-                  <td className="px-3 py-2">{displaySentAt(detail.sentAt)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          {failed && (
+            <>
+              <h3 className="mt-5 mb-2 text-sm font-medium">발송 결과</h3>
+              <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
+                <table className="w-full border-collapse text-sm">
+                  <thead className="bg-neutral-100 text-left">
+                    <tr>
+                      {["결과", "발송 시각"].map((header) => (
+                        <th key={header} className="px-3 py-2 font-medium">{header}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-t border-neutral-200">
+                      <td className="px-3 py-2 text-red-600">실패</td>
+                      <td className="px-3 py-2">{displaySentAt(detail.sentAt)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              {detail.errorMessage !== null && detail.errorMessage.trim() !== "" && (
+                <p className="mt-2 text-sm text-red-600">{detail.errorMessage}</p>
+              )}
+            </>
+          )}
         </>
+      )}
+      {failed && (
+        <div className="mt-4 flex justify-end">
+          <Button disabled={retrying} onClick={() => void resend()}>
+            {retrying ? "발송 중…" : "재발송"}
+          </Button>
+        </div>
       )}
     </Modal>
   );

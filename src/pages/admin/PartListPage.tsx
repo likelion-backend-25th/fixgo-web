@@ -13,6 +13,7 @@ import {
   partStatusLabel,
   updatePartMinutes,
   updatePartPrice,
+  updatePartStatus,
   updatePartStock,
   type PartItem,
   type PartStatus,
@@ -130,9 +131,9 @@ export function PartListPage() {
         <PartEditModal
           initial={editing}
           onClose={() => setEditing(null)}
-          onSaved={() => {
+          onSaved={(message) => {
             setEditing(null);
-            setNotice("부품 정보를 수정했습니다.");
+            setNotice(message);
             setError("");
             setReloadKey((current) => current + 1);
           }}
@@ -261,7 +262,7 @@ function PartEditModal({
 }: {
   initial: PartItem;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (message: string) => void;
 }) {
   const [price, setPrice] = useState(String(initial.unitPrice));
   const [minutes, setMinutes] = useState(String(initial.standardMinutes));
@@ -283,9 +284,23 @@ function PartEditModal({
     try {
       await updatePartPrice(initial.id, parsed);
       await updatePartMinutes(initial.id, parsedMinutes);
-      onSaved();
+      onSaved("부품 정보를 수정했습니다.");
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : "부품 정보를 수정하지 못했습니다.");
+      setSaving(false);
+    }
+  }
+
+  const previousStatus: PartStatus = initial.stockQuantity > 0 ? "ACTIVE" : "LOW_QUANTITY";
+
+  async function changeStatus(status: PartStatus) {
+    setSaving(true);
+    setError("");
+    try {
+      await updatePartStatus(initial.id, status);
+      onSaved(status === "DISCONTINUED" ? "부품을 단종 처리했습니다." : "부품 상태를 이전으로 되돌렸습니다.");
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : "부품 상태를 수정하지 못했습니다.");
       setSaving(false);
     }
   }
@@ -303,6 +318,15 @@ function PartEditModal({
         <TextField label="단가" value={price} onChange={setPrice} />
         <TextField label="표준 작업시간(분)" value={minutes} onChange={setMinutes} />
         <TextField label="상태" value={partStatusLabel(initial.status)} onChange={() => undefined} readOnly />
+        {initial.status === "DISCONTINUED" ? (
+          <Button type="button" variant="outline" disabled={saving} onClick={() => void changeStatus(previousStatus)}>
+            {partStatusLabel(previousStatus)}으로 되돌리기
+          </Button>
+        ) : (
+          <Button type="button" variant="outline" disabled={saving} onClick={() => void changeStatus("DISCONTINUED")}>
+            단종 처리
+          </Button>
+        )}
         {error !== "" && <Notice tone="error">{error}</Notice>}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>취소</Button>

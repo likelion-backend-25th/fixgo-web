@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Panel";
 import { formatDateTime, won } from "@/lib/format";
@@ -60,6 +61,7 @@ function RepairView({
   const [loading, setLoading] = useState(repair !== null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const navigate = useNavigate();
   const role = useSessionStore((state) => state.user?.role);
 
   useEffect(() => {
@@ -107,6 +109,8 @@ function RepairView({
   }, [repair]);
 
   const rejected = detail?.status === "REJECTED";
+  const inspectionEnded = rejected
+    && (reception.status === "AWAITING_SHIPMENT" || reception.status === "AWAITING_PICKUP");
   const approved = detail?.status === "APPROVED";
   const agreed = detail?.status === "REPAIRING" || detail?.status === "COMPLETED";
   const completed = detail?.status === "COMPLETED";
@@ -151,14 +155,24 @@ function RepairView({
   return (
     <div className="space-y-4">
       <AsSummary record={reception} />
-      {role === "TECHNICIAN" && <ProgressTabs receptionId={reception.id} current="repair" />}
-      {repair === null && <Notice>아직 A/S 진행 전입니다.</Notice>}
+      {role === "TECHNICIAN" && !inspectionEnded && (
+        <ProgressTabs receptionId={reception.id} current="repair" />
+      )}
+      {repair === null && <Notice tone="error">아직 A/S 진행 전입니다.</Notice>}
       {repair !== null && loading && <Notice>수리 정보를 불러오는 중입니다.</Notice>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
-      {detail !== null && (
+      {detail !== null && inspectionEnded && (
+        <div className="space-y-4">
+          <Notice>{`A/S를 중단했습니다. ${reception.returnMethod === "PICKUP" ? "수령 대기" : "배송 대기"}로 넘어가 점검이 끝났습니다.`}</Notice>
+          <div className="flex justify-end">
+            <Button onClick={() => navigate("/as/list")}>목록으로</Button>
+          </div>
+        </div>
+      )}
+      {detail !== null && !inspectionEnded && (
         <>
           <section className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-            <h2 className="mb-4 text-lg font-semibold">수리 정보</h2>
+            <h2 className="section-title mb-4">수리 정보</h2>
 
             <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
               <div>
@@ -242,7 +256,7 @@ function RepairView({
 
           {approved && role === "TECHNICIAN" && (
             <div className="flex items-center justify-between gap-3">
-              <Notice>
+              <Notice follow={false}>
                 {detail.warrantyResult === "FREE"
                   ? "무상 수리로 확정되어 수리 대기입니다. 수리를 시작하면 수리 중으로 바뀝니다."
                   : "고객이 견적을 승인했습니다. 수리를 시작하면 수리 중으로 바뀝니다."}
@@ -254,23 +268,18 @@ function RepairView({
           )}
 
           {!rejected && !agreed && !approved && (
-            <Notice>현재 상태에서는 수리 작업을 진행할 수 없습니다. 수리 시작 처리가 필요합니다.</Notice>
+            <Notice tone="error">현재 상태에서는 수리 작업을 진행할 수 없습니다. 수리 시작 처리가 필요합니다.</Notice>
           )}
 
-          {canComplete && (
-            <Button disabled={pending} onClick={() => void runRepairAction(finishRepair)}>
-              {pending ? "처리 중…" : needsReturnRecovery ? "배송·수령 대기로 전환" : "수리 완료"}
-            </Button>
-          )}
           {completed && <Notice>{completedReceptionMessage(reception.status)}</Notice>}
 
           {agreed && (
             <section className="space-y-4">
               <div>
-                <h2 className="mb-3 text-lg font-semibold">수리 작업 내역</h2>
+                <h2 className="section-title mb-3">수리 작업 내역</h2>
 
                 <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
-                  <table className="w-full min-w-[480px] text-sm">
+                  <table className="w-full text-sm">
                     <thead className="bg-neutral-100 text-left">
                       <tr>
                         <th className="px-3 py-3 font-medium">작업명</th>
@@ -301,7 +310,7 @@ function RepairView({
               </div>
 
               <div className="rounded-xl border border-neutral-200 bg-white p-4">
-                <h2 className="mb-3 font-semibold">수리비 내역</h2>
+                <h2 className="section-title mb-3">수리비 내역</h2>
 
                 <dl className="space-y-3 text-sm">
                   <div className="flex justify-between">
@@ -321,6 +330,13 @@ function RepairView({
                 </dl>
               </div>
             </section>
+          )}
+          {canComplete && (
+            <div className="flex justify-end">
+              <Button disabled={pending} onClick={() => void runRepairAction(finishRepair)}>
+                {pending ? "처리 중…" : needsReturnRecovery ? "배송·수령 대기로 전환" : "수리 완료"}
+              </Button>
+            </div>
           )}
         </>
       )}

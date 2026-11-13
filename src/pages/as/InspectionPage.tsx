@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/Button";
-import { TextArea } from "@/components/ui/Field";
-import { Notice } from "@/components/ui/Panel";
+import { SelectBox, TextArea, TextField } from "@/components/ui/Field";
+import { Modal } from "@/components/ui/Modal";
+import { FormActions, Notice } from "@/components/ui/Panel";
 import { isAbortError } from "@/lib/apiClient";
 import { categoryLabel, fetchProduct, startMyInspection } from "@/lib/asReceptionApi";
 import {
@@ -9,12 +11,15 @@ import {
   confirmRepairCost,
   createRepairPartUsage,
   createRepairWork,
+  abortRepair,
   fetchRepairPresetParts,
+  fetchRepairWorkParts,
   fetchRepairPresets,
   fetchRepairPresetsBySymptom,
   fetchRepairWorks,
   fetchSymptomPresets,
   updateRepair,
+  type AbortCategory,
   type RepairPreset,
   type RepairPresetPart,
   type RepairWork,
@@ -31,13 +36,15 @@ import type { RepairLine } from "@/types/screen";
 
 export function InspectionPage() {
   const isTechnician = useSessionStore((state) => state.user?.role === "TECHNICIAN");
-  if (!isTechnician) return <Notice>점검은 담당 기사가 진행할 수 있습니다.</Notice>;
+  if (!isTechnician) return <Notice tone="error">점검은 담당 기사가 진행할 수 있습니다.</Notice>;
 
   return (
     <ReceptionProgress render={({ reception, repair }, reload) => (
       repair === null
         ? <InspectionStart record={reception} onStarted={reload} />
-        : <InspectionForm key={repair.id} record={reception} repair={repair} onCompleted={reload} />
+        : isInspectionAborted(repair, reception)
+          ? <InspectionFinished record={reception} />
+          : <InspectionForm key={repair.id} record={reception} repair={repair} onCompleted={reload} />
     )} />
   );
 }
@@ -68,9 +75,29 @@ function InspectionStart({ record, onStarted }: { record: AsReceptionDetail; onS
         <Button disabled={starting} onClick={() => void start()}>
           {starting ? "점검 시작 중…" : "점검 시작"}
         </Button>
-      ) : <Notice>조회할 수 있는 점검 기록이 없습니다.</Notice>}
+      ) : <Notice tone="error">조회할 수 있는 점검 기록이 없습니다.</Notice>}
     </div>
   );
+}
+
+function InspectionFinished({ record }: { record: AsReceptionDetail }) {
+  const navigate = useNavigate();
+  const waiting = record.returnMethod === "PICKUP" ? "수령 대기" : "배송 대기";
+
+  return (
+    <div className="space-y-4">
+      <AsSummary record={record} />
+      <Notice>{`A/S를 중단했습니다. ${waiting}로 넘어가 점검이 끝났습니다.`}</Notice>
+      <div className="flex justify-end">
+        <Button onClick={() => navigate("/as/list")}>목록으로</Button>
+      </div>
+    </div>
+  );
+}
+
+function isInspectionAborted(repair: ReceptionRepair, record: AsReceptionDetail): boolean {
+  return repair.status === "REJECTED"
+    && (record.status === "AWAITING_SHIPMENT" || record.status === "AWAITING_PICKUP");
 }
 
 // 점검 항목은 고장 증상, 수리 프리셋, 소모 부품 순서로 쌓인다.
@@ -90,11 +117,20 @@ function InspectionForm({
   const [customerFault, setCustomerFault] = useState(false);
   const [reason, setReason] = useState(repair.reason ?? "");
   const [rejectCategory, setRejectCategory] = useState("");
-  const [rejectReason, setRejectReason] = useState(repair.reasonForRejection ?? "");
+  const [rejectReason, setRejectReason] = useState("");
+  const [abortOpen, setAbortOpen] = useState(false);
+  const [abortNotice, setAbortNotice] = useState("");
   const [presetOpen, setPresetOpen] = useState(false);
-  const [notice, setNotice] = useState("");
+  const [notice, setNoticeText] = useState("");
+  const [noticeTone, setNoticeTone] = useState<"info" | "error">("info");
   const [submitting, setSubmitting] = useState(false);
+  const navigate = useNavigate();
   const diagnosing = repair.status === "DIAGNOSING";
+
+  function setNotice(message: string, tone: "info" | "error" = "error") {
+    setNoticeText(message);
+    setNoticeTone(message === "" ? "info" : tone);
+  }
 
   // 1차 보증 판정은 구매일과 모델 보증기간으로 계산한다.
   useEffect(() => {
@@ -156,17 +192,9 @@ function InspectionForm({
           }
         }
 
-        const partsByPresetId = new Map<number, RepairPresetPart[]>();
-        await Promise.all(works.map(async (work) => {
-          const presetName = work.repairPresetName?.trim() ?? "";
-          const preset = presetByName.get(presetName);
-          if (preset === undefined || partsByPresetId.has(preset.id)) return;
-          const parts = await fetchRepairPresetParts(preset.id, controller.signal);
-          partsByPresetId.set(preset.id, parts);
-        }));
-
+        const partsByWorkId = await loadSavedParts(record.id, works, presetByName, controller.signal);
         if (controller.signal.aborted) return;
-        setLines(linesFromSavedWorks(works, presetByName, symptomsByPresetId, partsByPresetId));
+        setLines(linesFromSavedWorks(works, presetByName, symptomsByPresetId, partsByWorkId));
       } catch (cause: unknown) {
         if (controller.signal.aborted || isAbortError(cause)) return;
         setNotice(cause instanceof Error ? cause.message : "저장된 점검 항목을 불러오지 못했습니다.");
@@ -233,7 +261,7 @@ function InspectionForm({
         inspectionCost: 0,
         finalAmount: 0,
         status: "DIAGNOSING",
-        reasonForRejection: rejectReason.trim(),
+        reasonForRejection: "",
       });
   
       // 2. 증상별로 고른 수리 프리셋을 작업으로 등록하고, 그 프리셋의 부품 사용도 함께 남긴다.
@@ -284,15 +312,48 @@ function InspectionForm({
     }
   }
 
+  const returnWaitingLabel = record.returnMethod === "PICKUP" ? "수령 대기" : "배송 대기";
+
+  function closeAbort() {
+    setAbortOpen(false);
+    setAbortNotice("");
+    setRejectCategory("");
+    setRejectReason("");
+  }
+
+  async function abort() {
+    if (!isAbortCategory(rejectCategory) || rejectReason.trim() === "") {
+      setAbortNotice("중단 카테고리와 사유를 입력해 주세요.");
+      return;
+    }
+
+    setSubmitting(true);
+    setAbortNotice("");
+
+    try {
+      await abortRepair(repair.id, {
+        category: rejectCategory,
+        reason: rejectReason.trim(),
+      });
+      // 반환 대기로 넘긴 뒤에는 점검 화면을 닫고 목록으로 돌아간다.
+      navigate("/as/list", {
+        state: { notice: `A/S를 중단했습니다. ${returnWaitingLabel}로 넘어가 점검이 끝났습니다.` },
+      });
+    } catch (cause: unknown) {
+      setAbortNotice(cause instanceof Error ? cause.message : "A/S를 중단하지 못했습니다.");
+      setSubmitting(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
-      {notice !== "" && <Notice>{notice}</Notice>}
+      {notice !== "" && <Notice tone={noticeTone}>{notice}</Notice>}
       <AsSummary record={record} />
       <ProgressTabs receptionId={record.id} current="inspection" />
       {diagnosing ? (
-        <Notice>유상으로 저장하면 견적 승인 대기가 됩니다. 무상은 0원으로 확정되고 고객 승인 없이 수리 대기로 넘어갑니다.</Notice>
+        <Notice follow={false}>유상으로 저장하면 견적 승인 대기가 됩니다. 무상은 0원으로 확정되고 고객 승인 없이 수리 대기로 넘어갑니다.</Notice>
       ) : (
-        <Notice>{inspectionResultMessage(repair)}</Notice>
+        <Notice follow={false}>{inspectionResultMessage(repair, record)}</Notice>
       )}
       <section>
         <div className="mb-2 flex items-center justify-between">
@@ -319,26 +380,36 @@ function InspectionForm({
         onCustomerFault={setCustomerFault}
       />
       <TextArea className="text-sm" label="판정 사유" value={reason} onChange={setReason} readOnly={!diagnosing} />
-      {diagnosing && (
-        <section className="grid gap-2 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm md:grid-cols-[1fr_2fr_auto]">
-          <select value={rejectCategory} onChange={(event) => setRejectCategory(event.target.value)} className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm">
-            <option value="">--카테고리 선택--</option>
-            <option value="repair-impossible">수리 불가</option>
-            <option value="customer-cancel">고객 취소</option>
-          </select>
-          <input value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} placeholder="사유 입력" className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm" />
-          <Button
-            onClick={() => {
-              if (rejectCategory === "" || rejectReason.trim() === "") {
-                setNotice("A/S 거부 사유를 입력해 주세요.");
-                return;
-              }
-              setNotice("거부 사유를 화면에 입력했습니다.");
-            }}
-          >
-            제출
-          </Button>
-        </section>
+      {diagnosing && abortOpen && (
+        <Modal title="A/S 중단" compact onClose={closeAbort}>
+          <div className="space-y-3">
+            {abortNotice !== "" && <Notice tone="error">{abortNotice}</Notice>}
+            <p className="text-sm text-neutral-500">
+              부품 단종처럼 수리가 불가능하거나 고객이 취소한 경우입니다. 제출하면 {returnWaitingLabel}로 넘어갑니다.
+            </p>
+            <label className="block text-sm">
+              <span className="form-label mb-1.5 block">카테고리</span>
+              <SelectBox
+                aria-label="중단 카테고리"
+                value={rejectCategory}
+                onChange={setRejectCategory}
+                className="w-full"
+                options={[
+                  { value: "", label: "--카테고리 선택--" },
+                  { value: "REPAIR_IMPOSSIBLE", label: "수리 불가" },
+                  { value: "CUSTOMER_CANCEL", label: "고객 취소" },
+                ]}
+              />
+            </label>
+            <TextField label="사유" value={rejectReason} onChange={setRejectReason} placeholder="사유 입력" />
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="ghost" disabled={submitting} onClick={closeAbort}>취소</Button>
+              <Button disabled={submitting} onClick={() => void abort()}>
+                {submitting ? "제출 중…" : "제출"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
       )}
       <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm">
         <div className="flex justify-between"><span>항목 합계</span><span>{won(laborTotal)}</span></div>
@@ -346,19 +417,23 @@ function InspectionForm({
         <div className="mt-2 flex justify-between border-t border-blue-200 pt-2 font-semibold"><span>청구 금액</span><span>{judgment === null ? "미판정" : won(charge)}</span></div>
       </div>
       {diagnosing && (
-        <div className="flex justify-end">
+        <FormActions>
+          <Button variant="outline" disabled={submitting} onClick={() => setAbortOpen(true)}>
+            A/S 중단
+          </Button>
           <Button disabled={submitting || judgment === null} onClick={() => void complete()}>
             {submitting ? "점검 완료 처리 중…" : "점검 완료"}
           </Button>
-        </div>
+        </FormActions>
       )}
       {presetOpen && (
         <PresetPickerModal
           productId={record.product.id}
+          productModelId={record.product.productModelId}
           onClose={() => setPresetOpen(false)}
           onApply={async (selection) => {
             setLines((current) => appendSymptomPresets(current, selection));
-            setNotice("같은 고장 증상에 수리 프리셋을 추가했습니다.");
+            setNotice("같은 고장 증상에 수리 프리셋을 추가했습니다.", "info");
           }}
         />
       )}
@@ -425,7 +500,7 @@ function WarrantySection({
   );
 }
 
-function inspectionResultMessage(repair: ReceptionRepair): string {
+function inspectionResultMessage(repair: ReceptionRepair, record: AsReceptionDetail): string {
   if (repair.status === "REQUESTED") {
     return "견적 승인 대기입니다. 고객이 승인하면 수리 페이지에서 수리를 시작할 수 있습니다.";
   }
@@ -436,9 +511,17 @@ function inspectionResultMessage(repair: ReceptionRepair): string {
     return "고객이 견적을 승인했습니다. 수리 페이지에서 진행합니다.";
   }
   if (repair.status === "REJECTED") {
+    if (record.status === "AWAITING_SHIPMENT" || record.status === "AWAITING_PICKUP") {
+      const waiting = record.returnMethod === "PICKUP" ? "수령 대기" : "배송 대기";
+      return `A/S를 중단했습니다. ${waiting}로 넘어갔습니다.`;
+    }
     return "고객이 견적을 거부했습니다. 점검비 결제 후 배송 또는 수령으로 넘어갑니다.";
   }
   return "점검이 완료된 건입니다.";
+}
+
+function isAbortCategory(value: string): value is AbortCategory {
+  return value === "REPAIR_IMPOSSIBLE" || value === "CUSTOMER_CANCEL";
 }
 
 function isConsumedPart(line: RepairLine): line is RepairLine & { partId: number } {
@@ -522,11 +605,39 @@ interface SavedSymptom {
   name: string;
 }
 
+async function loadSavedParts(
+  receptionId: number,
+  works: RepairWork[],
+  presetByName: Map<string, RepairPreset>,
+  signal: AbortSignal,
+): Promise<Map<number, RepairPresetPart[]>> {
+  try {
+    return await fetchRepairWorkParts(receptionId, signal);
+  } catch (cause: unknown) {
+    if (signal.aborted || isAbortError(cause)) throw cause;
+  }
+
+  const partsByPresetId = new Map<number, RepairPresetPart[]>();
+  await Promise.all(works.map(async (work) => {
+    const presetName = work.repairPresetName?.trim() ?? "";
+    const preset = presetByName.get(presetName);
+    if (preset === undefined || partsByPresetId.has(preset.id)) return;
+    partsByPresetId.set(preset.id, await fetchRepairPresetParts(preset.id, signal));
+  }));
+  const partsByWorkId = new Map<number, RepairPresetPart[]>();
+  for (const work of works) {
+    const presetName = work.repairPresetName?.trim() ?? "";
+    const preset = presetByName.get(presetName);
+    partsByWorkId.set(work.id, preset === undefined ? [] : partsByPresetId.get(preset.id) ?? []);
+  }
+  return partsByWorkId;
+}
+
 function linesFromSavedWorks(
   works: RepairWork[],
   presetByName: Map<string, RepairPreset>,
   symptomsByPresetId: Map<number, SavedSymptom[]>,
-  partsByPresetId: Map<number, RepairPresetPart[]>,
+  partsByWorkId: Map<number, RepairPresetPart[]>,
 ): RepairLine[] {
   const rows: RepairLine[] = [];
 
@@ -539,7 +650,7 @@ function linesFromSavedWorks(
     const symptom = storedSymptom !== "" && storedSymptom !== presetName
       ? linkedSymptoms.find((item) => item.name === storedSymptom) ?? { id: 0, name: storedSymptom }
       : linkedSymptoms.length === 1 ? linkedSymptoms[0] : undefined;
-    const parts = preset === undefined ? [] : partsByPresetId.get(preset.id) ?? [];
+    const parts = partsByWorkId.get(work.id) ?? [];
     const block: RepairLine[] = [{
       id: `${groupId}-preset`,
       groupId,
@@ -618,7 +729,7 @@ function LineTable({
 }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
-      <table className="w-full min-w-[640px] text-sm">
+      <table className="w-full text-sm">
         <thead className="bg-neutral-50 text-left text-xs text-neutral-500">
           <tr>
             {["구분", "항목", "시간/수량", "단가", "금액", ""].map((header) => (

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { Button } from "@/components/ui/Button";
+import { useListParams } from "@/hooks/useListParams";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { SelectBox, TextField } from "@/components/ui/Field";
 import { Pagination } from "@/components/ui/Pagination";
@@ -26,21 +26,15 @@ const statusOptions: { value: StatusFilter; label: string }[] = [
 
 export function PaymentListPage() {
   const navigate = useNavigate();
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<StatusFilter>("ALL");
-  const [page, setPage] = useState(1);
-  const [applied, setApplied] = useState<{ keyword: string; status: StatusFilter }>({ keyword: "", status: "ALL" });
-  const filterKey = `${applied.keyword}:${applied.status}`;
-  const [seenFilter, setSeenFilter] = useState(filterKey);
+  const filters = useListParams();
+  const query = filters.text("q");
+  const status = readStatusFilter(filters.text("status", "ALL"));
+  const page = filters.page();
+  const [applied, setApplied] = useState<{ keyword: string; status: StatusFilter }>({ keyword: query.trim(), status });
   const [rows, setRows] = useState<PaymentListItem[]>([]);
   const [pageCount, setPageCount] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  if (seenFilter !== filterKey) {
-    setSeenFilter(filterKey);
-    setPage(1);
-  }
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -95,18 +89,34 @@ export function PaymentListPage() {
   }, [applied, page]);
 
   const columns: Column<PaymentListItem>[] = [
-    { key: "as", header: "접수번호", render: (row) => row.asReceptionNumber },
-    { key: "customer", header: "고객", render: (row) => row.customerName },
-    { key: "amount", header: "금액", render: (row) => won(row.amount) },
-    { key: "status", header: "상태", render: (row) => paymentBillStatusLabel(row.status) },
-    { key: "method", header: "수단", render: (row) => paymentMethodLabel(row.paymentMethod) },
-    { key: "approvedAt", header: "승인시각", render: (row) => formatApprovedAt(row.approvedAt) },
     {
-      key: "detail",
-      header: "",
-      render: (row) => (
-        <Button onClick={() => navigate(`/payment/${row.billId}`)}>상세 보기</Button>
-      ),
+      key: "as",
+      header: "접수번호",
+      width: "23%",
+      render: (row) => <span className="text-[#005A9C]">{row.asReceptionNumber}</span>,
+    },
+    { key: "customer", header: "고객명", width: "13%", render: (row) => row.customerName },
+    { key: "amount", header: "금액", width: "15%", className: "text-right", render: (row) => won(row.amount) },
+    {
+      key: "status",
+      header: "상태",
+      width: "16%",
+      className: "text-center",
+      render: (row) => <span className={statusColor(row.status)}>{paymentBillStatusLabel(row.status)}</span>,
+    },
+    {
+      key: "method",
+      header: "결제 수단",
+      width: "13%",
+      className: "text-center",
+      render: (row) => paymentMethodLabel(row.paymentMethod),
+    },
+    {
+      key: "approvedAt",
+      header: "승인 시각",
+      width: "20%",
+      className: "text-center",
+      render: (row) => formatApprovedAt(row.approvedAt),
     },
   ];
 
@@ -115,7 +125,7 @@ export function PaymentListPage() {
       <div className="mb-4 flex flex-wrap gap-2">
         <TextField
           value={query}
-          onChange={setQuery}
+          onChange={(value) => filters.replace({ q: value, page: null })}
           placeholder="접수번호, 고객명 검색"
           className="w-64"
         />
@@ -123,7 +133,7 @@ export function PaymentListPage() {
           value={status}
           onChange={(value) => {
             if (isStatusFilter(value)) {
-              setStatus(value);
+              filters.replace({ status: value === "ALL" ? null : value, page: null });
             }
           }}
           options={statusOptions}
@@ -134,11 +144,22 @@ export function PaymentListPage() {
         columns={columns}
         rows={rows}
         rowKey={(row) => String(row.billId)}
+        onRowClick={(row) => navigate(`/payment/${row.billId}`)}
         emptyText={tableMessage(loading, error)}
       />
-      <Pagination page={page} pageCount={pageCount} onPageChange={setPage} />
+      <Pagination page={page} pageCount={pageCount} onPageChange={filters.setPage} />
     </div>
   );
+}
+
+function statusColor(status: PaymentListItem["status"]): string | undefined {
+  if (status === "PAID") {
+    return "text-[#15803D]";
+  }
+  if (status === "UNPAID") {
+    return "text-[#B45309]";
+  }
+  return undefined;
 }
 
 function formatApprovedAt(value: string | null): string {
@@ -164,4 +185,8 @@ function tableMessage(loading: boolean, error: string): string {
 
 function isStatusFilter(value: string): value is StatusFilter {
   return statusOptions.some((option) => option.value === value);
+}
+
+function readStatusFilter(value: string): StatusFilter {
+  return isStatusFilter(value) ? value : "ALL";
 }

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useListParams } from "@/hooks/useListParams";
 import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
 import { TextField } from "@/components/ui/Field";
@@ -20,10 +21,11 @@ type TechnicianSortKey = "name" | "assigned" | "done" | "doing" | "avg" | "sales
 export function TechnicianStatsPage() {
   const { startDate, endDate, invalid } = useStatisticsPeriod();
   const { data, loading, error } = useStatisticsResource(fetchTechnicianStatistics, startDate, endDate, invalid);
-  const [keyword, setKeyword] = useState("");
-  const [appliedKeyword, setAppliedKeyword] = useState("");
-  const [sortKey, setSortKey] = useState<TechnicianSortKey | null>(null);
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const filters = useListParams();
+  const appliedKeyword = filters.text("q");
+  const [keyword, setKeyword] = useState(appliedKeyword);
+  const sortKey = readTechnicianSort(filters.text("sort"));
+  const sortDir = filters.text("dir") === "desc" ? "desc" : "asc";
   const rows = useMemo(() => {
     const matched = (data ?? []).filter((row) => includesText(row.technicianName, appliedKeyword));
     return sortTechnicians(matched, sortKey, sortDir);
@@ -31,12 +33,8 @@ export function TechnicianStatsPage() {
   const list = useStatisticsPage(rows, `${appliedKeyword}|${sortKey ?? ""}|${sortDir}|${startDate}|${endDate}`);
 
   function toggleSort(key: TechnicianSortKey) {
-    if (sortKey === key) {
-      setSortDir((current) => (current === "asc" ? "desc" : "asc"));
-      return;
-    }
-    setSortKey(key);
-    setSortDir("asc");
+    const nextDir = sortKey === key ? (sortDir === "asc" ? "desc" : "asc") : "asc";
+    filters.replace({ sort: key, dir: nextDir, page: null });
   }
 
   return (
@@ -47,7 +45,7 @@ export function TechnicianStatsPage() {
         className="mb-4 flex flex-wrap items-center gap-2"
         onSubmit={(event) => {
           event.preventDefault();
-          setAppliedKeyword(keyword);
+          filters.replace({ q: keyword.trim(), page: null });
         }}
       >
         <TextField value={keyword} onChange={setKeyword} placeholder="기사명" className="w-40" />
@@ -94,6 +92,13 @@ export function TechnicianStatsPage() {
       <Pagination page={list.page} pageCount={list.pageCount} onPageChange={list.setPage} />
     </div>
   );
+}
+
+function readTechnicianSort(value: string): TechnicianSortKey | null {
+  if (value === "name" || value === "assigned" || value === "done" || value === "doing" || value === "avg" || value === "sales") {
+    return value;
+  }
+  return null;
 }
 
 function sortTechnicians(

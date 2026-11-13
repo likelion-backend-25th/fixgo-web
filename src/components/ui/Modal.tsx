@@ -1,6 +1,8 @@
 import { X } from "lucide-react";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
+
+const modalStack: symbol[] = [];
 
 interface ModalProps {
   title: string;
@@ -12,15 +14,23 @@ interface ModalProps {
 }
 
 export function Modal({ title, onClose, children, wide = false, compact = false, className }: ModalProps) {
+  const id = useRef(Symbol(title)).current;
+
   useEffect(() => {
+    modalStack.push(id);
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
+      // 등록 창을 불러오기 창 위에 띄우면, Esc는 맨 위 창만 닫는다.
+      if (event.key === "Escape" && modalStack[modalStack.length - 1] === id) {
         onClose();
       }
     }
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+    return () => {
+      const index = modalStack.lastIndexOf(id);
+      if (index >= 0) modalStack.splice(index, 1);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [id, onClose]);
 
   return (
     <div

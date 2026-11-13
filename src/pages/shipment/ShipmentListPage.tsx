@@ -7,6 +7,7 @@ import { Notice } from "@/components/ui/Panel";
 import { Pagination } from "@/components/ui/Pagination";
 import { fetchReception, fetchReceptions, receptionStatusLabel } from "@/lib/asReceptionApi";
 import { isAbortError } from "@/lib/apiClient";
+import { useSessionStore } from "@/stores/useSessionStore";
 import { cn } from "@/lib/cn";
 import {
   createPickup,
@@ -21,6 +22,7 @@ import {
   refreshShipmentTracking,
   shipmentEventLabel,
   shipmentMethodLabel,
+  shipmentStatusClass,
   shipmentStatusLabel,
   updateShipmentTracking,
   type ShipmentDetail,
@@ -40,7 +42,6 @@ type ShipmentListStatus =
   | "방문 수령 완료";
 
 interface ShipmentRow {
-  no: number;
   shipmentId: number | null;
   asReceptionId: number;
   asId: string;
@@ -84,6 +85,7 @@ interface ReceptionPick {
 const pageSize = 20;
 
 export function ShipmentListPage() {
+  const canManage = useSessionStore((state) => state.user?.role !== "TECHNICIAN");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("전체");
   const [method, setMethod] = useState("전체");
@@ -94,6 +96,7 @@ export function ShipmentListPage() {
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [infoRow, setInfoRow] = useState<ShipmentRow | null>(null);
   const [creating, setCreating] = useState(false);
   const [createInitial, setCreateInitial] = useState<CreateInitial | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -138,10 +141,9 @@ export function ShipmentListPage() {
       if (row.status === "배송 준비 완료" && row.shipmentId !== null) {
         await markShipmentShipping(row.shipmentId);
         setActionNotice("배송을 시작했습니다.");
-      } else if (row.status === "배송 중" && row.shipmentId !== null) {
-        await refreshShipmentTracking(row.shipmentId);
-        setActionNotice("배송 이력을 갱신했습니다.");
-        setSelectedId(row.shipmentId);
+      } else if (row.status === "배송 중" && row.method === "택배" && row.shipmentId !== null) {
+        await markShipmentDelivered(row.shipmentId);
+        setActionNotice("배송 완료로 처리했습니다.");
       } else if (row.status === "방문 수령 대기" && row.shipmentId === null) {
         await createPickup(row.asReceptionId);
         setActionNotice("방문 수령을 등록했습니다.");
@@ -157,7 +159,6 @@ export function ShipmentListPage() {
     }
   }
   const columns: Column<ShipmentRow>[] = [
-    { key: "no", header: "번호", render: (row) => row.no },
     { key: "as", header: "접수번호", render: (row) => row.asId },
     { key: "method", header: "수령 방법", render: (row) => row.method },
     { key: "receiver", header: "수령인", render: (row) => row.receiver },
@@ -170,25 +171,22 @@ export function ShipmentListPage() {
       key: "detail",
       header: "",
       render: (row) => {
-        const shipmentId = row.shipmentId;
+        if (!canManage) {
+          return null;
+        }
+        const label = rowActionLabel(row);
+        if (label === "배송 알림" || label === "배송 조회" || label === "상세 보기") {
+          return null;
+        }
         return (
-          <div className="flex justify-end gap-2 whitespace-nowrap">
-            {row.status === "배송 준비 완료" && shipmentId !== null && (
-              <Button
-                variant="outline"
-                className="whitespace-nowrap"
-                disabled={busyId === row.asReceptionId}
-                onClick={() => setSelectedId(shipmentId)}
-              >
-                수정
-              </Button>
-            )}
+          <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
             <Button
-              variant={row.status === "배송 완료" || row.status === "방문 수령 완료" || row.status === "배송 중" ? "outline" : "primary"}
+              variant={label === "배송 완료" || label === "수령 완료" ? "outline" : "primary"}
+              className={shipmentActionClass(label)}
               disabled={busyId === row.asReceptionId}
               onClick={() => void runRowAction(row)}
             >
-              {rowActionLabel(row)}
+              {label}
             </Button>
           </div>
         );
@@ -207,8 +205,8 @@ export function ShipmentListPage() {
       size: pageSize,
     }, controller.signal)
       .then((result) => {
-        setRows(result.items.flatMap((item, index) => {
-          const row = toRow(item, result.number * result.size + index + 1);
+        setRows(result.items.flatMap((item) => {
+          const row = toRow(item);
           return row === null ? [] : [row];
         }));
         setPageCount(Math.max(1, result.totalPages));
@@ -267,7 +265,7 @@ export function ShipmentListPage() {
         <TextField value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="접수번호, 수령인, 운송장번호 검색" className="w-72" />
         <SelectBox value={status} onChange={(value) => { setStatus(value); setPage(1); }} options={statusFilters} />
         <SelectBox value={method} onChange={(value) => { setMethod(value); setPage(1); }} options={[{ value: "전체", label: "수령 방법 전체" }, { value: "택배", label: "택배" }, { value: "방문 수령", label: "방문 수령" }]} />
-        <Button className="ml-auto" onClick={() => { setCreateInitial(null); setCreating(true); }}>등록</Button>
+        {canManage && <Button className="ml-auto" onClick={() => { setCreateInitial(null); setCreating(true); }}>등록</Button>}
       </div>
       {loadError !== "" && <div className="mb-3"><Notice tone="error">{loadError}</Notice></div>}
       {actionError !== "" && <div className="mb-3"><Notice tone="error">{actionError}</Notice></div>}
@@ -276,6 +274,15 @@ export function ShipmentListPage() {
         columns={columns}
         rows={rows}
         rowKey={(row) => String(row.asReceptionId)}
+        onRowClick={(row) => {
+          if (row.method === "택배" && row.shipmentId !== null) {
+            setInfoRow(null);
+            setSelectedId(row.shipmentId);
+            return;
+          }
+          setSelectedId(null);
+          setInfoRow(row);
+        }}
         selectedKey={selectedId === null ? undefined : String(rows.find((row) => row.shipmentId === selectedId)?.asReceptionId ?? "")}
         emptyText={loading ? "불러오는 중" : "배송 내역이 없습니다."}
       />
@@ -293,7 +300,16 @@ export function ShipmentListPage() {
       {selectedId !== null && (
         <ShipmentDetailModal
           shipmentId={selectedId}
+          readOnly={!canManage}
           onClose={() => setSelectedId(null)}
+          onChanged={() => setReloadKey((value) => value + 1)}
+        />
+      )}
+      {infoRow !== null && (
+        <ShipmentRowInfoModal
+          row={infoRow}
+          canEdit={canManage}
+          onClose={() => setInfoRow(null)}
           onChanged={() => setReloadKey((value) => value + 1)}
         />
       )}
@@ -320,9 +336,18 @@ function toManagementMethod(value: string): "ALL" | ShipmentReturnMethod {
 function rowActionLabel(row: ShipmentRow): string {
   if (row.status === "배송 등록 대기") return "배송 등록";
   if (row.status === "배송 준비 완료") return "배송 알림";
-  if (row.status === "배송 중") return "배송 조회";
+  if (row.status === "배송 중" && row.method === "택배") return "배송 완료";
+  if (row.status === "배송 완료") return "상세 보기";
   if (row.status === "방문 수령 대기") return row.shipmentId === null ? "수령 등록" : "수령 완료";
   return "상세 보기";
+}
+
+function shipmentActionClass(label: string): string | undefined {
+  if (label === "배송 알림") return "bg-[#005A9C] text-white shadow-none hover:bg-[#004E8A]";
+  if (label === "수령 완료") return "border border-[#60C1E5] bg-white text-[#60C1E5] shadow-none hover:bg-[#F3FBFD]";
+  if (label === "배송 조회") return "bg-[#A0E0EF] text-[#005A9C] shadow-none hover:bg-[#8AD4E6]";
+  if (label === "상세 보기") return "bg-[#F1F5F9] text-[#475569] shadow-none hover:bg-[#E2E8F0]";
+  return undefined;
 }
 
 function listStatus(item: ShipmentManagementItem): ShipmentListStatus | null {
@@ -341,13 +366,12 @@ function listStatus(item: ShipmentManagementItem): ShipmentListStatus | null {
   return null;
 }
 
-function toRow(item: ShipmentManagementItem, no: number): ShipmentRow | null {
+function toRow(item: ShipmentManagementItem): ShipmentRow | null {
   const status = listStatus(item);
   if (status === null) {
     return null;
   }
   return {
-    no,
     shipmentId: item.shipmentId,
     asReceptionId: item.asReceptionId,
     asId: item.receptionNumber,
@@ -371,11 +395,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 function StatusLabel({ value }: { value: string }) {
-  return (
-    <span className={cn((value === "배송 중" || value === "배송중") && "text-blue-600", (value === "배송 완료" || value === "배송완료" || value === "방문 수령 완료" || value === "수령완료") && "text-green-600")}>
-      {value}
-    </span>
-  );
+  return <span className={shipmentStatusClass(value)}>{value}</span>;
 }
 
 function CreateShipmentModal({
@@ -499,7 +519,7 @@ function CreateShipmentModal({
         ) : (
           <>
             <Button variant="outline" disabled={submitting} onClick={() => void register(false)}>운송장 등록</Button>
-            <Button disabled={submitting || !deliveryReady} onClick={() => void register(true)}>배송 알림</Button>
+            <Button className={shipmentActionClass("배송 알림")} disabled={submitting || !deliveryReady} onClick={() => void register(true)}>배송 알림</Button>
           </>
         )}
       </div>
@@ -653,7 +673,17 @@ function ReceptionPickModal({
   );
 }
 
-function ShipmentDetailModal({ shipmentId, onClose, onChanged }: { shipmentId: number; onClose: () => void; onChanged: () => void }) {
+function ShipmentDetailModal({
+  shipmentId,
+  readOnly,
+  onClose,
+  onChanged,
+}: {
+  shipmentId: number;
+  readOnly: boolean;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
   const [detail, setDetail] = useState<ShipmentDetail | null>(null);
   const [carrierCode, setCarrierCode] = useState("");
   const [trackingNo, setTrackingNo] = useState("");
@@ -679,7 +709,7 @@ function ShipmentDetailModal({ shipmentId, onClose, onChanged }: { shipmentId: n
   }, [shipmentId]);
 
   const visit = detail?.returnMethod === "PICKUP";
-  const editable = detail?.status === "READY" && !visit;
+  const editable = !readOnly && detail?.status === "READY" && !visit;
 
   async function run(action: () => Promise<void>, done: string) {
     setBusy(true);
@@ -733,6 +763,9 @@ function ShipmentDetailModal({ shipmentId, onClose, onChanged }: { shipmentId: n
               <StatusLabel value={shipmentStatusLabel(detail.status, detail.returnMethod)} />
             </div>
           </label>
+          {visit && (
+            <TextField label="방문 수령 일시" value={formatShipmentTime(detail.completedAt)} onChange={() => undefined} readOnly />
+          )}
           {!visit && (
             <>
               <TextField label="운송장번호" value={trackingNo} onChange={setTrackingNo} readOnly={!editable} />
@@ -743,11 +776,20 @@ function ShipmentDetailModal({ shipmentId, onClose, onChanged }: { shipmentId: n
       )}
       {detail !== null && error !== "" && <div className="mt-3"><Notice tone="error">{error}</Notice></div>}
       {notice !== "" && <div className="mt-3"><Notice>{notice}</Notice></div>}
-      {detail !== null && (
+      {detail !== null && !readOnly && (
         <div className="mt-4 flex justify-end gap-2">
+          {!visit && editable && (
+            <Button
+              className={shipmentActionClass("배송 알림")}
+              disabled={busy}
+              onClick={() => void run(() => markShipmentShipping(shipmentId).then(() => undefined), "배송을 시작했습니다.")}
+            >
+              배송 알림
+            </Button>
+          )}
           {!visit && !editable && (
             <Button
-              variant="outline"
+              className={detail.status === "SHIPPING" ? "bg-[#005A9C] text-white shadow-none hover:bg-[#004E8A]" : shipmentActionClass("배송 조회")}
               disabled={busy}
               onClick={() => void run(() => refreshShipmentTracking(shipmentId), "배송 이력을 갱신했습니다.")}
             >
@@ -768,6 +810,7 @@ function ShipmentDetailModal({ shipmentId, onClose, onChanged }: { shipmentId: n
           )}
           {visit ? (
             <Button
+              className={shipmentActionClass("수령 완료")}
               disabled={busy || detail.status !== "READY"}
               onClick={() => void run(() => markShipmentPickedUp(shipmentId).then(() => undefined), "수령 완료로 처리했습니다.")}
             >
@@ -775,6 +818,7 @@ function ShipmentDetailModal({ shipmentId, onClose, onChanged }: { shipmentId: n
             </Button>
           ) : !editable && (
             <Button
+              variant={detail.status === "SHIPPING" ? "outline" : "primary"}
               disabled={busy || detail.status !== "SHIPPING"}
               onClick={() => void run(() => markShipmentDelivered(shipmentId).then(() => undefined), "배송 완료로 처리했습니다.")}
             >
@@ -814,6 +858,166 @@ function ShipmentHistory({ detail }: { detail: ShipmentDetail }) {
         </ol>
       )}
     </div>
+  );
+}
+
+function ShipmentRowInfoModal({
+  row,
+  canEdit,
+  onClose,
+  onChanged,
+}: {
+  row: ShipmentRow;
+  canEdit: boolean;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const delivery = row.method === "택배";
+  const showPickedUpAt = row.method === "방문 수령" && row.status === "방문 수령 완료";
+  const editable = canEdit && delivery && row.shipmentId !== null;
+  const [status, setStatus] = useState(row.status);
+  const [pickedUpAt, setPickedUpAt] = useState<string | null>(null);
+  const [carrierCode, setCarrierCode] = useState("");
+  const [trackingNo, setTrackingNo] = useState(row.trackingNo === "-" ? "" : row.trackingNo);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    const timeRequest = showPickedUpAt && row.shipmentId !== null
+      ? fetchShipmentDetail(row.shipmentId, controller.signal).then((detail) => detail.completedAt)
+      : Promise.resolve(null);
+    const shipmentRequest = delivery && row.shipmentId !== null
+      ? fetchShipmentDetail(row.shipmentId, controller.signal)
+      : Promise.resolve(null);
+    // 방문 수령 일시와 택배사 코드는 배송 상세에만 있다.
+    Promise.all([timeRequest, shipmentRequest])
+      .then(([completedAt, shipment]) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setPickedUpAt(completedAt);
+        if (shipment !== null) {
+          setCarrierCode(shipment.courierCode ?? "");
+          setTrackingNo(shipment.trackingNumber ?? "");
+        }
+        setError("");
+      })
+      .catch((caught: unknown) => {
+        if (!isAbortError(caught)) {
+          setError(caught instanceof Error ? caught.message : "배송 정보를 불러오지 못했습니다.");
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+    return () => controller.abort();
+  }, [delivery, row, showPickedUpAt]);
+
+  const canCompletePickup = canEdit && row.method === "방문 수령" && status === "방문 수령 대기";
+
+  async function completePickup() {
+    if (!canCompletePickup || saving) {
+      return;
+    }
+    setSaving(true);
+    setNotice("");
+    setError("");
+    try {
+      // 수령 기록이 없으면 먼저 만들고, 이어서 수령 완료로 바꾼다.
+      const shipmentId = row.shipmentId ?? (await createPickup(row.asReceptionId)).id;
+      const completed = await markShipmentPickedUp(shipmentId);
+      setStatus("방문 수령 완료");
+      setPickedUpAt(completed.completedAt);
+      setNotice("수령 완료로 처리했습니다.");
+      onChanged();
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : "수령 완료로 처리하지 못했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveTracking() {
+    if (!editable || row.shipmentId === null || saving) {
+      return;
+    }
+    setSaving(true);
+    setNotice("");
+    setError("");
+    try {
+      await updateShipmentTracking(row.shipmentId, carrierCode, trackingNo.trim());
+      setNotice("운송장 정보를 수정했습니다.");
+      onChanged();
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : "운송장 정보를 수정하지 못했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title="배송 상세" onClose={onClose}>
+      {loading ? (
+        <p className="text-sm text-neutral-500">{error === "" ? "불러오는 중" : error}</p>
+      ) : (
+        <div className="space-y-4">
+          <TextField label="접수번호" value={row.asId} onChange={() => undefined} readOnly />
+          <TextField label="수령인" value={row.receiver} onChange={() => undefined} readOnly />
+          <TextField label="수령 방법" value={row.method} onChange={() => undefined} readOnly />
+          {delivery && editable && (
+            <>
+              <label className="block text-sm">
+                <FieldLabel>택배사</FieldLabel>
+                <SelectBox
+                  className="w-full"
+                  value={carrierCode}
+                  onChange={setCarrierCode}
+                  options={[{ value: "", label: "택배사 선택" }, ...sweetTrackerCarriers.map((item) => ({ value: item.code, label: item.name }))]}
+                />
+              </label>
+              <TextField label="운송장번호" value={trackingNo} onChange={setTrackingNo} placeholder="운송장번호" />
+            </>
+          )}
+          {delivery && !editable && (
+            <>
+              <TextField label="택배사" value={row.carrier} onChange={() => undefined} readOnly />
+              <TextField label="운송장번호" value={row.trackingNo} onChange={() => undefined} readOnly />
+            </>
+          )}
+          <label className="block text-sm">
+            <FieldLabel>상태</FieldLabel>
+            <div className="rounded-lg border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm">
+              <StatusLabel value={status} />
+            </div>
+          </label>
+          {row.method === "방문 수령" && status === "방문 수령 완료" && (
+            <TextField label="방문 수령 일시" value={formatShipmentTime(pickedUpAt)} onChange={() => undefined} readOnly />
+          )}
+          {editable && (
+            <div className="flex justify-end">
+              <Button disabled={saving || carrierCode === "" || trackingNo.trim() === ""} onClick={() => void saveTracking()}>
+                {saving ? "저장 중…" : "저장"}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+      {!loading && notice !== "" && <div className="mt-3"><Notice>{notice}</Notice></div>}
+      {!loading && error !== "" && <div className="mt-3"><Notice tone="error">{error}</Notice></div>}
+      {canCompletePickup && !loading && (
+        <div className="mt-4 flex justify-end">
+          <Button className={shipmentActionClass("수령 완료")} disabled={saving} onClick={() => void completePickup()}>
+            {saving ? "처리 중…" : "수령 완료"}
+          </Button>
+        </div>
+      )}
+    </Modal>
   );
 }
 

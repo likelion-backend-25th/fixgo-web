@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
@@ -8,6 +8,7 @@ import { Notice, Panel } from "@/components/ui/Panel";
 import { Pagination } from "@/components/ui/Pagination";
 import { isAbortError } from "@/lib/apiClient";
 import { fetchReceptions, receptionStatusLabel } from "@/lib/asReceptionApi";
+import { embedDaumPostcode, selectedAddress } from "@/lib/daumPostcode";
 import { repairStatusLabel } from "@/lib/repair";
 import { fetchCustomer, updateCustomer } from "@/lib/customerApi";
 import { formatDate } from "@/lib/format";
@@ -23,10 +24,12 @@ export function CustomerDetailPage() {
   const [history, setHistory] = useState<AsReceptionListItem[]>([]);
   const [historyPage, setHistoryPage] = useState(1);
   const [historyPageCount, setHistoryPageCount] = useState(1);
+  const [historyTotal, setHistoryTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState(false);
+  const [postLookup, setPostLookup] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -72,12 +75,14 @@ export function CustomerDetailPage() {
     if (customer === null) {
       setHistory([]);
       setHistoryPageCount(1);
+      setHistoryTotal(0);
       return;
     }
     const controller = new AbortController();
     fetchReceptions(
       {
-        keyword: customer.phone,
+        keyword: "",
+        customerId: customer.id,
         status: null,
         technicianId: null,
         page: historyPage,
@@ -90,11 +95,13 @@ export function CustomerDetailPage() {
         if (controller.signal.aborted) return;
         setHistory(result.items);
         setHistoryPageCount(Math.max(1, result.totalPages));
+        setHistoryTotal(result.totalElements);
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted || isAbortError(cause)) return;
         setHistory([]);
         setHistoryPageCount(1);
+        setHistoryTotal(0);
         setError(cause instanceof Error ? cause.message : "수리 이력을 불러오지 못했습니다.");
       });
     return () => controller.abort();
@@ -108,10 +115,6 @@ export function CustomerDetailPage() {
     return <Notice tone="error">{error === "" ? "고객 정보를 찾을 수 없습니다." : error}</Notice>;
   }
 
-  const address = [customer.zipcode, customer.basicAddress, customer.detailAddress]
-    .filter((part) => part !== null && part !== "")
-    .join(" ");
-
   const historyColumns: Column<AsReceptionListItem>[] = [
     {
       key: "id",
@@ -124,13 +127,13 @@ export function CustomerDetailPage() {
     },
     { key: "date", header: "접수일", render: (row) => formatDate(row.createdAt) },
     { key: "model", header: "모델명", render: (row) => row.modelName ?? "-" },
-    { key: "status", header: "접수상태", render: (row) => receptionStatusLabel(row.receptionStatus) },
+    { key: "status", header: "접수 상태", render: (row) => receptionStatusLabel(row.receptionStatus) },
     {
       key: "repair",
       header: "수리 상태",
       render: (row) => (row.repairStatus === null ? "-" : repairStatusLabel(row.repairStatus)),
     },
-    { key: "tech", header: "담당기사", render: (row) => row.technicianName ?? "-" },
+    { key: "tech", header: "담당 기사", render: (row) => row.technicianName ?? "-" },
   ];
 
   return (
@@ -139,27 +142,49 @@ export function CustomerDetailPage() {
       {error !== "" && <Notice tone="error">{error}</Notice>}
       <Panel
         title="고객 정보"
+        className="p-6"
         action={<Button variant="outline" onClick={() => setEditing(true)}>수정</Button>}
       >
-        <div className="grid gap-3 text-sm sm:grid-cols-2">
-          <p>이름 {customer.name}</p>
-          <p>연락처 {customer.phone}</p>
-          <p>이메일 {customer.email}</p>
-          <p>주소 {address === "" ? "-" : address}</p>
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+          <InfoItem label="고객명" value={customer.name} />
+          <InfoItem label="연락처" value={customer.phone} />
+          <InfoItem label="이메일" value={customer.email} />
+        </div>
+        <div className="my-6 border-t border-neutral-200" />
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+          <InfoItem label="우편번호" value={customer.zipcode ?? ""} />
+          <InfoItem label="기본 주소" value={customer.basicAddress ?? ""} />
+          <InfoItem label="상세 주소" value={customer.detailAddress ?? ""} />
         </div>
       </Panel>
 
-      <h2 className="text-sm font-semibold">이전 수리 내역</h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="section-title">이전 수리 내역</h2>
+        <p className="text-sm text-[#64748B]">전체 {historyTotal}건</p>
+      </div>
       <DataTable
         columns={historyColumns}
         rows={history}
         rowKey={(row) => String(row.id)}
-        emptyText="이전 수리 내역이 없습니다."
+        emptyText={(
+          <span className="block text-center">
+            <span className="block">이전 수리 내역이 없습니다.</span>
+            <span className="mt-1 block text-xs">A/S 접수 후 해당 고객의 수리 내역을 확인할 수 있습니다.</span>
+          </span>
+        )}
       />
-      <Pagination page={historyPage} pageCount={historyPageCount} onPageChange={setHistoryPage} />
+      {historyTotal > 0 && (
+        <Pagination page={historyPage} pageCount={historyPageCount} onPageChange={setHistoryPage} />
+      )}
 
-      {editing && (
-        <Modal title="고객 정보 수정" onClose={() => setEditing(false)}>
+      {editing && !postLookup && (
+        <Modal
+          title="고객 정보 수정"
+          onClose={() => {
+            setEditing(false);
+            setPostLookup(false);
+          }}
+        >
           <form
             className="space-y-3"
             onSubmit={(event) => {
@@ -177,6 +202,7 @@ export function CustomerDetailPage() {
                 .then((updated) => {
                   setCustomer(updated);
                   setEditing(false);
+                  setPostLookup(false);
                   setNotice("고객 정보를 수정했습니다.");
                 })
                 .catch((cause: unknown) => {
@@ -188,16 +214,109 @@ export function CustomerDetailPage() {
             <TextField label="이름" value={name} onChange={setName} />
             <TextField label="연락처" value={phone} onChange={setPhone} />
             <TextField label="이메일" value={email} onChange={setEmail} />
-            <TextField label="우편번호" value={zipcode} onChange={setZipcode} />
+            <TextField label="우편번호" value={zipcode} onChange={setZipcode} readOnly />
             <TextField label="기본 주소" value={basicAddress} onChange={setBasicAddress} />
-            <TextField label="상세 주소" value={detailAddress} onChange={setDetailAddress} />
+            <div className="flex items-end gap-2">
+              <TextField
+                className="flex-1"
+                label="상세 주소"
+                value={detailAddress}
+                onChange={setDetailAddress}
+              />
+              <Button type="button" variant="outline" onClick={() => setPostLookup(true)}>
+                우편번호 찾기
+              </Button>
+            </div>
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setEditing(false)} disabled={saving}>취소</Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setEditing(false);
+                  setPostLookup(false);
+                }}
+                disabled={saving}
+              >
+                취소
+              </Button>
               <Button type="submit" disabled={saving}>저장</Button>
             </div>
           </form>
         </Modal>
       )}
+
+      {postLookup && (
+        <CustomerPostLookup
+          onClose={() => setPostLookup(false)}
+          onApply={({ postalCode, address }) => {
+            setZipcode(postalCode);
+            setBasicAddress(address);
+            setPostLookup(false);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function InfoItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs text-[#64748B]">{label}</p>
+      <p className="mt-1.5 text-sm break-words text-[#1E293B]">{value === "" ? "-" : value}</p>
+    </div>
+  );
+}
+
+function CustomerPostLookup({
+  onClose,
+  onApply,
+}: {
+  onClose: () => void;
+  onApply: (result: { postalCode: string; address: string }) => void;
+}) {
+  const frameRef = useRef<HTMLDivElement>(null);
+  const onApplyRef = useRef(onApply);
+  const onCloseRef = useRef(onClose);
+  const [lookupError, setLookupError] = useState("");
+  onApplyRef.current = onApply;
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (frame === null) {
+      return;
+    }
+    let cancelled = false;
+    embedDaumPostcode(frame, {
+      width: "100%",
+      height: "100%",
+      oncomplete: (data) => {
+        onApplyRef.current({
+          postalCode: data.zonecode,
+          address: selectedAddress(data),
+        });
+        onCloseRef.current();
+      },
+    })
+      .catch((cause: unknown) => {
+        if (!cancelled) {
+          setLookupError(
+            cause instanceof Error ? cause.message : "카카오 우편번호 서비스를 불러오지 못했습니다.",
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <Modal title="우편번호 찾기" wide onClose={onClose}>
+      {lookupError !== "" && <Notice tone="error">{lookupError}</Notice>}
+      <div ref={frameRef} className="h-[460px] overflow-hidden rounded-xl border border-neutral-200" />
+      <p className="mt-3 text-xs text-neutral-500">
+        주소를 고르면 우편번호와 기본 주소가 입력됩니다. 상세 주소는 직접 입력합니다.
+      </p>
+    </Modal>
   );
 }

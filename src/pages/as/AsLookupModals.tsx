@@ -6,9 +6,10 @@ import { Modal } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Panel";
 import { Pagination } from "@/components/ui/Pagination";
 import { isAbortError } from "@/lib/apiClient";
-import { categoryLabel, fetchAssignableTechnicians, searchCustomers, searchProductsBySerialPage } from "@/lib/asReceptionApi";
+import { categoryLabel, fetchAssignableTechnicians, searchProductsBySerialPage } from "@/lib/asReceptionApi";
+import { searchCustomersPage } from "@/lib/customerApi";
 import { formatDurationMinutes } from "@/lib/format";
-import { loadDaumPostcode, selectedAddress } from "@/lib/daumPostcode";
+import { embedDaumPostcode, selectedAddress } from "@/lib/daumPostcode";
 import type { AssignableTechnician, CustomerSummary, ProductSummary, TechnicianSort } from "@/types/asReception";
 
 export type LookupKind = "customer" | "serial" | "tech" | "post" | null;
@@ -22,9 +23,12 @@ interface ApplyPatch {
   address?: string;
   addressDetail?: string;
   productId?: number | null;
+  productModelId?: number | null;
   serial?: string;
   productGroup?: string;
   modelName?: string;
+  purchasedAt?: string;
+  purchasedAtLocked?: boolean;
   technicianId?: number | null;
   technician?: string;
 }
@@ -53,9 +57,12 @@ export function AsLookupModals({ kind, onClose, onApply }: AsLookupModalsProps) 
 
 function CustomerLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClose" | "onApply">) {
   const [query, setQuery] = useState("");
+  const [applied, setApplied] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageCount, setPageCount] = useState(1);
   const [selected, setSelected] = useState<number | null>(null);
   const [rows, setRows] = useState<CustomerSummary[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const columns: Column<CustomerSummary>[] = [
     { key: "name", header: "고객명", render: (row) => row.name },
@@ -65,41 +72,60 @@ function CustomerLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClose
   ];
 
   useEffect(() => {
-    const trimmed = query.trim();
-    if (trimmed === "") {
-      setRows([]);
-      setError("");
-      setLoading(false);
-      return;
-    }
-    const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      setLoading(true);
-      setError("");
-      searchCustomers(trimmed, controller.signal)
-        .then((items) => {
-          if (!controller.signal.aborted) {
-            setRows(items);
-          }
-        })
-        .catch((cause: unknown) => {
-          if (controller.signal.aborted || isAbortError(cause)) {
-            return;
-          }
-          setRows([]);
-          setError(cause instanceof Error ? cause.message : "고객을 조회하지 못했습니다.");
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) {
-            setLoading(false);
-          }
-        });
+      const next = query.trim();
+      setApplied((current) => {
+        if (current === next) {
+          return current;
+        }
+        setPage(1);
+        setSelected(null);
+        return next;
+      });
     }, 300);
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
+    return () => window.clearTimeout(timer);
   }, [query]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError("");
+    searchCustomersPage({ keyword: applied, page, size: 20 }, controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setRows(result.items);
+        setPageCount(Math.max(1, result.totalPages));
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted || isAbortError(cause)) {
+          return;
+        }
+        setRows([]);
+        setPageCount(1);
+        setError(cause instanceof Error ? cause.message : "고객을 조회하지 못했습니다.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+    return () => controller.abort();
+  }, [applied, page]);
+
+  function apply(row: CustomerSummary) {
+    onApply({
+      customerId: row.id,
+      customerName: row.name,
+      phone: row.phone,
+      email: row.email,
+      postalCode: row.zipcode ?? "",
+      address: row.basicAddress ?? "",
+      addressDetail: row.detailAddress ?? "",
+    });
+    onClose();
+  }
 
   return (
     <Modal title="고객정보 조회" wide onClose={onClose}>
@@ -111,24 +137,20 @@ function CustomerLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClose
         rowKey={(row) => String(row.id)}
         selectedKey={selected === null ? undefined : String(selected)}
         onRowClick={(row) => setSelected(row.id)}
-        emptyText={query.trim() === "" ? "고객명, 연락처, 이메일을 입력해 주세요." : loading ? "고객을 조회하는 중입니다." : "조회 결과가 없습니다."}
+        onRowDoubleClick={apply}
+        emptyText={loading ? "고객을 조회하는 중입니다." : "조회 결과가 없습니다."}
       />
+      <Pagination page={page} pageCount={pageCount} onPageChange={(next) => {
+        setSelected(null);
+        setPage(next);
+      }} />
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>취소</Button>
         <Button
           onClick={() => {
             const row = rows.find((item) => item.id === selected);
             if (row === undefined) return;
-            onApply({
-              customerId: row.id,
-              customerName: row.name,
-              phone: row.phone,
-              email: row.email,
-              postalCode: row.zipcode ?? "",
-              address: row.basicAddress ?? "",
-              addressDetail: row.detailAddress ?? "",
-            });
-            onClose();
+            apply(row);
           }}
         >
           적용
@@ -145,7 +167,7 @@ function SerialLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClose" 
   const [pageCount, setPageCount] = useState(1);
   const [selected, setSelected] = useState<number | null>(null);
   const [rows, setRows] = useState<ProductSummary[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const columns: Column<ProductSummary>[] = [
     { key: "serial", header: "시리얼번호", render: (row) => row.serialNumber },
@@ -169,13 +191,6 @@ function SerialLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClose" 
   }, [query]);
 
   useEffect(() => {
-    if (applied === "") {
-      setRows([]);
-      setPageCount(1);
-      setError("");
-      setLoading(false);
-      return;
-    }
     const controller = new AbortController();
     setLoading(true);
     setError("");
@@ -203,6 +218,21 @@ function SerialLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClose" 
     return () => controller.abort();
   }, [applied, page]);
 
+  function apply(row: ProductSummary) {
+    const purchasedAt = row.purchasedAt?.slice(0, 10) ?? "";
+    onApply({
+      productId: row.id,
+      productModelId: row.productModelId,
+      serial: row.serialNumber,
+      productGroup: categoryLabel(row.category),
+      modelName: row.modelName,
+      // 저장된 구매일이 있으면 채우고 수정을 막는다. 없으면 직접 입력할 수 있게 연다.
+      purchasedAt,
+      purchasedAtLocked: purchasedAt !== "",
+    });
+    onClose();
+  }
+
   return (
     <Modal title="시리얼번호 조회" wide onClose={onClose}>
       <TextField value={query} onChange={setQuery} placeholder="시리얼번호 일부 입력" className="mb-3 w-64" />
@@ -213,7 +243,8 @@ function SerialLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClose" 
         rowKey={(row) => String(row.id)}
         selectedKey={selected === null ? undefined : String(selected)}
         onRowClick={(row) => setSelected(row.id)}
-        emptyText={applied === "" ? "시리얼번호 일부를 입력해 주세요." : loading ? "제품을 조회하는 중입니다." : "조회 결과가 없습니다."}
+        onRowDoubleClick={apply}
+        emptyText={loading ? "제품을 조회하는 중입니다." : "조회 결과가 없습니다."}
       />
       <Pagination page={page} pageCount={pageCount} onPageChange={(next) => {
         setSelected(null);
@@ -225,13 +256,7 @@ function SerialLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClose" 
           onClick={() => {
             const row = rows.find((item) => item.id === selected);
             if (row === undefined) return;
-            onApply({
-              productId: row.id,
-              serial: row.serialNumber,
-              productGroup: categoryLabel(row.category),
-              modelName: row.modelName,
-            });
-            onClose();
+            apply(row);
           }}
         >
           적용
@@ -326,6 +351,11 @@ function TechnicianLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClo
     setSortDir(key === "name" ? "asc" : "desc");
   }
 
+  function apply(row: AssignableTechnician) {
+    onApply({ technicianId: row.id, technician: row.name });
+    onClose();
+  }
+
   return (
     <Modal title="A/S 기사 목록" wide onClose={onClose}>
       <TextField value={query} onChange={setQuery} placeholder="기사 이름 검색" className="mb-3 w-64" />
@@ -336,6 +366,7 @@ function TechnicianLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClo
         rowKey={(row) => String(row.id)}
         selectedKey={selected === null ? undefined : String(selected)}
         onRowClick={(row) => setSelected(row.id)}
+        onRowDoubleClick={apply}
         sortKey={sortKey}
         sortDir={sortDir}
         onSort={onSort}
@@ -347,8 +378,7 @@ function TechnicianLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClo
           onClick={() => {
             const row = rows.find((item) => item.id === selected);
             if (row === undefined) return;
-            onApply({ technicianId: row.id, technician: row.name });
-            onClose();
+            apply(row);
           }}
         >
           적용하기
@@ -372,24 +402,17 @@ function PostLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClose" | 
       return;
     }
     let cancelled = false;
-    loadDaumPostcode()
-      .then((Postcode) => {
-        if (cancelled) {
-          return;
-        }
-        frame.replaceChildren();
-        new Postcode({
-          width: "100%",
-          height: "100%",
-          oncomplete: (data) => {
-            onApplyRef.current({
-              postalCode: data.zonecode,
-              address: selectedAddress(data),
-            });
-            onCloseRef.current();
-          },
-        }).embed(frame);
-      })
+    embedDaumPostcode(frame, {
+      width: "100%",
+      height: "100%",
+      oncomplete: (data) => {
+        onApplyRef.current({
+          postalCode: data.zonecode,
+          address: selectedAddress(data),
+        });
+        onCloseRef.current();
+      },
+    })
       .catch((cause: unknown) => {
         if (!cancelled) {
           setError(cause instanceof Error ? cause.message : "카카오 우편번호 서비스를 불러오지 못했습니다.");

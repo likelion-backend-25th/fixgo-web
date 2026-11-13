@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
+import { useListParams } from "@/hooks/useListParams";
 import { Button } from "@/components/ui/Button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { TextField } from "@/components/ui/Field";
@@ -24,9 +25,10 @@ const PAGE_SIZE = 20;
 
 export function CustomerListPage() {
   const navigate = useNavigate();
-  const [query, setQuery] = useState("");
-  const [appliedKeyword, setAppliedKeyword] = useState("");
-  const [page, setPage] = useState(1);
+  const filters = useListParams();
+  const query = filters.text("q");
+  const page = filters.page();
+  const [appliedKeyword, setAppliedKeyword] = useState(query.trim());
   const [rows, setRows] = useState<CustomerDetail[]>([]);
   const [pageCount, setPageCount] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -39,7 +41,6 @@ export function CustomerListPage() {
       const next = query.trim();
       setAppliedKeyword((current) => {
         if (current === next) return current;
-        setPage(1);
         return next;
       });
     }, 300);
@@ -82,7 +83,7 @@ export function CustomerListPage() {
     <div>
       {error !== "" && <div className="mb-3"><Notice tone="error">{error}</Notice></div>}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <TextField value={query} onChange={setQuery} placeholder="고객명, 연락처 검색" className="w-64" />
+        <TextField value={query} onChange={(value) => filters.replace({ q: value, page: null })} placeholder="고객명, 연락처 검색" className="w-64" />
         <Button className="ml-auto" onClick={() => setOpen(true)}>엑셀 일괄 등록</Button>
       </div>
       <DataTable
@@ -92,7 +93,7 @@ export function CustomerListPage() {
         onRowClick={(row) => navigate(`/customer/${row.id}`)}
         emptyText={loading ? "고객을 조회하는 중입니다." : "조회 결과가 없습니다."}
       />
-      <Pagination page={page} pageCount={pageCount} onPageChange={setPage} />
+      <Pagination page={page} pageCount={pageCount} onPageChange={filters.setPage} />
       {open && (
         <ExcelModal
           onClose={() => setOpen(false)}

@@ -14,6 +14,9 @@ dist
 dist-ssr
 *.local
 
+# TypeScript가 원본이므로 JS 복제본은 추적하지 않는다.
+*.js
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

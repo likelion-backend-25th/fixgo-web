@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
+import { useListParams } from "@/hooks/useListParams";
 import { Button } from "@/components/ui/Button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { SelectBox, TextField } from "@/components/ui/Field";
@@ -85,6 +86,14 @@ const repairStatusOptions: { value: RepairStatusFilter; label: string }[] = [
   ...REPAIR_STATUSES.map((value) => ({ value, label: repairStatusLabel(value) })),
 ];
 
+function readRepairStatusFilter(value: string): RepairStatusFilter {
+  return isRepairStatusFilter(value) ? value : "ALL";
+}
+
+function readTechSortKey(value: string): TechSortKey {
+  return isTechSortKey(value) ? value : "createdAt";
+}
+
 function isRepairStatusFilter(value: string): value is RepairStatusFilter {
   return value === "ALL" || value === "RECEIVED" || REPAIR_STATUSES.some((item) => item === value);
 }
@@ -103,6 +112,9 @@ function isTechSortKey(value: string): value is TechSortKey {
 }
 
 function technicianStatusLabel(row: TechnicianRepairRow): string {
+  if (isReturnWaiting(row.receptionStatus)) {
+    return receptionStatusLabel(row.receptionStatus);
+  }
   return row.repairStatus === null
     ? receptionStatusLabel(row.receptionStatus)
     : repairStatusLabel(row.repairStatus);
@@ -161,13 +173,14 @@ function TechnicianAsListPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const notice = readNotice(location.state);
+  const filters = useListParams();
+  const query = filters.text("q");
+  const status = readRepairStatusFilter(filters.text("status", "ALL"));
+  const sortKey = readTechSortKey(filters.text("sort", "createdAt"));
+  const sortDir = filters.text("dir") === "asc" ? "asc" : "desc";
+  const page = filters.page();
 
   const [items, setItems] = useState<TechnicianRepairRow[]>([]);
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<RepairStatusFilter>("ALL");
-  const [sortKey, setSortKey] = useState<TechSortKey>("createdAt");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -234,13 +247,12 @@ function TechnicianAsListPage() {
     if (!isTechSortKey(key)) {
       return;
     }
-    setPage(1);
-    if (sortKey === key) {
-      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
-      return;
-    }
-    setSortKey(key);
-    setSortDir("asc");
+    const nextDir = sortKey === key ? (sortDir === "asc" ? "desc" : "asc") : "asc";
+    filters.replace({
+      sort: key === "createdAt" ? null : key,
+      dir: nextDir === "desc" ? null : nextDir,
+      page: null,
+    });
   }
 
   const columns: Column<TechnicianRepairRow>[] = [
@@ -304,10 +316,7 @@ function TechnicianAsListPage() {
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <TextField
           value={query}
-          onChange={(value) => {
-            setQuery(value);
-            setPage(1);
-          }}
+          onChange={(value) => filters.replace({ q: value, page: null })}
           placeholder="접수번호, 고객, 진단 내용 검색"
           className="w-64"
         />
@@ -315,8 +324,7 @@ function TechnicianAsListPage() {
           value={status}
           onChange={(value) => {
             if (isRepairStatusFilter(value)) {
-              setStatus(value);
-              setPage(1);
+              filters.replace({ status: value === "ALL" ? null : value, page: null });
             }
           }}
           options={repairStatusOptions}
@@ -339,6 +347,11 @@ function TechnicianAsListPage() {
               : "조회 결과가 없습니다."
         }
         onRowClick={(row) => {
+          // 중단된 접수는 점검·수리 화면으로 다시 들어가지 않는다.
+          if (row.repairStatus === "REJECTED" && isReturnWaiting(row.receptionStatus)) {
+            navigate(`/as/details/${row.id}`);
+            return;
+          }
           // 수리 진행 상태에 따라 점검 또는 수리 탭으로 이동한다. 주소의 id는 접수 ID다.
           const status = row.repairStatus;
           const goRepair =
@@ -346,7 +359,7 @@ function TechnicianAsListPage() {
           navigate(goRepair ? `/as/${row.id}/repair` : `/as/${row.id}/inspection`);
         }}
       />
-      <Pagination page={currentPage} pageCount={pageCount} onPageChange={setPage} />
+      <Pagination page={currentPage} pageCount={pageCount} onPageChange={filters.setPage} />
     </div>
   );
 }
@@ -374,29 +387,23 @@ function ReceptionAsListPage() {
   const canCreate =
     user?.role === "ADMIN" || user?.role === "RECEPTIONIST" || user?.role === "MANAGER";
   const notice = readNotice(location.state);
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<StatusFilter>("ALL");
-  const [assignee, setAssignee] = useState("ALL");
+  const filters = useListParams();
+  const query = filters.text("q");
+  const status = readReceptionStatusFilter(filters.text("status", "ALL"));
+  const assignee = filters.text("assignee", "ALL");
+  const mineOnly = filters.text("mine") === "1";
+  const sortKey = readReceptionSortKey(filters.text("sort", "createdAt"));
+  const sortDir = filters.text("dir") === "asc" ? "asc" : "desc";
+  const page = filters.page();
   const [technicians, setTechnicians] = useState<TechnicianSummary[]>([]);
-  const [mineOnly, setMineOnly] = useState(false);
-  const [sortKey, setSortKey] = useState<SortKey>("createdAt");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [page, setPage] = useState(1);
-  const [applied, setApplied] = useState({ keyword: "", status: "ALL" as StatusFilter });
+  const [applied, setApplied] = useState({ keyword: query.trim(), status });
   const showAssignedOnly = isTechnician && mineOnly;
   const technicianId = isTechnician || assignee === "ALL" ? null : Number(assignee);
-  const filterKey = `${applied.keyword}:${applied.status}:${technicianId ?? ""}:${showAssignedOnly}:${sortKey}:${sortDir}`;
-  const [seenFilter, setSeenFilter] = useState(filterKey);
   const [rows, setRows] = useState<AsReceptionListItem[]>([]);
   const [modelSorted, setModelSorted] = useState<AsReceptionListItem[] | null>(null);
   const [pageCount, setPageCount] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  if (seenFilter !== filterKey) {
-    setSeenFilter(filterKey);
-    setPage(1);
-  }
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -496,12 +503,12 @@ function ReceptionAsListPage() {
     if (!isSortKey(key)) {
       return;
     }
-    if (sortKey === key) {
-      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
-      return;
-    }
-    setSortKey(key);
-    setSortDir("asc");
+    const nextDir = sortKey === key ? (sortDir === "asc" ? "desc" : "asc") : "asc";
+    filters.replace({
+      sort: key === "createdAt" ? null : key,
+      dir: nextDir === "desc" ? null : nextDir,
+      page: null,
+    });
   }
 
   return (
@@ -511,7 +518,7 @@ function ReceptionAsListPage() {
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <TextField
           value={query}
-          onChange={setQuery}
+          onChange={(value) => filters.replace({ q: value, page: null })}
           placeholder="접수번호, 고객명, 증상 검색"
           className="w-64"
         />
@@ -519,7 +526,7 @@ function ReceptionAsListPage() {
           value={status}
           onChange={(value) => {
             if (isStatusFilter(value)) {
-              setStatus(value);
+              filters.replace({ status: value === "ALL" ? null : value, page: null });
             }
           }}
           options={statusOptions}
@@ -527,7 +534,7 @@ function ReceptionAsListPage() {
         {!isTechnician && (
           <SelectBox
             value={assignee}
-            onChange={setAssignee}
+            onChange={(value) => filters.replace({ assignee: value === "ALL" ? null : value, page: null })}
             options={[
               { value: "ALL", label: "담당 전체" },
               ...technicians.map((item) => ({ value: String(item.id), label: item.name })),
@@ -539,7 +546,7 @@ function ReceptionAsListPage() {
             <input
               type="checkbox"
               checked={mineOnly}
-              onChange={(event) => setMineOnly(event.target.checked)}
+              onChange={(event) => filters.replace({ mine: event.target.checked ? "1" : null, page: null })}
             />
             내 담당 A/S 목록만 보기
           </label>
@@ -560,9 +567,17 @@ function ReceptionAsListPage() {
         emptyText={tableMessage(loading, error)}
         onRowClick={(row) => navigate(`/as/details/${row.id}`)}
       />
-      <Pagination page={page} pageCount={pageCount} onPageChange={setPage} />
+      <Pagination page={page} pageCount={pageCount} onPageChange={filters.setPage} />
     </div>
   );
+}
+
+function readReceptionStatusFilter(value: string): StatusFilter {
+  return isStatusFilter(value) ? value : "ALL";
+}
+
+function readReceptionSortKey(value: string): SortKey {
+  return isSortKey(value) ? value : "createdAt";
 }
 
 function sortField(key: Exclude<SortKey, "modelName">): string {
@@ -638,10 +653,11 @@ function isSortKey(value: string): value is SortKey {
 }
 
 function statusText(row: AsReceptionListItem): string {
-  if (row.repairStatus === "REJECTED") {
-    return "수리 거부";
-  }
   return receptionStatusLabel(row.receptionStatus);
+}
+
+function isReturnWaiting(status: AsReceptionListItem["receptionStatus"]): boolean {
+  return status === "AWAITING_SHIPMENT" || status === "AWAITING_PICKUP";
 }
 
 const deskColumns: Column<AsReceptionListItem>[] = [

@@ -13,11 +13,12 @@ export interface NavGroup {
 
 const all: StaffRole[] = ["ADMIN", "RECEPTIONIST", "TECHNICIAN", "MANAGER"];
 const desk: StaffRole[] = ["ADMIN", "RECEPTIONIST", "MANAGER"];
+const deskView: StaffRole[] = ["ADMIN", "RECEPTIONIST", "MANAGER", "TECHNICIAN"];
 const floor: StaffRole[] = ["ADMIN", "TECHNICIAN", "MANAGER"];
 
 export const NAV_GROUPS: NavGroup[] = [
   {
-    label: "A/S",
+    label: "A/S 관리",
     items: [
       { label: "A/S 목록", to: "/as/list", roles: all },
       { label: "A/S 접수 등록", to: "/as/new", roles: desk },
@@ -27,8 +28,8 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "운영",
     items: [
       { label: "A/S 지원 품목", to: "/admin/products/list", roles: desk },
-      { label: "결제 관리", to: "/payment/list", roles: desk },
-      { label: "배송 관리", to: "/shipment/list", roles: desk },
+      { label: "결제 관리", to: "/payment/list", roles: deskView },
+      { label: "배송 관리", to: "/shipment/list", roles: deskView },
       { label: "고객 관리", to: "/customer", roles: desk },
       { label: "이메일 발송", to: "/notification_service", roles: desk },
       { label: "이메일 발송 내역", to: "/notification/list", roles: desk },

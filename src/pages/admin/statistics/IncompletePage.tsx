@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
+import { useListParams } from "@/hooks/useListParams";
 import { Button } from "@/components/ui/Button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { SelectBox, TextField } from "@/components/ui/Field";
@@ -23,15 +24,16 @@ const pendingStatuses = AS_RECEPTION_STATUSES.filter((status) => status !== "COM
 
 export function IncompletePage() {
   const navigate = useNavigate();
-  const [elapsed, setElapsed] = useState<ElapsedFilter>("ALL");
-  const [status, setStatus] = useState<StatusFilter>("ALL");
-  const [keyword, setKeyword] = useState("");
-  const [appliedKeyword, setAppliedKeyword] = useState("");
+  const filters = useListParams();
+  const elapsed = readElapsed(filters.text("elapsed", "ALL"));
+  const status = readPendingStatus(filters.text("status", "ALL"));
+  const appliedKeyword = filters.text("q");
+  const [keyword, setKeyword] = useState(appliedKeyword);
   const [receptions, setReceptions] = useState<LongPendingReception[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [sortKey, setSortKey] = useState<PendingSortKey | null>(null);
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const sortKey = readPendingSort(filters.text("sort"));
+  const sortDir = filters.text("dir") === "asc" ? "asc" : "desc";
 
   useEffect(() => {
     const controller = new AbortController();
@@ -73,12 +75,8 @@ export function IncompletePage() {
   const list = useStatisticsPage(rows, `${appliedKeyword}|${elapsed}|${status}|${sortKey ?? ""}|${sortDir}`);
 
   function toggleSort(key: PendingSortKey) {
-    if (sortKey === key) {
-      setSortDir((current) => (current === "asc" ? "desc" : "asc"));
-      return;
-    }
-    setSortKey(key);
-    setSortDir("asc");
+    const nextDir = sortKey === key ? (sortDir === "asc" ? "desc" : "asc") : "asc";
+    filters.replace({ sort: key, dir: nextDir, page: null });
   }
 
   const columns: Column<LongPendingReception>[] = [
@@ -118,7 +116,7 @@ export function IncompletePage() {
         className="mb-4 flex flex-wrap items-center gap-2"
         onSubmit={(event) => {
           event.preventDefault();
-          setAppliedKeyword(keyword);
+          filters.replace({ q: keyword.trim(), page: null });
         }}
       >
         <TextField value={keyword} onChange={setKeyword} placeholder="접수번호, 고객명" className="w-48" />
@@ -126,18 +124,16 @@ export function IncompletePage() {
         <SelectBox
           value={elapsed}
           onChange={(value) => {
-            if (value === "ALL" || value === "14" || value === "21") {
-              setElapsed(value);
-            }
+            const next = readElapsed(value);
+            filters.replace({ elapsed: next === "ALL" ? null : next, page: null });
           }}
           options={[{ value: "ALL", label: "경과일 전체" }, { value: "14", label: "14일 이상" }, { value: "21", label: "21일 이상" }]}
         />
         <SelectBox
           value={status}
           onChange={(value) => {
-            if (value === "ALL" || (isReceptionStatus(value) && value !== "COMPLETED")) {
-              setStatus(value);
-            }
+            const next = readPendingStatus(value);
+            filters.replace({ status: next === "ALL" ? null : next, page: null });
           }}
           options={[
             { value: "ALL", label: "상태 전체" },
@@ -156,6 +152,27 @@ export function IncompletePage() {
       <Pagination page={list.page} pageCount={list.pageCount} onPageChange={list.setPage} />
     </div>
   );
+}
+
+function readElapsed(value: string): ElapsedFilter {
+  if (value === "14" || value === "21") {
+    return value;
+  }
+  return "ALL";
+}
+
+function readPendingStatus(value: string): StatusFilter {
+  if (value !== "ALL" && value !== "COMPLETED" && isReceptionStatus(value)) {
+    return value;
+  }
+  return "ALL";
+}
+
+function readPendingSort(value: string): PendingSortKey | null {
+  if (value === "number" || value === "elapsed" || value === "changedAt") {
+    return value;
+  }
+  return null;
 }
 
 function sortPending(

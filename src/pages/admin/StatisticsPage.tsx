@@ -6,11 +6,12 @@ import {
   fetchMonthlyStatistics,
   fetchPaymentStatistics,
   fetchReceptionStatistics,
-  fetchShipmentStatistics,
+  fetchShipmentHistory,
   fetchTechnicianStatistics,
 } from "@/lib/statisticsApi";
 import { formatDurationMinutes, formatRate, statisticsSearch } from "@/lib/statisticsPeriod";
 import { won } from "@/lib/format";
+import { summarizeShipmentMethods } from "@/pages/admin/statistics/ShipmentStatsPage";
 import { MonthlyTrendChart } from "@/pages/admin/statistics/MonthlyTrendChart";
 import { PeriodFilter } from "@/pages/admin/statistics/PeriodFilter";
 import { useStatisticsPeriod } from "@/pages/admin/statistics/useStatisticsPeriod";
@@ -23,9 +24,10 @@ export function StatisticsPage() {
   const payment = useStatisticsResource(fetchPaymentStatistics, startDate, endDate, invalid);
   const technicians = useStatisticsResource(fetchTechnicianStatistics, startDate, endDate, invalid);
   const models = useStatisticsResource(fetchModelStatistics, startDate, endDate, invalid);
-  const shipments = useStatisticsResource(fetchShipmentStatistics, startDate, endDate, invalid);
+  const shipments = useStatisticsResource(fetchShipmentHistory, startDate, endDate, invalid);
   const pending = useStatisticsResource(loadLongPending, startDate, endDate, invalid);
   const monthly = useStatisticsResource(fetchMonthlyStatistics, startDate, endDate, invalid);
+  const shipmentSummary = shipments.data === null ? null : summarizeShipmentMethods(shipments.data);
   const query = statisticsSearch(startDate, endDate);
   const monthLabels = monthly.data?.map((point) => point.label) ?? [];
   const errors = [reception.error, payment.error, technicians.error, models.error, shipments.error, pending.error, monthly.error]
@@ -88,11 +90,7 @@ export function StatisticsPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Link to={`/admin/statistics/shipments?${query}`} className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm hover:border-blue-400">
           <p className="mb-3 text-sm font-medium">배송 현황</p>
-          <div className="grid grid-cols-3 gap-3 text-sm">
-            <Metric label="대기" value={countText(shipments.loading, shipments.data?.readyCount, "건")} />
-            <Metric label="배송중" value={countText(shipments.loading, shipments.data?.shippingCount, "건")} />
-            <Metric label="완료" value={countText(shipments.loading, shipments.data?.completedCount, "건")} />
-          </div>
+          <ShipmentOverview loading={shipments.loading} summary={shipmentSummary} />
         </Link>
         <Link to={`/admin/statistics/repair_cost?${query}`} className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm hover:border-blue-400">
           <p className="mb-3 text-sm font-medium">수리비 수납</p>
@@ -183,6 +181,60 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ShipmentOverview({
+  loading,
+  summary,
+}: {
+  loading: boolean;
+  summary: ReturnType<typeof summarizeShipmentMethods> | null;
+}) {
+  const rows = [
+    {
+      label: "택배",
+      ready: countText(loading, summary?.delivery.ready, "건"),
+      shipping: countText(loading, summary?.delivery.shipping, "건"),
+      completed: countText(loading, summary?.delivery.completed, "건"),
+    },
+    {
+      label: "방문 수령",
+      ready: countText(loading, summary?.pickup.ready, "건"),
+      shipping: "-",
+      completed: countText(loading, summary?.pickup.completed, "건"),
+    },
+  ];
+
+  return (
+    <table className="w-full table-fixed text-sm">
+      <colgroup>
+        <col className="w-24" />
+        <col />
+        <col />
+        <col />
+      </colgroup>
+      <thead>
+        <tr className="text-neutral-500">
+          <th className="pb-2 text-left font-normal" />
+          <th className="pb-2 text-right font-normal">대기</th>
+          <th className="pb-2 text-right font-normal">배송중</th>
+          <th className="pb-2 text-right font-normal">완료</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr key={row.label} className="border-t border-neutral-100">
+            <td className="whitespace-nowrap py-2 pr-3 text-neutral-600">{row.label}</td>
+            <td className="py-2 text-right font-semibold text-blue-600 tabular-nums">{row.ready}</td>
+            <td className={`py-2 text-right tabular-nums ${row.shipping === "-" ? "text-neutral-300" : "font-semibold text-blue-600"}`}>
+              {row.shipping}
+            </td>
+            <td className="py-2 text-right font-semibold text-blue-600 tabular-nums">{row.completed}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 function TechnicianBars({ loading, rows }: { loading: boolean; rows: TechnicianStatistics[] }) {
   const top = [...rows].sort((left, right) => right.assignedCount - left.assignedCount).slice(0, 5);
   const max = Math.max(...top.map((row) => row.assignedCount), 1);
@@ -201,7 +253,7 @@ function TechnicianBars({ loading, rows }: { loading: boolean; rows: TechnicianS
             <span>{row.assignedCount.toLocaleString("ko-KR")}건</span>
           </div>
           <div className="h-2 rounded bg-neutral-100">
-            <div className="h-2 rounded bg-blue-600" style={{ width: `${(row.assignedCount / max) * 100}%` }} />
+            <div className="h-2 rounded bg-blue-400" style={{ width: `${(row.assignedCount / max) * 100}%` }} />
           </div>
         </li>
       ))}

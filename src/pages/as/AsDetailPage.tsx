@@ -1,12 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { Button } from "@/components/ui/Button";
-import { TextField } from "@/components/ui/Field";
 import { Notice, Panel } from "@/components/ui/Panel";
 import { isAbortError } from "@/lib/apiClient";
 import {
   categoryLabel,
-  changeReceptionStatus,
   customerPortalUrl,
   fetchCustomerPortalLink,
   fetchMyReception,
@@ -24,7 +22,7 @@ import { useSessionStore } from "@/stores/useSessionStore";
 import { DocumentModal, type DocumentKind } from "@/pages/as/DocumentModal";
 import { ReceptionEditPanel } from "@/pages/as/ReceptionEditPanel";
 import { TechnicianAssignPanel } from "@/pages/as/TechnicianAssignPanel";
-import type { AsReceptionDetail, AsStatusHistory, CustomerPortalLink, ProductSummary } from "@/types/asReception";
+import type { AsReceptionDetail, AsReceptionStatus, AsStatusHistory, CustomerPortalLink, ProductSummary, ReceptionRepair } from "@/types/asReception";
 import type { AsRecord } from "@/types/screen";
 
 export function AsDetailPage() {
@@ -33,6 +31,7 @@ export function AsDetailPage() {
   const receptionId = Number(asRequestId);
   const validId = Number.isInteger(receptionId) && receptionId > 0;
   const [detail, setDetail] = useState<AsReceptionDetail | null>(null);
+  const [repair, setRepair] = useState<ReceptionRepair | null>(null);
   const [product, setProduct] = useState<ProductSummary | null>(null);
   const [history, setHistory] = useState<AsStatusHistory[]>([]);
   const [loading, setLoading] = useState(validId);
@@ -40,7 +39,6 @@ export function AsDetailPage() {
   const [notice, setNotice] = useState(readNotice(location.state) ?? "");
   const [version, setVersion] = useState(0);
   const role = useSessionStore((state) => state.user?.role);
-  const memberId = useSessionStore((state) => state.memberId);
   const isTechnician = role === "TECHNICIAN";
   useHeadingMeta(detail?.receptionNumber);
 
@@ -55,18 +53,22 @@ export function AsDetailPage() {
     // 상세와 이력을 같이 읽고, 모델명은 제품 API로 보완한다. 기사 화면은 이력을 쓰지 않는다.
     Promise.all([
       isTechnician
-        ? fetchMyReception(receptionId, controller.signal).then((record) => record.reception)
-        : fetchReception(receptionId, controller.signal),
+        ? fetchMyReception(receptionId, controller.signal)
+        : fetchReception(receptionId, controller.signal).then((reception) => ({
+            reception,
+            repair: null,
+          })),
       isTechnician ? Promise.resolve([]) : fetchReceptionHistory(receptionId, controller.signal),
     ])
-      .then(async ([nextDetail, nextHistory]) => {
+      .then(async ([loaded, nextHistory]) => {
         if (controller.signal.aborted) {
           return;
         }
-        setDetail(nextDetail);
+        setDetail(loaded.reception);
+        setRepair(loaded.repair);
         setHistory(nextHistory);
         try {
-          const nextProduct = await fetchProduct(nextDetail.product.id, controller.signal);
+          const nextProduct = await fetchProduct(loaded.reception.product.id, controller.signal);
           if (!controller.signal.aborted) {
             setProduct(nextProduct);
           }
@@ -81,6 +83,7 @@ export function AsDetailPage() {
           return;
         }
         setDetail(null);
+        setRepair(null);
         setHistory([]);
         setError(cause instanceof Error ? cause.message : "접수 정보를 불러오지 못했습니다.");
       })
@@ -104,40 +107,40 @@ export function AsDetailPage() {
     <div className="space-y-4">
       {notice !== "" && <Notice>{notice}</Notice>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
-      {isTechnician ? (
-        <TechnicianSummary detail={detail} productName={product?.modelName ?? detail.modelName ?? "-"} />
-      ) : (
-        <Panel>
-          <div className="space-y-4">
-            <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-[max-content_max-content_minmax(0,1.3fr)_max-content_minmax(0,1.8fr)]">
-              <Field label="고객명" value={detail.customer.name} />
-              <Field label="연락처" value={detail.customer.phone} nowrap />
-              <Field label="이메일" value={detail.customer.email} />
-              <Field label="우편번호" value={detail.customer.zipcode ?? "-"} />
-              <Field label="주소" value={`${detail.customer.basicAddress ?? ""} ${detail.customer.detailAddress ?? ""}`.trim() || "-"} />
-              <Field label="제품군" value={product === null ? "-" : categoryLabel(product.category)} />
-              <Field label="모델명" value={product?.modelName ?? "-"} />
-              <Field label="시리얼번호" value={detail.product.serialNumber} />
-              <Field label="구매일" value={formatYearMonthDay(product?.purchasedAt ?? detail.product.purchasedAt)} />
-              <Field label="수령 방식" value={returnMethodLabel(detail.returnMethod)} />
-              <div className="lg:col-span-2">
-                <Field label="증상 요약" value={detail.symptom} />
-              </div>
-              <Field label="접수 직원" value={detail.receptionist?.name ?? "-"} />
-              <Field label="담당 기사" value={detail.technician?.name ?? "-"} />
-              <Field label="접수 날짜" value={formatDateTime(detail.createdAt)} />
-              <div className="min-w-0 sm:col-span-2 lg:col-span-3">
-                <p className="mb-1 text-xs text-neutral-500">고장 증상 상세</p>
-                <div className="min-h-20 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm break-words">{detail.symptomDetail}</div>
-              </div>
-              <div className="min-w-0 lg:col-span-2">
-                <p className="mb-1 text-xs text-neutral-500">고객 요청 사항 / 메모</p>
-                <div className="min-h-20 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm break-words">{detail.memo ?? "-"}</div>
-              </div>
-            </div>
-          </div>
-        </Panel>
+      {isTechnician && repair?.status === "REJECTED"
+        && (detail.status === "AWAITING_SHIPMENT" || detail.status === "AWAITING_PICKUP") && (
+        <Notice>{`A/S를 중단했습니다. ${detail.returnMethod === "PICKUP" ? "수령 대기" : "배송 대기"}로 넘어가 점검이 끝났습니다.`}</Notice>
       )}
+      <Panel title="고객 정보">
+        <div className="grid gap-x-8 gap-y-4 sm:grid-cols-3">
+          <Field label="고객명" value={detail.customer.name} />
+          <Field label="연락처" value={detail.customer.phone} nowrap />
+          <Field label="이메일" value={detail.customer.email} />
+          <Field label="우편번호" value={detail.customer.zipcode ?? "-"} />
+          <div className="sm:col-span-2">
+            <Field label="주소" value={customerAddress(detail)} />
+          </div>
+        </div>
+      </Panel>
+      <Panel title="제품 및 접수 정보">
+        <div className="grid gap-x-8 gap-y-4 sm:grid-cols-3">
+          <Field label="제품군" value={product === null ? "-" : categoryLabel(product.category)} />
+          <Field label="모델명" value={product?.modelName ?? detail.modelName ?? "-"} />
+          <Field label="시리얼번호" value={detail.product.serialNumber} />
+          <Field label="구매일" value={formatYearMonthDay(product?.purchasedAt ?? detail.product.purchasedAt)} />
+          <Field label="수령 방식" value={returnMethodLabel(detail.returnMethod)} />
+          <Field label="접수 날짜" value={formatDateTime(detail.createdAt)} />
+          <Field label="접수 직원" value={detail.receptionist?.name ?? "-"} />
+          <Field label="담당 기사" value={detail.technician?.name ?? "-"} />
+        </div>
+      </Panel>
+      <Panel title="고장 내용">
+        <Field label="고장 증상 요약" value={detail.symptom} />
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <Note label="고장 증상 상세" value={detail.symptomDetail} />
+          <Note label="고객 요청 사항 / 메모" value={detail.memo ?? "-"} />
+        </div>
+      </Panel>
       <ReceptionEditPanel
         detail={detail}
         onSaved={(message) => {
@@ -162,16 +165,7 @@ export function AsDetailPage() {
               수리 진행 보기
             </Link>
           )}
-          <StatusPanel
-            detail={detail}
-            canChange={role === "ADMIN" || (role === "RECEPTIONIST" && detail.receptionist?.id === memberId)}
-            onChanged={(message) => {
-              setNotice(message);
-              setError("");
-              setVersion((current) => current + 1);
-            }}
-            onError={setError}
-          />
+          <StatusPanel detail={detail} history={history} />
           <Panel title="상태 변경 이력">
             {history.length === 0 ? (
               <p className="text-sm text-neutral-500">상태 변경 이력이 없습니다.</p>
@@ -198,45 +192,81 @@ export function AsDetailPage() {
   );
 }
 
-function StatusPanel({
-  detail,
-  canChange,
-  onChanged,
-  onError,
-}: {
-  detail: AsReceptionDetail;
-  canChange: boolean;
-  onChanged: (message: string) => void;
-  onError: (message: string) => void;
-}) {
-  const [reason, setReason] = useState("");
-  const [pending, setPending] = useState(false);
+const STATUS_TRACK: { label: string; statuses: readonly AsReceptionStatus[] }[] = [
+  { label: "접수", statuses: ["RECEIVED"] },
+  { label: "점검", statuses: ["INSPECTION"] },
+  { label: "견적", statuses: ["AWAITING_QUOTE_APPROVAL"] },
+  { label: "수리", statuses: ["AWAITING_REPAIR", "REPAIR_IN_PROGRESS"] },
+  { label: "결제", statuses: ["AWAITING_PAYMENT"] },
+  { label: "인도", statuses: ["AWAITING_SHIPMENT", "AWAITING_PICKUP"] },
+  { label: "완료", statuses: ["COMPLETED"] },
+];
 
-  async function save() {
-    setPending(true);
-    try {
-      await changeReceptionStatus(detail.id, "WARRANTY_REVIEW", reason);
-      setReason("");
-      onChanged("보증 판정 상태로 변경했습니다.");
-    } catch (cause: unknown) {
-      onError(cause instanceof Error ? cause.message : "접수 상태를 변경하지 못했습니다.");
-    } finally {
-      setPending(false);
-    }
-  }
+const REPAIR_STEP_INDEX = STATUS_TRACK.findIndex((step) => step.label === "수리");
 
+function statusTrackIndex(status: AsReceptionStatus): number {
+  const index = STATUS_TRACK.findIndex((step) => step.statuses.includes(status));
+  return index === -1 ? 0 : index;
+}
+
+function StatusPanel({ detail, history }: { detail: AsReceptionDetail; history: AsStatusHistory[] }) {
+  const current = statusTrackIndex(detail.status);
+  // 견적 승인 대기에서 결제 대기로 바로 넘어가면 고객이 견적을 거부한 것이다.
+  const repairSkipped = history.some((item) =>
+    item.fromStatus === "AWAITING_QUOTE_APPROVAL" && item.toStatus === "AWAITING_PAYMENT",
+  ) && current > REPAIR_STEP_INDEX;
+  const aborted = history.some((item) =>
+    (item.fromStatus === "INSPECTION" || item.fromStatus === "WARRANTY_REVIEW")
+    && (item.toStatus === "AWAITING_SHIPMENT" || item.toStatus === "AWAITING_PICKUP"),
+  );
+  const handoffLabel = detail.returnMethod === "PICKUP" ? "수령" : "배송";
+  const inset = 50 / STATUS_TRACK.length;
   return (
     <Panel title="접수 상태">
-      <p className="text-sm">현재 상태 {receptionStatusLabel(detail.status)}</p>
-      <p className="mt-2 text-sm text-neutral-500">
-        점검 중이고 점검 기록이 있는 건만 보증 판정으로 바꿀 수 있습니다. 수리, 결제, 배송, 완료는 각 업무 화면에서 함께 처리됩니다.
-      </p>
-      {canChange && detail.status === "INSPECTION" && (
-        <div className="mt-3 flex flex-wrap items-end gap-2">
-          <TextField className="w-72" value={reason} onChange={setReason} placeholder="변경 사유" />
-          <Button onClick={() => void save()} disabled={pending}>보증 판정으로 변경</Button>
-        </div>
-      )}
+      <div className="relative">
+        <div className="absolute top-[7px] h-px bg-neutral-300" style={{ left: `${inset}%`, right: `${inset}%` }} />
+        {current > 0 && (
+          <div
+            className="absolute top-[7px] h-px bg-blue-600"
+            style={{ left: `${inset}%`, width: `${(current / (STATUS_TRACK.length - 1)) * (100 - inset * 2)}%` }}
+          />
+        )}
+        <ol className="relative grid grid-cols-7" aria-label="접수 진행">
+          {STATUS_TRACK.map((step, index) => {
+            const skipped = (repairSkipped && index === REPAIR_STEP_INDEX)
+              || (aborted && (step.label === "견적" || step.label === "수리" || step.label === "결제"));
+            const reached = !skipped && index <= current;
+            const active = !skipped && index === current;
+            const label = step.statuses.includes("AWAITING_SHIPMENT") ? handoffLabel : step.label;
+            return (
+              <li key={step.label} className="flex flex-col items-center gap-2" aria-current={active ? "step" : undefined}>
+                {skipped ? (
+                  <span className="relative z-10 flex h-3.5 w-3.5 items-center justify-center text-sm font-bold leading-none text-red-600" aria-label="건너뜀">×</span>
+                ) : (
+                  <span
+                    className={
+                      reached
+                        ? `relative z-10 h-3.5 w-3.5 rounded-full bg-blue-600 ${active ? "ring-2 ring-blue-200 ring-offset-2" : ""}`
+                        : "relative z-10 h-3.5 w-3.5 rounded-full bg-neutral-300"
+                    }
+                  />
+                )}
+                <span
+                  className={
+                    skipped
+                      ? "text-center text-[11px] leading-tight font-semibold text-red-600"
+                      : reached
+                        ? `text-center text-[11px] leading-tight ${active ? "font-semibold text-blue-600" : "text-blue-600"}`
+                        : "text-center text-[11px] leading-tight text-neutral-500"
+                  }
+                >
+                  {label}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
     </Panel>
   );
 }
@@ -346,29 +376,8 @@ function toDocumentRecord(detail: AsReceptionDetail, product: ProductSummary | n
   };
 }
 
-function TechnicianSummary({ detail, productName }: { detail: AsReceptionDetail; productName: string }) {
-  return (
-    <Panel>
-      <div className="space-y-4">
-        <div className="grid grid-cols-4 gap-x-6">
-          <Field label="고객명" value={detail.customer.name} />
-          <Field label="연락처" value={detail.customer.phone} nowrap />
-          <Field label="제품" value={productName} />
-          <Field label="시리얼번호" value={detail.product.serialNumber} />
-        </div>
-        <div className="grid grid-cols-4 gap-x-6">
-          <Field label="고장 증상" value={detail.symptom} />
-          <Field label="수령 방식" value={returnMethodLabel(detail.returnMethod)} />
-          <Field label="접수일" value={formatDateTime(detail.createdAt)} />
-          <Field label="담당 기사" value={detail.technician?.name ?? "-"} />
-        </div>
-        <div className="grid grid-cols-2 gap-x-6">
-          <Note label="고장 증상 상세" value={detail.symptomDetail} />
-          <Note label="고객 요청 사항 / 메모" value={detail.memo ?? "-"} />
-        </div>
-      </div>
-    </Panel>
-  );
+function customerAddress(detail: AsReceptionDetail): string {
+  return `${detail.customer.basicAddress ?? ""} ${detail.customer.detailAddress ?? ""}`.trim() || "-";
 }
 
 function Note({ label, value }: { label: string; value: string }) {

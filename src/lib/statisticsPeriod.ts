@@ -14,11 +14,14 @@ export function isIsoDate(value: string): boolean {
   return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
 }
 
-export const STATISTICS_PRESETS = ["today", "week", "month", "quarter", "half", "year"] as const;
+export const STATISTICS_ALL_START = "2025-01-01";
+
+export const STATISTICS_PRESETS = ["all", "today", "week", "month", "quarter", "half", "year"] as const;
 
 export type StatisticsPreset = (typeof STATISTICS_PRESETS)[number];
 
 export const STATISTICS_PRESET_LABEL: Record<StatisticsPreset, string> = {
+  all: "전체",
   today: "오늘",
   week: "1주일",
   month: "1개월",
@@ -27,9 +30,12 @@ export const STATISTICS_PRESET_LABEL: Record<StatisticsPreset, string> = {
   year: "1년",
 };
 
-// 종료일은 오늘이다. 1주일은 오늘을 포함한 7일이고, 개월 단위는 같은 날짜까지 거슬러 올라간다.
+// 종료일은 오늘이다. 전체는 저장된 접수보다 앞선 고정일이고, 1주일은 오늘을 포함한 7일, 개월 단위는 같은 날짜까지 거슬러 올라간다.
 export function periodForPreset(preset: StatisticsPreset, today = new Date()): StatisticsPeriod {
   const end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  if (preset === "all") {
+    return { startDate: STATISTICS_ALL_START, endDate: toIsoDate(end) };
+  }
   const start = new Date(end);
   if (preset === "week") {
     start.setDate(start.getDate() - 6);

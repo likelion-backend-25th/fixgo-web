@@ -7,6 +7,14 @@ import { useHydratedSession } from "@/hooks/useHydratedSession";
 import { loginWithPassword } from "@/lib/authApi";
 import { useSessionStore } from "@/stores/useSessionStore";
 
+const demoAccounts = [
+  { role: "기사", email: "technician001@fixgo.com" },
+  { role: "접수", email: "receptionist001@fixgo.com" },
+  { role: "관리자", email: "admin001@fixgo.com" },
+] as const;
+
+const demoPassword = "password123";
+
 export function LoginPage() {
   const { user, ready } = useHydratedSession();
   const loginWithApi = useSessionStore((state) => state.loginWithApi);
@@ -68,6 +76,27 @@ export function LoginPage() {
             {pending ? "로그인 중" : "로그인"}
           </Button>
         </form>
+        <div className="mt-6 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm">
+          <p className="font-medium text-neutral-800">테스트 계정</p>
+          <p className="mt-1 text-neutral-500">비밀번호 {demoPassword}</p>
+          <ul className="mt-2 space-y-1">
+            {demoAccounts.map((account) => (
+              <li key={account.email}>
+                <button
+                  type="button"
+                  className="text-left text-blue-600 hover:underline"
+                  onClick={() => {
+                    setLoginId(account.email);
+                    setPassword(demoPassword);
+                    setError("");
+                  }}
+                >
+                  {account.role} {account.email}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
       </div>
     </div>

@@ -22,6 +22,7 @@ export interface Column<T> {
   render: (row: T) => ReactNode;
   className?: string;
   sortable?: boolean;
+  width?: string;
 }
 
 interface DataTableProps<T> {
@@ -29,12 +30,14 @@ interface DataTableProps<T> {
   rows: T[];
   rowKey: (row: T) => string;
   onRowClick?: (row: T) => void;
+  onRowDoubleClick?: (row: T) => void;
   selectedKey?: string;
-  emptyText?: string;
+  emptyText?: ReactNode;
   sortKey?: string;
   sortDir?: "asc" | "desc";
   onSort?: (key: string) => void;
   compact?: boolean;
+  tableClassName?: string;
 }
 
 export function DataTable<T>({
@@ -42,17 +45,26 @@ export function DataTable<T>({
   rows,
   rowKey,
   onRowClick,
+  onRowDoubleClick,
   selectedKey,
   emptyText = "조회 결과가 없습니다.",
   sortKey,
   sortDir = "asc",
   onSort,
   compact = false,
+  tableClassName,
 }: DataTableProps<T>) {
+  const fixed = columns.some((column) => column.width !== undefined);
   return (
     <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-sm">
-      {/* 좁은 모달에서는 표 최소 너비를 빼야 열이 칸에 맞게 줄어든다. */}
-      <table className={cn("border-collapse text-sm", compact ? "w-full" : "w-full min-w-[720px]")}>
+      <table className={cn("w-full border-collapse text-sm", fixed && "table-fixed", tableClassName)}>
+        {fixed && (
+          <colgroup>
+            {columns.map((column) => (
+              <col key={column.key} style={column.width === undefined ? undefined : { width: column.width }} />
+            ))}
+          </colgroup>
+        )}
         <thead className="bg-neutral-50 text-left text-xs font-medium text-neutral-500">
           <tr>
             {columns.map((column) => (
@@ -86,9 +98,10 @@ export function DataTable<T>({
                 <tr
                   key={key}
                   onClick={onRowClick === undefined ? undefined : () => onRowClick(row)}
+                  onDoubleClick={onRowDoubleClick === undefined ? undefined : () => onRowDoubleClick(row)}
                   className={cn(
                     "border-t border-neutral-100",
-                    onRowClick !== undefined && "cursor-pointer hover:bg-neutral-50",
+                    (onRowClick !== undefined || onRowDoubleClick !== undefined) && "cursor-pointer hover:bg-neutral-50",
                     selectedKey === key && "bg-blue-50",
                   )}
                 >

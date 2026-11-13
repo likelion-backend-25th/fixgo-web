@@ -1,6 +1,6 @@
 import { apiFetch, isRecord, readErrorMessage } from "@/lib/apiClient";
 
-export type NotificationType = "RECEIVED" | "ESTIMATE" | "REPAIR" | "PAYMENT" | "SHIPPING";
+export type NotificationType = "RECEIVED" | "ESTIMATE" | "REPAIR" | "PAYMENT" | "SHIPPING" | "CANCEL";
 
 export type NotificationStatus = "PENDING" | "SENDING" | "SENT" | "FAILED";
 
@@ -63,7 +63,7 @@ export interface EmailDetail {
   errorMessage: string | null;
 }
 
-const notificationTypes: readonly NotificationType[] = ["RECEIVED", "ESTIMATE", "REPAIR", "PAYMENT", "SHIPPING"];
+const notificationTypes: readonly NotificationType[] = ["RECEIVED", "ESTIMATE", "REPAIR", "PAYMENT", "SHIPPING", "CANCEL"];
 const notificationStatuses: readonly NotificationStatus[] = ["PENDING", "SENDING", "SENT", "FAILED"];
 
 export async function sendNotificationEmail(request: SendEmailRequest): Promise<SendEmailResponse> {

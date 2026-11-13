@@ -4,8 +4,13 @@ import type {
   ModelStatistics,
   ModelSymptomStatistics,
   MonthlyStatistics,
+  PaymentHistoryItem,
+  PaymentHistoryStatus,
   PaymentStatistics,
   ReceptionStatistics,
+  ShipmentHistoryItem,
+  ShipmentHistoryMethod,
+  ShipmentHistoryStatus,
   ShipmentStatistics,
   TechnicianStatistics,
 } from "@/types/statistics";
@@ -90,6 +95,18 @@ export async function fetchPaymentStatistics(
   return { startDate, endDate, totalPaidAmount, totalRefundAmount, netCollectedAmount, unpaidCount };
 }
 
+export async function fetchPaymentHistory(
+  startDate: string,
+  endDate: string,
+  signal: AbortSignal,
+): Promise<PaymentHistoryItem[]> {
+  const body = await getStatistics("/payments/history", startDate, endDate, signal, "결제 내역을 불러오지 못했습니다.");
+  if (!Array.isArray(body)) {
+    throw new Error("결제 내역 응답이 올바르지 않습니다.");
+  }
+  return body.map(parsePaymentHistory);
+}
+
 export async function fetchMonthlyStatistics(
   startDate: string,
   endDate: string,
@@ -126,6 +143,18 @@ export async function fetchShipmentStatistics(
     throw new Error("배송 통계 응답이 올바르지 않습니다.");
   }
   return { startDate, endDate, readyCount, shippingCount, completedCount };
+}
+
+export async function fetchShipmentHistory(
+  startDate: string,
+  endDate: string,
+  signal: AbortSignal,
+): Promise<ShipmentHistoryItem[]> {
+  const body = await getStatistics("/shipments/history", startDate, endDate, signal, "배송 내역을 불러오지 못했습니다.");
+  if (!Array.isArray(body)) {
+    throw new Error("배송 내역 응답이 올바르지 않습니다.");
+  }
+  return body.map(parseShipmentHistory);
 }
 
 async function getStatistics(
@@ -213,6 +242,69 @@ function parseSymptom(value: unknown): ModelSymptomStatistics {
     count: value.count,
     percentage: value.percentage,
   };
+}
+
+const shipmentHistoryStatuses: readonly ShipmentHistoryStatus[] = ["READY", "SHIPPING", "DELIVERED", "PICKED_UP"];
+const shipmentHistoryMethods: readonly ShipmentHistoryMethod[] = ["DELIVERY", "PICKUP"];
+
+function parseShipmentHistory(value: unknown): ShipmentHistoryItem {
+  if (
+    !isRecord(value)
+    || !isId(value.shipmentId)
+    || !isId(value.receptionId)
+    || typeof value.receptionNumber !== "string"
+    || typeof value.customerName !== "string"
+    || !isShipmentHistoryMethod(value.returnMethod)
+    || !isShipmentHistoryStatus(value.status)
+    || (value.createdAt !== null && typeof value.createdAt !== "string")
+  ) {
+    throw new Error("배송 내역 응답이 올바르지 않습니다.");
+  }
+  return {
+    shipmentId: value.shipmentId,
+    receptionId: value.receptionId,
+    receptionNumber: value.receptionNumber,
+    customerName: value.customerName,
+    returnMethod: value.returnMethod,
+    status: value.status,
+    createdAt: value.createdAt,
+  };
+}
+
+function isShipmentHistoryStatus(value: unknown): value is ShipmentHistoryStatus {
+  return typeof value === "string" && shipmentHistoryStatuses.some((status) => status === value);
+}
+
+function isShipmentHistoryMethod(value: unknown): value is ShipmentHistoryMethod {
+  return typeof value === "string" && shipmentHistoryMethods.some((method) => method === value);
+}
+
+const historyStatuses: readonly PaymentHistoryStatus[] = ["UNPAID", "PAID", "REFUNDED"];
+
+function parsePaymentHistory(value: unknown): PaymentHistoryItem {
+  if (
+    !isRecord(value)
+    || !isId(value.billId)
+    || typeof value.receptionNumber !== "string"
+    || typeof value.customerName !== "string"
+    || !isCount(value.amount)
+    || !isHistoryStatus(value.status)
+    || (value.occurredAt !== null && typeof value.occurredAt !== "string")
+  ) {
+    throw new Error("결제 내역 응답이 올바르지 않습니다.");
+  }
+  return {
+    billId: value.billId,
+    receptionNumber: value.receptionNumber,
+    customerName: value.customerName,
+    amount: value.amount,
+    status: value.status,
+    occurredAt: value.occurredAt,
+  };
+}
+
+function isHistoryStatus(value: unknown): value is PaymentHistoryStatus {
+  return typeof value === "string" && historyStatuses.some((status) => status === value);
 }
 
 function matchesPeriod(value: Record<string, unknown>, startDate: string, endDate: string): boolean {

@@ -17,6 +17,24 @@ const titleOf: Record<DocumentKind, string> = {
   payment: "결제 내역서",
 };
 
+const NOT_ISSUED = "아직 발급되지 않은 서류입니다.";
+
+function documentError(kind: DocumentKind, cause: unknown): string {
+  const message = cause instanceof Error ? cause.message : "서류를 불러오지 못했습니다.";
+  if (kind !== "estimate" && kind !== "repair") {
+    return message;
+  }
+  // 접수 직후처럼 서류가 아직 없을 때는 서버의 원인 문구 대신 같은 안내를 보여 준다.
+  if (
+    message === "수리 정보를 찾을 수 없습니다."
+    || message === "아직 수리비가 확정되지 않았습니다."
+    || message === "수리가 완료된 건만 내역서를 조회할 수 있습니다."
+  ) {
+    return NOT_ISSUED;
+  }
+  return message;
+}
+
 export function DocumentModal({
   kind,
   receptionId,
@@ -55,7 +73,7 @@ export function DocumentModal({
         if (isAbortError(cause)) {
           return;
         }
-        setError(cause instanceof Error ? cause.message : "서류를 불러오지 못했습니다.");
+        setError(documentError(kind, cause));
       })
       .finally(() => {
         if (!controller.signal.aborted) {

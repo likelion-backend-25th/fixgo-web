@@ -1,7 +1,6 @@
 export const AS_RECEPTION_STATUSES = [
   "RECEIVED",
   "INSPECTION",
-  "WARRANTY_REVIEW",
   "AWAITING_QUOTE_APPROVAL",
   "AWAITING_REPAIR",
   "REPAIR_IN_PROGRESS",
@@ -44,6 +43,7 @@ export interface AsReceptionListQuery {
   keyword: string;
   status: AsReceptionStatus | null;
   technicianId: number | null;
+  customerId?: number | null;
   page: number;
   size: number;
   sort: string;
@@ -195,6 +195,7 @@ export type {
 
 export interface ProductSummary {
   id: number;
+  productModelId: number;
   serialNumber: string;
   modelName: string;
   name: string;
