@@ -10,6 +10,7 @@ import { resolveHeading } from "@/layouts/navigation";
 import { ROLE_LABEL } from "@/types/staff";
 
 const HeadingMetaContext = createContext<(owner: symbol, meta: string | undefined) => void>(() => {});
+const SIDEBAR_KEY = "fixgo-sidebar-collapsed";
 
 export function useHeadingMeta(meta: string | undefined) {
   const setMeta = useContext(HeadingMetaContext);
@@ -25,6 +26,7 @@ export function RootLayout() {
   const { user, ready } = useHydratedSession();
   const { pathname } = useLocation();
   const [menuState, setMenuState] = useState({ path: pathname, open: false });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed);
   const [pageMeta, setPageMeta] = useState<string | undefined>(undefined);
   const metaOwner = useRef<symbol | null>(null);
   const menuOpen = menuState.open && menuState.path === pathname;
@@ -59,6 +61,14 @@ export function RootLayout() {
     setMenuState({ path: pathname, open });
   }
 
+  function toggleSidebar() {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      localStorage.setItem(SIDEBAR_KEY, next ? "1" : "0");
+      return next;
+    });
+  }
+
   if (!ready) {
     return null;
   }
@@ -71,20 +81,23 @@ export function RootLayout() {
 
   return (
     <HeadingMetaContext.Provider value={setHeadingMeta}>
-    <div className="flex min-h-screen bg-neutral-50 text-neutral-900">
+    <div className="flex h-dvh flex-col overflow-hidden bg-neutral-50 text-neutral-900 print:h-auto print:overflow-visible">
       {menuOpen && (
         <button
           type="button"
           aria-label="메뉴 닫기"
-          className="fixed inset-0 z-30 bg-neutral-900/30 md:hidden"
+          className="fixed inset-x-0 top-14 bottom-0 z-30 bg-neutral-900/30 md:hidden"
           onClick={() => setMenuOpen(false)}
         />
       )}
-      <Sidebar open={menuOpen} onNavigate={() => setMenuOpen(false)} />
-      <div className="flex min-w-0 flex-1 flex-col pl-[var(--scrollbar-size)]">
-        <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white/90 backdrop-blur">
-          <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between gap-3 px-8 py-3">
+      <header className="sticky top-0 z-40 flex h-14 w-full shrink-0 items-center justify-between gap-3 border-b border-neutral-200 bg-white/90 px-8 backdrop-blur">
           <div className="flex min-w-0 items-center gap-3">
+            <Link to="/as/list" className="flex shrink-0 items-center gap-2.5">
+              <span className="grid size-8 place-items-center rounded-lg bg-blue-600 text-sm font-bold text-white">
+                F
+              </span>
+              <span className="text-base font-semibold tracking-tight text-neutral-900">FixGo</span>
+            </Link>
             <button
               type="button"
               className="rounded-lg p-2 text-neutral-700 hover:bg-neutral-100 md:hidden"
@@ -103,11 +116,8 @@ export function RootLayout() {
           <div className="flex shrink-0 items-center gap-2">
             <Link
               to="/member/me"
-              className="flex items-center gap-2.5 rounded-full py-1 pr-2 pl-1 hover:bg-neutral-50"
+              className="rounded-lg px-2 py-1 hover:bg-neutral-50"
             >
-              <span className="grid size-8 place-items-center rounded-full bg-blue-600 text-sm font-semibold text-white">
-                {user.name.slice(0, 1)}
-              </span>
               <span className="text-right text-sm leading-tight">
                 <span className="block font-medium">{user.name}</span>
                 <span className="block text-xs text-neutral-500">{ROLE_LABEL[user.role]}</span>
@@ -115,16 +125,32 @@ export function RootLayout() {
             </Link>
             <Button variant="outline" onClick={() => void logoutFromServer()}>로그아웃</Button>
           </div>
-          </div>
-        </header>
+      </header>
+      <div className="flex min-h-0 flex-1 overflow-hidden print:overflow-visible">
+      <Sidebar
+        open={menuOpen}
+        collapsed={sidebarCollapsed}
+        onNavigate={() => setMenuOpen(false)}
+        onToggle={toggleSidebar}
+      />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-y-contain pl-[var(--scrollbar-size)]">
         <main className="flex-1">
           <div className="page-container">
             <Outlet />
           </div>
         </main>
       </div>
+      </div>
       {user.role === "ADMIN" && <AiChatWidget />}
     </div>
     </HeadingMetaContext.Provider>
   );
+}
+
+function readSidebarCollapsed(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_KEY) === "1";
+  } catch {
+    return false;
+  }
 }

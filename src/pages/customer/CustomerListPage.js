@@ -1,6 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
+import { useListParams } from "@/hooks/useListParams";
 import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
 import { TextField } from "@/components/ui/Field";
@@ -13,9 +14,10 @@ import { formatDate } from "@/lib/format";
 const PAGE_SIZE = 20;
 export function CustomerListPage() {
     const navigate = useNavigate();
-    const [query, setQuery] = useState("");
-    const [appliedKeyword, setAppliedKeyword] = useState("");
-    const [page, setPage] = useState(1);
+    const filters = useListParams();
+    const query = filters.text("q");
+    const page = filters.page();
+    const [appliedKeyword, setAppliedKeyword] = useState(query.trim());
     const [rows, setRows] = useState([]);
     const [pageCount, setPageCount] = useState(1);
     const [loading, setLoading] = useState(false);
@@ -28,7 +30,6 @@ export function CustomerListPage() {
             setAppliedKeyword((current) => {
                 if (current === next)
                     return current;
-                setPage(1);
                 return next;
             });
         }, 300);
@@ -64,7 +65,7 @@ export function CustomerListPage() {
         { key: "email", header: "이메일", render: (row) => row.email },
         { key: "date", header: "등록일", render: (row) => formatDate(row.createdAt) },
     ];
-    return (_jsxs("div", { children: [error !== "" && _jsx("div", { className: "mb-3", children: _jsx(Notice, { tone: "error", children: error }) }), _jsxs("div", { className: "mb-4 flex flex-wrap items-center gap-2", children: [_jsx(TextField, { value: query, onChange: setQuery, placeholder: "\uACE0\uAC1D\uBA85, \uC5F0\uB77D\uCC98 \uAC80\uC0C9", className: "w-64" }), _jsx(Button, { className: "ml-auto", onClick: () => setOpen(true), children: "\uC5D1\uC140 \uC77C\uAD04 \uB4F1\uB85D" })] }), _jsx(DataTable, { columns: columns, rows: rows, rowKey: (row) => String(row.id), onRowClick: (row) => navigate(`/customer/${row.id}`), emptyText: loading ? "고객을 조회하는 중입니다." : "조회 결과가 없습니다." }), _jsx(Pagination, { page: page, pageCount: pageCount, onPageChange: setPage }), open && (_jsx(ExcelModal, { onClose: () => setOpen(false), onRegistered: () => {
+    return (_jsxs("div", { children: [error !== "" && _jsx("div", { className: "mb-3", children: _jsx(Notice, { tone: "error", children: error }) }), _jsxs("div", { className: "mb-4 flex flex-wrap items-center gap-2", children: [_jsx(TextField, { value: query, onChange: (value) => filters.replace({ q: value, page: null }), placeholder: "\uACE0\uAC1D\uBA85, \uC5F0\uB77D\uCC98 \uAC80\uC0C9", className: "w-64" }), _jsx(Button, { className: "ml-auto", onClick: () => setOpen(true), children: "\uC5D1\uC140 \uC77C\uAD04 \uB4F1\uB85D" })] }), _jsx(DataTable, { columns: columns, rows: rows, rowKey: (row) => String(row.id), onRowClick: (row) => navigate(`/customer/${row.id}`), emptyText: loading ? "고객을 조회하는 중입니다." : "조회 결과가 없습니다." }), _jsx(Pagination, { page: page, pageCount: pageCount, onPageChange: filters.setPage }), open && (_jsx(ExcelModal, { onClose: () => setOpen(false), onRegistered: () => {
                     setReloadKey((value) => value + 1);
                     setOpen(false);
                 } }))] }));

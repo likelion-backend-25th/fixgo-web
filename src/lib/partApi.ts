@@ -91,6 +91,15 @@ export async function updatePartPrice(id: number, unitPrice: number): Promise<vo
   await readApiJson(response, "부품 단가를 수정하지 못했습니다.");
 }
 
+export async function updatePartStatus(id: number, status: PartStatus): Promise<void> {
+  const response = await apiFetch("/api/v1/part/status", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, status }),
+  });
+  await readApiJson(response, "부품 상태를 수정하지 못했습니다.");
+}
+
 export async function updatePartStock(
   id: number,
   movementType: StockMovement,

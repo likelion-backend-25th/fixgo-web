@@ -1,7 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { Button } from "@/components/ui/Button";
+import { useListParams } from "@/hooks/useListParams";
 import { DataTable } from "@/components/ui/DataTable";
 import { SelectBox, TextField } from "@/components/ui/Field";
 import { Pagination } from "@/components/ui/Pagination";
@@ -17,20 +17,15 @@ const statusOptions = [
 ];
 export function PaymentListPage() {
     const navigate = useNavigate();
-    const [query, setQuery] = useState("");
-    const [status, setStatus] = useState("ALL");
-    const [page, setPage] = useState(1);
-    const [applied, setApplied] = useState({ keyword: "", status: "ALL" });
-    const filterKey = `${applied.keyword}:${applied.status}`;
-    const [seenFilter, setSeenFilter] = useState(filterKey);
+    const filters = useListParams();
+    const query = filters.text("q");
+    const status = readStatusFilter(filters.text("status", "ALL"));
+    const page = filters.page();
+    const [applied, setApplied] = useState({ keyword: query.trim(), status });
     const [rows, setRows] = useState([]);
     const [pageCount, setPageCount] = useState(1);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    if (seenFilter !== filterKey) {
-        setSeenFilter(filterKey);
-        setPage(1);
-    }
     useEffect(() => {
         const timer = window.setTimeout(() => {
             const next = { keyword: query.trim(), status };
@@ -77,23 +72,27 @@ export function PaymentListPage() {
         return () => controller.abort();
     }, [applied, page]);
     const columns = [
-        { key: "as", header: "접수번호", render: (row) => row.asReceptionNumber },
-        { key: "customer", header: "고객", render: (row) => row.customerName },
-        { key: "amount", header: "금액", render: (row) => won(row.amount) },
-        { key: "status", header: "상태", render: (row) => paymentBillStatusLabel(row.status) },
-        { key: "method", header: "수단", render: (row) => paymentMethodLabel(row.paymentMethod) },
-        { key: "approvedAt", header: "승인시각", render: (row) => formatApprovedAt(row.approvedAt) },
-        {
-            key: "detail",
-            header: "",
-            render: (row) => (_jsx(Button, { onClick: () => navigate(`/payment/${row.billId}`), children: "\uC0C1\uC138 \uBCF4\uAE30" })),
-        },
+        { key: "as", header: "접수번호", width: "23%", render: (row) => (_jsx("span", { className: "text-[#005A9C]", children: row.asReceptionNumber })) },
+        { key: "customer", header: "고객명", width: "13%", render: (row) => row.customerName },
+        { key: "amount", header: "금액", width: "15%", className: "text-right", render: (row) => won(row.amount) },
+        { key: "status", header: "상태", width: "16%", className: "text-center", render: (row) => (_jsx("span", { className: statusColor(row.status), children: paymentBillStatusLabel(row.status) })) },
+        { key: "method", header: "결제 수단", width: "13%", className: "text-center", render: (row) => paymentMethodLabel(row.paymentMethod) },
+        { key: "approvedAt", header: "승인 시각", width: "20%", className: "text-center", render: (row) => formatApprovedAt(row.approvedAt) },
     ];
-    return (_jsxs("div", { children: [_jsxs("div", { className: "mb-4 flex flex-wrap gap-2", children: [_jsx(TextField, { value: query, onChange: setQuery, placeholder: "\uC811\uC218\uBC88\uD638, \uACE0\uAC1D\uBA85 \uAC80\uC0C9", className: "w-64" }), _jsx(SelectBox, { value: status, onChange: (value) => {
+    return (_jsxs("div", { children: [_jsxs("div", { className: "mb-4 flex flex-wrap gap-2", children: [_jsx(TextField, { value: query, onChange: (value) => filters.replace({ q: value, page: null }), placeholder: "\uC811\uC218\uBC88\uD638, \uACE0\uAC1D\uBA85 \uAC80\uC0C9", className: "w-64" }), _jsx(SelectBox, { value: status, onChange: (value) => {
                             if (isStatusFilter(value)) {
-                                setStatus(value);
+                                filters.replace({ status: value === "ALL" ? null : value, page: null });
                             }
-                        }, options: statusOptions })] }), error !== "" && _jsx(Notice, { tone: "error", children: error }), _jsx(DataTable, { columns: columns, rows: rows, rowKey: (row) => String(row.billId), emptyText: tableMessage(loading, error) }), _jsx(Pagination, { page: page, pageCount: pageCount, onPageChange: setPage })] }));
+                        }, options: statusOptions })] }), error !== "" && _jsx(Notice, { tone: "error", children: error }), _jsx(DataTable, { columns: columns, rows: rows, rowKey: (row) => String(row.billId), onRowClick: (row) => navigate(`/payment/${row.billId}`), emptyText: tableMessage(loading, error) }), _jsx(Pagination, { page: page, pageCount: pageCount, onPageChange: filters.setPage })] }));
+}
+function statusColor(status) {
+    if (status === "PAID") {
+        return "text-[#15803D]";
+    }
+    if (status === "UNPAID") {
+        return "text-[#B45309]";
+    }
+    return undefined;
 }
 function formatApprovedAt(value) {
     if (value === null || value.trim() === "") {
@@ -116,4 +115,7 @@ function tableMessage(loading, error) {
 }
 function isStatusFilter(value) {
     return statusOptions.some((option) => option.value === value);
+}
+function readStatusFilter(value) {
+    return isStatusFilter(value) ? value : "ALL";
 }

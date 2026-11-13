@@ -9,7 +9,7 @@ import { Notice, Panel } from "@/components/ui/Panel";
 import { Pagination } from "@/components/ui/Pagination";
 import { isAbortError } from "@/lib/apiClient";
 import { fetchReceptions, receptionStatusLabel } from "@/lib/asReceptionApi";
-import { loadDaumPostcode, selectedAddress } from "@/lib/daumPostcode";
+import { embedDaumPostcode, selectedAddress } from "@/lib/daumPostcode";
 import { repairStatusLabel } from "@/lib/repair";
 import { fetchCustomer, updateCustomer } from "@/lib/customerApi";
 import { formatDate } from "@/lib/format";
@@ -21,6 +21,7 @@ export function CustomerDetailPage() {
     const [history, setHistory] = useState([]);
     const [historyPage, setHistoryPage] = useState(1);
     const [historyPageCount, setHistoryPageCount] = useState(1);
+    const [historyTotal, setHistoryTotal] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
@@ -71,11 +72,13 @@ export function CustomerDetailPage() {
         if (customer === null) {
             setHistory([]);
             setHistoryPageCount(1);
+            setHistoryTotal(0);
             return;
         }
         const controller = new AbortController();
         fetchReceptions({
-            keyword: customer.phone,
+            keyword: "",
+            customerId: customer.id,
             status: null,
             technicianId: null,
             page: historyPage,
@@ -87,12 +90,14 @@ export function CustomerDetailPage() {
                 return;
             setHistory(result.items);
             setHistoryPageCount(Math.max(1, result.totalPages));
+            setHistoryTotal(result.totalElements);
         })
             .catch((cause) => {
             if (controller.signal.aborted || isAbortError(cause))
                 return;
             setHistory([]);
             setHistoryPageCount(1);
+            setHistoryTotal(0);
             setError(cause instanceof Error ? cause.message : "수리 이력을 불러오지 못했습니다.");
         });
         return () => controller.abort();
@@ -103,9 +108,6 @@ export function CustomerDetailPage() {
     if (customer === null) {
         return _jsx(Notice, { tone: "error", children: error === "" ? "고객 정보를 찾을 수 없습니다." : error });
     }
-    const address = [customer.zipcode, customer.basicAddress, customer.detailAddress]
-        .filter((part) => part !== null && part !== "")
-        .join(" ");
     const historyColumns = [
         {
             key: "id",
@@ -114,15 +116,15 @@ export function CustomerDetailPage() {
         },
         { key: "date", header: "접수일", render: (row) => formatDate(row.createdAt) },
         { key: "model", header: "모델명", render: (row) => row.modelName ?? "-" },
-        { key: "status", header: "접수상태", render: (row) => receptionStatusLabel(row.receptionStatus) },
+        { key: "status", header: "접수 상태", render: (row) => receptionStatusLabel(row.receptionStatus) },
         {
             key: "repair",
             header: "수리 상태",
             render: (row) => (row.repairStatus === null ? "-" : repairStatusLabel(row.repairStatus)),
         },
-        { key: "tech", header: "담당기사", render: (row) => row.technicianName ?? "-" },
+        { key: "tech", header: "담당 기사", render: (row) => row.technicianName ?? "-" },
     ];
-    return (_jsxs("div", { className: "space-y-4", children: [notice !== "" && _jsx(Notice, { children: notice }), error !== "" && _jsx(Notice, { tone: "error", children: error }), _jsx(Panel, { title: "\uACE0\uAC1D \uC815\uBCF4", action: _jsx(Button, { variant: "outline", onClick: () => setEditing(true), children: "\uC218\uC815" }), children: _jsxs("div", { className: "grid gap-3 text-sm sm:grid-cols-2", children: [_jsxs("p", { children: ["\uC774\uB984 ", customer.name] }), _jsxs("p", { children: ["\uC5F0\uB77D\uCC98 ", customer.phone] }), _jsxs("p", { children: ["\uC774\uBA54\uC77C ", customer.email] }), _jsxs("p", { children: ["\uC8FC\uC18C ", address === "" ? "-" : address] })] }) }), _jsx("h2", { className: "section-title", children: "\uC774\uC804 \uC218\uB9AC \uB0B4\uC5ED" }), _jsx(DataTable, { columns: historyColumns, rows: history, rowKey: (row) => String(row.id), emptyText: "\uC774\uC804 \uC218\uB9AC \uB0B4\uC5ED\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." }), _jsx(Pagination, { page: historyPage, pageCount: historyPageCount, onPageChange: setHistoryPage }), editing && !postLookup && (_jsx(Modal, { title: "\uACE0\uAC1D \uC815\uBCF4 \uC218\uC815", onClose: () => {
+    return (_jsxs("div", { className: "space-y-4", children: [notice !== "" && _jsx(Notice, { children: notice }), error !== "" && _jsx(Notice, { tone: "error", children: error }), _jsx(Panel, { title: "\uACE0\uAC1D \uC815\uBCF4", className: "p-6", action: _jsx(Button, { variant: "outline", onClick: () => setEditing(true), children: "\uC218\uC815" }), children: [_jsxs("div", { className: "grid grid-cols-1 gap-6 sm:grid-cols-3", children: [_jsx(InfoItem, { label: "\uACE0\uAC1D\uBA85", value: customer.name }), _jsx(InfoItem, { label: "\uC5F0\uB77D\uCC98", value: customer.phone }), _jsx(InfoItem, { label: "\uC774\uBA54\uC77C", value: customer.email })] }), _jsx("div", { className: "my-6 border-t border-neutral-200" }), _jsxs("div", { className: "grid grid-cols-1 gap-6 sm:grid-cols-3", children: [_jsx(InfoItem, { label: "\uC6B0\uD3B8\uBC88\uD638", value: customer.zipcode ?? "" }), _jsx(InfoItem, { label: "\uAE30\uBCF8 \uC8FC\uC18C", value: customer.basicAddress ?? "" }), _jsx(InfoItem, { label: "\uC0C1\uC138 \uC8FC\uC18C", value: customer.detailAddress ?? "" })] })] }), _jsxs("div", { className: "flex items-center justify-between gap-3", children: [_jsx("h2", { className: "section-title", children: "\uC774\uC804 \uC218\uB9AC \uB0B4\uC5ED" }), _jsxs("p", { className: "text-sm text-[#64748B]", children: ["\uC804\uCCB4 ", historyTotal, "\uAC74"] })] }), _jsx(DataTable, { columns: historyColumns, rows: history, rowKey: (row) => String(row.id), emptyText: _jsxs("span", { className: "block text-center", children: [_jsx("span", { className: "block", children: "\uC774\uC804 \uC218\uB9AC \uB0B4\uC5ED\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." }), _jsx("span", { className: "mt-1 block text-xs", children: "A/S \uC811\uC218 \uD6C4 \uD574\uB2F9 \uACE0\uAC1D\uC758 \uC218\uB9AC \uB0B4\uC5ED\uC744 \uD655\uC778\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4." })] }) }), historyTotal > 0 && _jsx(Pagination, { page: historyPage, pageCount: historyPageCount, onPageChange: setHistoryPage }), editing && !postLookup && (_jsx(Modal, { title: "\uACE0\uAC1D \uC815\uBCF4 \uC218\uC815", onClose: () => {
                     setEditing(false);
                     setPostLookup(false);
                 }, children: _jsxs("form", { className: "space-y-3", onSubmit: (event) => {
@@ -156,6 +158,9 @@ export function CustomerDetailPage() {
                     setPostLookup(false);
                 } }))] }));
 }
+function InfoItem({ label, value }) {
+    return (_jsxs("div", { className: "min-w-0", children: [_jsx("p", { className: "text-xs text-[#64748B]", children: label }), _jsx("p", { className: "mt-1.5 text-sm break-words text-[#1E293B]", children: value === "" ? "-" : value })] }));
+}
 function CustomerPostLookup({ onClose, onApply, }) {
     const frameRef = useRef(null);
     const onApplyRef = useRef(onApply);
@@ -169,23 +174,16 @@ function CustomerPostLookup({ onClose, onApply, }) {
             return;
         }
         let cancelled = false;
-        loadDaumPostcode()
-            .then((Postcode) => {
-            if (cancelled) {
-                return;
-            }
-            frame.replaceChildren();
-            new Postcode({
-                width: "100%",
-                height: "100%",
-                oncomplete: (data) => {
-                    onApplyRef.current({
-                        postalCode: data.zonecode,
-                        address: selectedAddress(data),
-                    });
-                    onCloseRef.current();
-                },
-            }).embed(frame);
+        embedDaumPostcode(frame, {
+            width: "100%",
+            height: "100%",
+            oncomplete: (data) => {
+                onApplyRef.current({
+                    postalCode: data.zonecode,
+                    address: selectedAddress(data),
+                });
+                onCloseRef.current();
+            },
         })
             .catch((cause) => {
             if (!cancelled) {

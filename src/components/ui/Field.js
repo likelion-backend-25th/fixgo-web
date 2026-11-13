@@ -1,10 +1,33 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Calendar } from "lucide-react";
 import { cn } from "@/lib/cn";
 const controlClass = "w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15";
 export function TextField({ label, value, onChange, placeholder, type = "text", invalid = false, readOnly = false, required = false, className, }) {
-    return (_jsxs("label", { className: cn("block text-sm", className), children: [label !== undefined && _jsxs("span", { className: "form-label mb-1.5 block", children: [label, required && _jsx("span", { className: "ml-0.5 text-red-500", children: "*" })] }), _jsx("input", { type: type, value: value, readOnly: readOnly, placeholder: placeholder, onChange: (event) => onChange(event.target.value), className: cn(controlClass, invalid && "border-red-300 bg-red-50", readOnly && "bg-neutral-50 text-neutral-700") })] }));
+    // 주소 필터가 다시 그려져도 조합 중인 한글이 끊기지 않게 입력값은 로컬에 둔다.
+    const [text, setText] = useState(value);
+    const composing = useRef(false);
+    useEffect(() => {
+        if (!composing.current) {
+            setText(value);
+        }
+    }, [value]);
+    function publish(next) {
+        setText(next);
+        onChange(next);
+    }
+    return (_jsxs("label", { className: cn("block text-sm", className), children: [label !== undefined && _jsxs("span", { className: "form-label mb-1.5 block", children: [label, required && _jsx("span", { className: "ml-0.5 text-red-500", children: "*" })] }), _jsx("input", { type: type, value: text, readOnly: readOnly, placeholder: placeholder, onCompositionStart: () => {
+                composing.current = true;
+            }, onCompositionEnd: (event) => {
+                composing.current = false;
+                publish(event.currentTarget.value);
+            }, onChange: (event) => {
+                const next = event.target.value;
+                setText(next);
+                if (!composing.current && !event.nativeEvent.isComposing) {
+                    onChange(next);
+                }
+            }, className: cn(controlClass, invalid && "border-red-300 bg-red-50", readOnly && "bg-neutral-50 text-neutral-700") })] }));
 }
 export function TextArea({ label, value, onChange, placeholder, rows = 4, readOnly = false, required = false, className, }) {
     return (_jsxs("label", { className: cn("block text-sm", className), children: [label !== undefined && _jsxs("span", { className: "form-label mb-1.5 block", children: [label, required && _jsx("span", { className: "ml-0.5 text-red-500", children: "*" })] }), _jsx("textarea", { value: value, readOnly: readOnly, rows: rows, placeholder: placeholder, onChange: (event) => onChange(event.target.value), className: cn(controlClass, "resize-y", readOnly && "bg-neutral-50 text-neutral-700") })] }));

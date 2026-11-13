@@ -18,7 +18,7 @@ const floor: StaffRole[] = ["ADMIN", "TECHNICIAN", "MANAGER"];
 
 export const NAV_GROUPS: NavGroup[] = [
   {
-    label: "A/S",
+    label: "A/S 관리",
     items: [
       { label: "A/S 목록", to: "/as/list", roles: all },
       { label: "A/S 접수 등록", to: "/as/new", roles: desk },

@@ -43,6 +43,7 @@ export interface AsReceptionListQuery {
   keyword: string;
   status: AsReceptionStatus | null;
   technicianId: number | null;
+  customerId?: number | null;
   page: number;
   size: number;
   sort: string;

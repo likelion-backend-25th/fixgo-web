@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -114,31 +114,38 @@ export function PaymentDetailPage() {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
-        <dl className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <InfoField label="고객명" value={text(reception.customerName)} />
-          <InfoField label="접수번호" value={receptionLink(reception.asReceptionNumber)} />
-          <InfoField label="제품" value={text(reception.productName)} />
-          <InfoField label="증상" value={text(reception.symptom)} />
-          <InfoField label="청구금액" value={won(detail.amount)} />
-          <InfoField
-            label="결제상태"
-            value={<span className={`rounded-md px-2 py-1 text-xs font-medium ${statusClass(detail)}`}>{headlineStatus(detail)}</span>}
-          />
-          <InfoField label="승인시각" value={formatDateTime(history?.approvedAt ?? null)} />
-        </dl>
-      </section>
+      <Panel title="A/S 접수 정보" className="p-6">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+          <InfoItem label="고객명" value={text(reception.customerName)} />
+          <InfoItem label="접수번호" value={receptionLink(reception.asReceptionNumber)} />
+          <InfoItem label="제품명" value={text(reception.productName)} />
+        </div>
+        <div className="mt-6">
+          <InfoItem label="고장 증상" value={text(reception.symptom)} />
+        </div>
+      </Panel>
 
-      {history !== null && (
-        <Panel title="결제">
-          <dl className="grid gap-4 sm:grid-cols-2">
-            <InfoField label="주문번호" value={history.orderId} />
-            <InfoField label="결제 금액" value={won(history.amount)} />
-            <InfoField label="결제 수단" value={paymentMethodLabel(history.paymentMethod)} />
-            <InfoField label="승인 시각" value={formatDateTime(history.approvedAt)} />
-          </dl>
-        </Panel>
-      )}
+      <Panel
+        title="결제 정보"
+        className="p-6"
+        action={<span className={statusTextClass(detail)}>{headlineStatus(detail)}</span>}
+      >
+        <InfoItem label="주문번호" value={history?.orderId ?? "-"} />
+        <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2">
+          <InfoItem label="결제 수단" value={paymentMethodLabel(history?.paymentMethod ?? detail.paymentMethod)} />
+          <InfoItem label="승인 시각" value={formatDateTime(history?.approvedAt ?? null)} />
+        </div>
+        <div className="mt-6 space-y-6 border-t border-neutral-200 pt-6">
+          <div className="flex items-center justify-between gap-4 text-sm text-[#1E293B]">
+            <span>청구 금액</span>
+            <span>{won(detail.amount)}</span>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-sm text-[#1E293B]">최종 결제 금액</span>
+            <span className="text-[22px] font-bold text-[#005A9C]">{won(history?.amount ?? detail.amount)}</span>
+          </div>
+        </div>
+      </Panel>
 
       {account !== null && (
         <Panel title="가상계좌">
@@ -354,17 +361,26 @@ function headlineStatus(detail: PaymentDetail): string {
   return paymentBillStatusLabel(detail.status);
 }
 
-function statusClass(detail: PaymentDetail): string {
+function statusTextClass(detail: PaymentDetail): string {
   if (detail.status === "UNPAID" && detail.paymentStatus === "IN_PROGRESS") {
-    return "bg-amber-50 text-amber-700";
+    return "text-sm font-medium text-amber-600";
   }
   if (detail.status === "PAID") {
-    return "bg-green-50 text-green-600";
+    return "text-sm font-medium text-green-600";
   }
   if (detail.status === "UNPAID") {
-    return "bg-blue-50 text-blue-600";
+    return "text-sm font-medium text-blue-600";
   }
-  return "bg-red-50 text-red-600";
+  return "text-sm font-medium text-red-600";
+}
+
+function InfoItem({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs text-[#64748B]">{label}</p>
+      <div className="mt-1.5 break-words text-sm text-[#1E293B]">{value}</div>
+    </div>
+  );
 }
 
 function refundStatusLabel(status: PaymentRefundStatus): string {

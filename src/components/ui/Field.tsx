@@ -1,4 +1,4 @@
-import { useRef, type ReactNode, type SelectHTMLAttributes } from "react";
+import { useEffect, useRef, useState, type ReactNode, type SelectHTMLAttributes } from "react";
 import { Calendar } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -37,15 +37,43 @@ export function TextField({
   required = false,
   className,
 }: TextFieldProps) {
+  // 주소 필터가 다시 그려져도 조합 중인 한글이 끊기지 않게 입력값은 로컬에 둔다.
+  const [text, setText] = useState(value);
+  const composing = useRef(false);
+
+  useEffect(() => {
+    if (!composing.current) {
+      setText(value);
+    }
+  }, [value]);
+
+  function publish(next: string) {
+    setText(next);
+    onChange(next);
+  }
+
   return (
     <label className={cn("block text-sm", className)}>
       {label !== undefined && <FieldCaption label={label} required={required} />}
       <input
         type={type}
-        value={value}
+        value={text}
         readOnly={readOnly}
         placeholder={placeholder}
-        onChange={(event) => onChange(event.target.value)}
+        onCompositionStart={() => {
+          composing.current = true;
+        }}
+        onCompositionEnd={(event) => {
+          composing.current = false;
+          publish(event.currentTarget.value);
+        }}
+        onChange={(event) => {
+          const next = event.target.value;
+          setText(next);
+          if (!composing.current && !event.nativeEvent.isComposing) {
+            onChange(next);
+          }
+        }}
         className={cn(
           controlClass,
           invalid && "border-red-300 bg-red-50",

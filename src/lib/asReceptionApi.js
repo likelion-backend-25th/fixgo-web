@@ -64,6 +64,9 @@ export async function fetchReceptions(query, signal, mineOnly = false) {
     if (!mineOnly && query.technicianId !== null) {
         params.set("technicianId", String(query.technicianId));
     }
+    if (query.customerId != null) {
+        params.set("customerId", String(query.customerId));
+    }
     params.set("page", String(query.page - 1));
     params.set("size", String(query.size));
     params.set("sort", query.sort);

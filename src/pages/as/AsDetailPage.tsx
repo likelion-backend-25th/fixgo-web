@@ -111,40 +111,36 @@ export function AsDetailPage() {
         && (detail.status === "AWAITING_SHIPMENT" || detail.status === "AWAITING_PICKUP") && (
         <Notice>{`A/S를 중단했습니다. ${detail.returnMethod === "PICKUP" ? "수령 대기" : "배송 대기"}로 넘어가 점검이 끝났습니다.`}</Notice>
       )}
-      {isTechnician ? (
-        <TechnicianSummary detail={detail} productName={product?.modelName ?? detail.modelName ?? "-"} />
-      ) : (
-        <Panel>
-          <div className="space-y-4">
-            <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-[max-content_max-content_minmax(0,1.3fr)_max-content_minmax(0,1.8fr)]">
-              <Field label="고객명" value={detail.customer.name} />
-              <Field label="연락처" value={detail.customer.phone} nowrap />
-              <Field label="이메일" value={detail.customer.email} />
-              <Field label="우편번호" value={detail.customer.zipcode ?? "-"} />
-              <Field label="주소" value={`${detail.customer.basicAddress ?? ""} ${detail.customer.detailAddress ?? ""}`.trim() || "-"} />
-              <Field label="제품군" value={product === null ? "-" : categoryLabel(product.category)} />
-              <Field label="모델명" value={product?.modelName ?? "-"} />
-              <Field label="시리얼번호" value={detail.product.serialNumber} />
-              <Field label="구매일" value={formatYearMonthDay(product?.purchasedAt ?? detail.product.purchasedAt)} />
-              <Field label="수령 방식" value={returnMethodLabel(detail.returnMethod)} />
-              <div className="lg:col-span-2">
-                <Field label="증상 요약" value={detail.symptom} />
-              </div>
-              <Field label="접수 직원" value={detail.receptionist?.name ?? "-"} />
-              <Field label="담당 기사" value={detail.technician?.name ?? "-"} />
-              <Field label="접수 날짜" value={formatDateTime(detail.createdAt)} />
-              <div className="min-w-0 sm:col-span-2 lg:col-span-3">
-                <p className="mb-1 text-xs text-neutral-500">고장 증상 상세</p>
-                <div className="min-h-20 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm break-words">{detail.symptomDetail}</div>
-              </div>
-              <div className="min-w-0 lg:col-span-2">
-                <p className="mb-1 text-xs text-neutral-500">고객 요청 사항 / 메모</p>
-                <div className="min-h-20 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm break-words">{detail.memo ?? "-"}</div>
-              </div>
-            </div>
+      <Panel title="고객 정보">
+        <div className="grid gap-x-8 gap-y-4 sm:grid-cols-3">
+          <Field label="고객명" value={detail.customer.name} />
+          <Field label="연락처" value={detail.customer.phone} nowrap />
+          <Field label="이메일" value={detail.customer.email} />
+          <Field label="우편번호" value={detail.customer.zipcode ?? "-"} />
+          <div className="sm:col-span-2">
+            <Field label="주소" value={customerAddress(detail)} />
           </div>
-        </Panel>
-      )}
+        </div>
+      </Panel>
+      <Panel title="제품 및 접수 정보">
+        <div className="grid gap-x-8 gap-y-4 sm:grid-cols-3">
+          <Field label="제품군" value={product === null ? "-" : categoryLabel(product.category)} />
+          <Field label="모델명" value={product?.modelName ?? detail.modelName ?? "-"} />
+          <Field label="시리얼번호" value={detail.product.serialNumber} />
+          <Field label="구매일" value={formatYearMonthDay(product?.purchasedAt ?? detail.product.purchasedAt)} />
+          <Field label="수령 방식" value={returnMethodLabel(detail.returnMethod)} />
+          <Field label="접수 날짜" value={formatDateTime(detail.createdAt)} />
+          <Field label="접수 직원" value={detail.receptionist?.name ?? "-"} />
+          <Field label="담당 기사" value={detail.technician?.name ?? "-"} />
+        </div>
+      </Panel>
+      <Panel title="고장 내용">
+        <Field label="고장 증상 요약" value={detail.symptom} />
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <Note label="고장 증상 상세" value={detail.symptomDetail} />
+          <Note label="고객 요청 사항 / 메모" value={detail.memo ?? "-"} />
+        </div>
+      </Panel>
       <ReceptionEditPanel
         detail={detail}
         onSaved={(message) => {
@@ -380,29 +376,8 @@ function toDocumentRecord(detail: AsReceptionDetail, product: ProductSummary | n
   };
 }
 
-function TechnicianSummary({ detail, productName }: { detail: AsReceptionDetail; productName: string }) {
-  return (
-    <Panel>
-      <div className="space-y-4">
-        <div className="grid grid-cols-4 gap-x-6">
-          <Field label="고객명" value={detail.customer.name} />
-          <Field label="연락처" value={detail.customer.phone} nowrap />
-          <Field label="제품" value={productName} />
-          <Field label="시리얼번호" value={detail.product.serialNumber} />
-        </div>
-        <div className="grid grid-cols-4 gap-x-6">
-          <Field label="고장 증상" value={detail.symptom} />
-          <Field label="수령 방식" value={returnMethodLabel(detail.returnMethod)} />
-          <Field label="접수일" value={formatDateTime(detail.createdAt)} />
-          <Field label="담당 기사" value={detail.technician?.name ?? "-"} />
-        </div>
-        <div className="grid grid-cols-2 gap-x-6">
-          <Note label="고장 증상 상세" value={detail.symptomDetail} />
-          <Note label="고객 요청 사항 / 메모" value={detail.memo ?? "-"} />
-        </div>
-      </div>
-    </Panel>
-  );
+function customerAddress(detail: AsReceptionDetail): string {
+  return `${detail.customer.basicAddress ?? ""} ${detail.customer.detailAddress ?? ""}`.trim() || "-";
 }
 
 function Note({ label, value }: { label: string; value: string }) {

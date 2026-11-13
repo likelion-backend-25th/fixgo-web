@@ -20,6 +20,16 @@ export async function fetchLaborRates(signal?: AbortSignal): Promise<LaborRateIt
   return body.map(parseLaborRate);
 }
 
+export async function updateLaborRate(id: number, cost: number): Promise<LaborRateItem> {
+  const response = await apiFetch("/api/v1/labor-rates", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, cost }),
+  });
+  const body = await readApiJson(response, "금액을 수정하지 못했습니다.");
+  return parseLaborRate(body);
+}
+
 function parseLaborRate(value: unknown): LaborRateItem {
   if (
     !isRecord(value)

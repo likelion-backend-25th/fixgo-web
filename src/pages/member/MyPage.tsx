@@ -19,15 +19,10 @@ export function MyPage() {
     <div>
       <section className="max-w-4xl rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap gap-8">
-          <div className="flex items-center gap-4">
-            <span className="grid size-16 place-items-center rounded-full bg-blue-600 text-xl font-semibold text-white">
-              {user.name.slice(0, 1)}
-            </span>
-            <div>
-              <p className="text-lg font-semibold">{user.name}</p>
-              <p className="text-sm text-neutral-500">{ROLE_LABEL[user.role]}</p>
-              <p className="text-sm text-neutral-500">{user.workStatus}</p>
-            </div>
+          <div>
+            <p className="text-lg font-semibold">{user.name}</p>
+            <p className="text-sm text-neutral-500">{ROLE_LABEL[user.role]}</p>
+            <p className="text-sm text-neutral-500">{user.workStatus}</p>
           </div>
           <dl className="grid gap-3 text-sm sm:grid-cols-[80px_1fr]">
             <dt className="text-neutral-500">연락처</dt>

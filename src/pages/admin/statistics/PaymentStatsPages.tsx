@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
+import { useListParams } from "@/hooks/useListParams";
 import { Button } from "@/components/ui/Button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { SelectBox, TextField } from "@/components/ui/Field";
@@ -20,10 +21,11 @@ import { useStatisticsResource } from "@/pages/admin/statistics/useStatisticsRes
 type DepositSortKey = "number" | "customer" | "model" | "amount" | "billed" | "elapsed" | "status";
 
 export function DepositWaitingPage() {
-  const [keyword, setKeyword] = useState("");
-  const [appliedKeyword, setAppliedKeyword] = useState("");
-  const [sortKey, setSortKey] = useState<DepositSortKey | null>(null);
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const filters = useListParams();
+  const appliedKeyword = filters.text("q");
+  const [keyword, setKeyword] = useState(appliedKeyword);
+  const sortKey = readDepositSort(filters.text("sort"));
+  const sortDir = filters.text("dir") === "desc" ? "desc" : "asc";
   const [bills, setBills] = useState<PaymentListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -60,12 +62,8 @@ export function DepositWaitingPage() {
   const total = filtered.reduce((sum, row) => sum + row.amount, 0);
 
   function toggleSort(key: DepositSortKey) {
-    if (sortKey === key) {
-      setSortDir((current) => (current === "asc" ? "desc" : "asc"));
-      return;
-    }
-    setSortKey(key);
-    setSortDir("asc");
+    const nextDir = sortKey === key ? (sortDir === "asc" ? "desc" : "asc") : "asc";
+    filters.replace({ sort: key, dir: nextDir, page: null });
   }
 
   return (
@@ -75,7 +73,7 @@ export function DepositWaitingPage() {
         className="mb-4 flex flex-wrap items-center gap-2"
         onSubmit={(event) => {
           event.preventDefault();
-          setAppliedKeyword(keyword);
+          filters.replace({ q: keyword.trim(), page: null });
         }}
       >
         <TextField value={keyword} onChange={setKeyword} placeholder="접수번호, 고객명" className="w-48" />
@@ -113,6 +111,21 @@ function depositColumns(
       <span className="text-orange-500">{depositStatusLabel(row.status)}</span>
     )),
   ];
+}
+
+function readDepositSort(value: string): DepositSortKey | null {
+  if (
+    value === "number"
+    || value === "customer"
+    || value === "model"
+    || value === "amount"
+    || value === "billed"
+    || value === "elapsed"
+    || value === "status"
+  ) {
+    return value;
+  }
+  return null;
 }
 
 function column(
@@ -251,13 +264,14 @@ const historyFilters: { value: HistoryFilter; label: string }[] = [
 
 function PaymentHistorySection() {
   const navigate = useNavigate();
+  const filters = useListParams();
   const { startDate, endDate, invalid } = useStatisticsPeriod();
   const history = useStatisticsResource(fetchPaymentHistory, startDate, endDate, invalid);
-  const [status, setStatus] = useState<HistoryFilter>("ALL");
-  const [keyword, setKeyword] = useState("");
-  const [appliedKeyword, setAppliedKeyword] = useState("");
-  const [sortKey, setSortKey] = useState<HistorySortKey | null>(null);
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const status = readHistoryFilter(filters.text("status", "ALL"));
+  const appliedKeyword = filters.text("q");
+  const [keyword, setKeyword] = useState(appliedKeyword);
+  const sortKey = readHistorySort(filters.text("sort"));
+  const sortDir = filters.text("dir") === "desc" ? "desc" : "asc";
   const rows = useMemo(
     () => sortHistory(filterHistory(history.data ?? [], status, appliedKeyword), sortKey, sortDir),
     [appliedKeyword, history.data, sortDir, sortKey, status],
@@ -265,12 +279,8 @@ function PaymentHistorySection() {
   const list = useStatisticsPage(rows, `${startDate}|${endDate}|${status}|${appliedKeyword}|${sortKey ?? ""}|${sortDir}`);
 
   function toggleSort(key: HistorySortKey) {
-    if (sortKey === key) {
-      setSortDir((current) => (current === "asc" ? "desc" : "asc"));
-      return;
-    }
-    setSortKey(key);
-    setSortDir("asc");
+    const nextDir = sortKey === key ? (sortDir === "asc" ? "desc" : "asc") : "asc";
+    filters.replace({ sort: key, dir: nextDir, page: null });
   }
   return (
     <section className="mt-4">
@@ -280,12 +290,15 @@ function PaymentHistorySection() {
           className="flex flex-wrap items-center gap-2"
           onSubmit={(event) => {
             event.preventDefault();
-            setAppliedKeyword(keyword);
+            filters.replace({ q: keyword.trim(), page: null });
           }}
         >
           <TextField value={keyword} onChange={setKeyword} placeholder="접수번호, 고객명" className="w-48" />
           <Button type="submit">검색</Button>
-          <SelectBox value={status} onChange={(value) => setStatus(readHistoryFilter(value))} options={historyFilters} />
+          <SelectBox value={status} onChange={(value) => {
+            const next = readHistoryFilter(value);
+            filters.replace({ status: next === "ALL" ? null : next, page: null });
+          }} options={historyFilters} />
         </form>
       </div>
       {history.error !== "" && <Notice tone="error">{history.error}</Notice>}
@@ -394,6 +407,13 @@ function filterHistory(rows: PaymentHistoryItem[], status: HistoryFilter, keywor
     const keywordMatched = includesText(row.receptionNumber, keyword) || includesText(row.customerName, keyword);
     return statusMatched && keywordMatched;
   });
+}
+
+function readHistorySort(value: string): HistorySortKey | null {
+  if (value === "number" || value === "customer" || value === "amount" || value === "status" || value === "date") {
+    return value;
+  }
+  return null;
 }
 
 function readHistoryFilter(value: string): HistoryFilter {

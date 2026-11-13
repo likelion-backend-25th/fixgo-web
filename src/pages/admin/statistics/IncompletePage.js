@@ -1,6 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
+import { useListParams } from "@/hooks/useListParams";
 import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
 import { SelectBox, TextField } from "@/components/ui/Field";
@@ -17,15 +18,19 @@ import { AS_RECEPTION_STATUSES } from "@/types/asReception";
 const pendingStatuses = AS_RECEPTION_STATUSES.filter((status) => status !== "COMPLETED");
 export function IncompletePage() {
     const navigate = useNavigate();
-    const [elapsed, setElapsed] = useState("ALL");
-    const [status, setStatus] = useState("ALL");
-    const [keyword, setKeyword] = useState("");
-    const [appliedKeyword, setAppliedKeyword] = useState("");
+    const filters = useListParams();
+    const elapsedRaw = filters.text("elapsed", "ALL");
+    const elapsed = elapsedRaw === "14" || elapsedRaw === "21" ? elapsedRaw : "ALL";
+    const statusRaw = filters.text("status", "ALL");
+    const status = statusRaw !== "ALL" && statusRaw !== "COMPLETED" && isReceptionStatus(statusRaw) ? statusRaw : "ALL";
+    const appliedKeyword = filters.text("q");
+    const [keyword, setKeyword] = useState(appliedKeyword);
     const [receptions, setReceptions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    const [sortKey, setSortKey] = useState(null);
-    const [sortDir, setSortDir] = useState("desc");
+    const sortRaw = filters.text("sort");
+    const sortKey = sortRaw === "number" || sortRaw === "elapsed" || sortRaw === "changedAt" ? sortRaw : null;
+    const sortDir = filters.text("dir") === "asc" ? "asc" : "desc";
     useEffect(() => {
         const controller = new AbortController();
         setLoading(true);
@@ -61,12 +66,8 @@ export function IncompletePage() {
     }, [appliedKeyword, elapsed, receptions, sortDir, sortKey, status]);
     const list = useStatisticsPage(rows, `${appliedKeyword}|${elapsed}|${status}|${sortKey ?? ""}|${sortDir}`);
     function toggleSort(key) {
-        if (sortKey === key) {
-            setSortDir((current) => (current === "asc" ? "desc" : "asc"));
-            return;
-        }
-        setSortKey(key);
-        setSortDir("asc");
+        const nextDir = sortKey === key ? (sortDir === "asc" ? "desc" : "asc") : "asc";
+        filters.replace({ sort: key, dir: nextDir, page: null });
     }
     const columns = [
         {
@@ -91,15 +92,13 @@ export function IncompletePage() {
     ];
     return (_jsxs("div", { children: [_jsx("p", { className: "mb-4", children: _jsx(Link, { to: "/admin/statistics", className: "text-sm text-blue-600", children: "\uD1B5\uACC4/\uB9AC\uD3EC\uD2B8\uB85C \uB3CC\uC544\uAC00\uAE30" }) }), _jsxs("form", { className: "mb-4 flex flex-wrap items-center gap-2", onSubmit: (event) => {
                     event.preventDefault();
-                    setAppliedKeyword(keyword);
+                    filters.replace({ q: keyword.trim(), page: null });
                 }, children: [_jsx(TextField, { value: keyword, onChange: setKeyword, placeholder: "\uC811\uC218\uBC88\uD638, \uACE0\uAC1D\uBA85", className: "w-48" }), _jsx(Button, { type: "submit", children: "\uAC80\uC0C9" }), _jsx(SelectBox, { value: elapsed, onChange: (value) => {
-                            if (value === "ALL" || value === "14" || value === "21") {
-                                setElapsed(value);
-                            }
+                            const nextElapsed = value === "14" || value === "21" ? value : "ALL";
+                            filters.replace({ elapsed: nextElapsed === "ALL" ? null : nextElapsed, page: null });
                         }, options: [{ value: "ALL", label: "경과일 전체" }, { value: "14", label: "14일 이상" }, { value: "21", label: "21일 이상" }] }), _jsx(SelectBox, { value: status, onChange: (value) => {
-                            if (value === "ALL" || (isReceptionStatus(value) && value !== "COMPLETED")) {
-                                setStatus(value);
-                            }
+                            const nextStatus = value !== "ALL" && value !== "COMPLETED" && isReceptionStatus(value) ? value : "ALL";
+                            filters.replace({ status: nextStatus === "ALL" ? null : nextStatus, page: null });
                         }, options: [
                             { value: "ALL", label: "상태 전체" },
                             ...pendingStatuses.map((item) => ({ value: item, label: receptionStatusLabel(item) })),

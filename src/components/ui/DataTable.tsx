@@ -32,7 +32,7 @@ interface DataTableProps<T> {
   onRowClick?: (row: T) => void;
   onRowDoubleClick?: (row: T) => void;
   selectedKey?: string;
-  emptyText?: string;
+  emptyText?: ReactNode;
   sortKey?: string;
   sortDir?: "asc" | "desc";
   onSort?: (key: string) => void;

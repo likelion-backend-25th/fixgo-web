@@ -34,6 +34,13 @@ export async function fetchModelSymptomStatistics(modelId, startDate, endDate, s
     }
     return body.map(parseSymptom);
 }
+export async function fetchPaymentHistory(startDate, endDate, signal) {
+    const body = await getStatistics("/payments/history", startDate, endDate, signal, "결제 내역을 불러오지 못했습니다.");
+    if (!Array.isArray(body)) {
+        throw new Error("결제 내역 응답이 올바르지 않습니다.");
+    }
+    return body.map(parsePaymentHistory);
+}
 export async function fetchPaymentStatistics(startDate, endDate, signal) {
     const body = await getStatistics("/payments", startDate, endDate, signal, "결제 통계를 불러오지 못했습니다.");
     if (!isRecord(body) || !matchesPeriod(body, startDate, endDate)) {
@@ -75,6 +82,13 @@ export async function fetchShipmentStatistics(startDate, endDate, signal) {
         throw new Error("배송 통계 응답이 올바르지 않습니다.");
     }
     return { startDate, endDate, readyCount, shippingCount, completedCount };
+}
+export async function fetchShipmentHistory(startDate, endDate, signal) {
+    const body = await getStatistics("/shipments/history", startDate, endDate, signal, "배송 내역을 불러오지 못했습니다.");
+    if (!Array.isArray(body)) {
+        throw new Error("배송 내역 응답이 올바르지 않습니다.");
+    }
+    return body.map(parseShipmentHistory);
 }
 async function getStatistics(path, startDate, endDate, signal, fallback) {
     const query = new URLSearchParams({ startDate, endDate });
@@ -147,6 +161,58 @@ function parseSymptom(value) {
         count: value.count,
         percentage: value.percentage,
     };
+}
+const shipmentHistoryStatuses = ["READY", "SHIPPING", "DELIVERED", "PICKED_UP"];
+const shipmentHistoryMethods = ["DELIVERY", "PICKUP"];
+function parseShipmentHistory(value) {
+    if (!isRecord(value)
+        || !isId(value.shipmentId)
+        || !isId(value.receptionId)
+        || typeof value.receptionNumber !== "string"
+        || typeof value.customerName !== "string"
+        || !isShipmentHistoryMethod(value.returnMethod)
+        || !isShipmentHistoryStatus(value.status)
+        || (value.createdAt !== null && typeof value.createdAt !== "string")) {
+        throw new Error("배송 내역 응답이 올바르지 않습니다.");
+    }
+    return {
+        shipmentId: value.shipmentId,
+        receptionId: value.receptionId,
+        receptionNumber: value.receptionNumber,
+        customerName: value.customerName,
+        returnMethod: value.returnMethod,
+        status: value.status,
+        createdAt: value.createdAt,
+    };
+}
+function isShipmentHistoryStatus(value) {
+    return typeof value === "string" && shipmentHistoryStatuses.includes(value);
+}
+function isShipmentHistoryMethod(value) {
+    return typeof value === "string" && shipmentHistoryMethods.includes(value);
+}
+const historyStatuses = ["UNPAID", "PAID", "REFUNDED"];
+function parsePaymentHistory(value) {
+    if (!isRecord(value)
+        || !isId(value.billId)
+        || typeof value.receptionNumber !== "string"
+        || typeof value.customerName !== "string"
+        || !isCount(value.amount)
+        || !isHistoryStatus(value.status)
+        || (value.occurredAt !== null && typeof value.occurredAt !== "string")) {
+        throw new Error("결제 내역 응답이 올바르지 않습니다.");
+    }
+    return {
+        billId: value.billId,
+        receptionNumber: value.receptionNumber,
+        customerName: value.customerName,
+        amount: value.amount,
+        status: value.status,
+        occurredAt: value.occurredAt,
+    };
+}
+function isHistoryStatus(value) {
+    return typeof value === "string" && historyStatuses.includes(value);
 }
 function matchesPeriod(value, startDate, endDate) {
     return value.startDate === startDate && value.endDate === endDate;

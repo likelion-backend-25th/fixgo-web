@@ -1,6 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useMemo, useState } from "react";
-import { Link } from "react-router";
+import { useNavigate } from "react-router";
+import { useListParams } from "@/hooks/useListParams";
 import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
 import { TextField } from "@/components/ui/Field";
@@ -17,12 +18,15 @@ import { useStatisticsPage } from "@/pages/admin/statistics/useStatisticsPage";
 import { useStatisticsPeriod } from "@/pages/admin/statistics/useStatisticsPeriod";
 import { useStatisticsResource } from "@/pages/admin/statistics/useStatisticsResource";
 export function ModelStatsPage() {
+    const navigate = useNavigate();
     const { startDate, endDate, invalid } = useStatisticsPeriod();
     const { data, loading, error } = useStatisticsResource(fetchModelStatistics, startDate, endDate, invalid);
-    const [keyword, setKeyword] = useState("");
-    const [appliedKeyword, setAppliedKeyword] = useState("");
-    const [sortKey, setSortKey] = useState(null);
-    const [sortDir, setSortDir] = useState("desc");
+    const filters = useListParams();
+    const appliedKeyword = filters.text("q");
+    const [keyword, setKeyword] = useState(appliedKeyword);
+    const sortRaw = filters.text("sort");
+    const sortKey = sortRaw === "model" || sortRaw === "received" || sortRaw === "done" || sortRaw === "doing" ? sortRaw : null;
+    const sortDir = filters.text("dir") === "desc" ? "desc" : "asc";
     const query = statisticsSearch(startDate, endDate);
     const rows = useMemo(() => {
         const matched = (data ?? []).filter((row) => includesText(row.modelName, appliedKeyword));
@@ -30,16 +34,12 @@ export function ModelStatsPage() {
     }, [appliedKeyword, data, sortDir, sortKey]);
     const list = useStatisticsPage(rows, `${appliedKeyword}|${sortKey ?? ""}|${sortDir}|${startDate}|${endDate}`);
     function toggleSort(key) {
-        if (sortKey === key) {
-            setSortDir((current) => (current === "asc" ? "desc" : "asc"));
-            return;
-        }
-        setSortKey(key);
-        setSortDir("asc");
+        const nextDir = sortKey === key ? (sortDir === "asc" ? "desc" : "asc") : "asc";
+        filters.replace({ sort: key, dir: nextDir, page: null });
     }
     return (_jsxs("div", { children: [_jsx(StatisticsBackLink, {}), _jsx(PeriodFilter, {}), _jsxs("form", { className: "mb-4 flex flex-wrap items-center gap-2", onSubmit: (event) => {
                     event.preventDefault();
-                    setAppliedKeyword(keyword);
+                    filters.replace({ q: keyword.trim(), page: null });
                 }, children: [_jsx(TextField, { value: keyword, onChange: setKeyword, placeholder: "\uBAA8\uB378\uBA85", className: "w-40" }), _jsx(Button, { type: "submit", children: "\uAC80\uC0C9" })] }), error !== "" && _jsx(Notice, { tone: "error", children: error }), _jsx(DataTable, { columns: [
                     {
                         key: "model",
@@ -65,9 +65,9 @@ export function ModelStatsPage() {
                     {
                         key: "symptom",
                         header: "주요증상",
-                        render: (row) => (_jsx(Link, { className: "text-blue-600", to: `/admin/statistics/models/${row.modelId}?${query}&modelName=${encodeURIComponent(row.modelName)}`, children: row.mainSymptom ?? "증상 분포" })),
+                        render: (row) => row.mainSymptom ?? "증상 분포",
                     },
-                ], rows: list.visible, rowKey: (row) => String(row.modelId), emptyText: invalid ? "조회 기간을 확인해 주세요." : loading ? "모델 통계를 불러오는 중입니다." : "조회 결과가 없습니다." }), _jsx(Pagination, { page: list.page, pageCount: list.pageCount, onPageChange: list.setPage })] }));
+                ], rows: list.visible, rowKey: (row) => String(row.modelId), onRowClick: (row) => navigate(`/admin/statistics/models/${row.modelId}?${query}&modelName=${encodeURIComponent(row.modelName)}`), emptyText: invalid ? "조회 기간을 확인해 주세요." : loading ? "모델 통계를 불러오는 중입니다." : "조회 결과가 없습니다." }), _jsx(Pagination, { page: list.page, pageCount: list.pageCount, onPageChange: list.setPage })] }));
 }
 function sortModels(rows, sortKey, sortDir) {
     if (sortKey === null) {

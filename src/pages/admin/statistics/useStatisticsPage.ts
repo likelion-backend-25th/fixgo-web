@@ -1,13 +1,17 @@
 import { useState } from "react";
+import { useListParams } from "@/hooks/useListParams";
 
 export const STATISTICS_PAGE_SIZE = 20;
 
 export function useStatisticsPage<T>(rows: T[], resetKey: string) {
-  const [page, setPage] = useState(1);
+  const filters = useListParams();
+  const page = filters.page();
   const [seenKey, setSeenKey] = useState(resetKey);
   if (seenKey !== resetKey) {
     setSeenKey(resetKey);
-    setPage(1);
+    if (page !== 1) {
+      filters.replace({ page: null });
+    }
   }
 
   const pageCount = Math.max(1, Math.ceil(rows.length / STATISTICS_PAGE_SIZE));
@@ -17,6 +21,6 @@ export function useStatisticsPage<T>(rows: T[], resetKey: string) {
     page: safePage,
     pageCount,
     visible: rows.slice(start, start + STATISTICS_PAGE_SIZE),
-    setPage,
+    setPage: filters.setPage,
   };
 }

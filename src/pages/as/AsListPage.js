@@ -1,6 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
+import { useListParams } from "@/hooks/useListParams";
 import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
 import { SelectBox, TextField } from "@/components/ui/Field";
@@ -111,12 +112,14 @@ function TechnicianAsListPage() {
     const navigate = useNavigate();
     const location = useLocation();
     const notice = readNotice(location.state);
+    const filters = useListParams();
+    const query = filters.text("q");
+    const status = isRepairStatusFilter(filters.text("status", "ALL")) ? filters.text("status", "ALL") : "ALL";
+    const sortRaw = filters.text("sort", "createdAt");
+    const sortKey = isTechSortKey(sortRaw) ? sortRaw : "createdAt";
+    const sortDir = filters.text("dir") === "asc" ? "asc" : "desc";
+    const page = filters.page();
     const [items, setItems] = useState([]);
-    const [query, setQuery] = useState("");
-    const [status, setStatus] = useState("ALL");
-    const [sortKey, setSortKey] = useState("createdAt");
-    const [sortDir, setSortDir] = useState("desc");
-    const [page, setPage] = useState(1);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     // 서버가 로그인한 기사에게 배정된 접수와 수리만 반환한다.
@@ -171,13 +174,12 @@ function TechnicianAsListPage() {
         if (!isTechSortKey(key)) {
             return;
         }
-        setPage(1);
-        if (sortKey === key) {
-            setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
-            return;
-        }
-        setSortKey(key);
-        setSortDir("asc");
+        const nextDir = sortKey === key ? (sortDir === "asc" ? "desc" : "asc") : "asc";
+        filters.replace({
+            sort: key === "createdAt" ? null : key,
+            dir: nextDir === "desc" ? null : nextDir,
+            page: null,
+        });
     }
     const columns = [
         {
@@ -230,12 +232,10 @@ function TechnicianAsListPage() {
         },
     ];
     return (_jsxs("div", { children: [notice !== null && _jsx(Notice, { children: notice }), error !== "" && _jsx(Notice, { tone: "error", children: error }), _jsxs("div", { className: "mb-4 flex flex-wrap items-center gap-2", children: [_jsx(TextField, { value: query, onChange: (value) => {
-                            setQuery(value);
-                            setPage(1);
+                            filters.replace({ q: value, page: null });
                         }, placeholder: "\uC811\uC218\uBC88\uD638, \uACE0\uAC1D, \uC9C4\uB2E8 \uB0B4\uC6A9 \uAC80\uC0C9", className: "w-64" }), _jsx(SelectBox, { value: status, onChange: (value) => {
                             if (isRepairStatusFilter(value)) {
-                                setStatus(value);
-                                setPage(1);
+                                filters.replace({ status: value === "ALL" ? null : value, page: null });
                             }
                         }, options: repairStatusOptions }), _jsx("span", { className: "ml-2 text-sm text-neutral-500", children: "\uB0B4 \uB2F4\uB2F9 A/S\uB9CC \uD45C\uC2DC\uB429\uB2C8\uB2E4." })] }), _jsx(DataTable, { columns: columns, rows: rows, rowKey: (row) => String(row.id), sortKey: sortKey, sortDir: sortDir, onSort: onSort, emptyText: loading
                     ? "A/S 목록을 불러오는 중입니다."
@@ -251,7 +251,7 @@ function TechnicianAsListPage() {
                     const status = row.repairStatus;
                     const goRepair = status === "APPROVED" || status === "REPAIRING" || status === "COMPLETED" || status === "REJECTED";
                     navigate(goRepair ? `/as/${row.id}/repair` : `/as/${row.id}/inspection`);
-                } }), _jsx(Pagination, { page: currentPage, pageCount: pageCount, onPageChange: setPage })] }));
+                } }), _jsx(Pagination, { page: currentPage, pageCount: pageCount, onPageChange: filters.setPage })] }));
 }
 const statusOptions = [
     { value: "ALL", label: "상태 전체" },
@@ -267,28 +267,24 @@ function ReceptionAsListPage() {
     const isTechnician = user?.role === "TECHNICIAN";
     const canCreate = user?.role === "ADMIN" || user?.role === "RECEPTIONIST" || user?.role === "MANAGER";
     const notice = readNotice(location.state);
-    const [query, setQuery] = useState("");
-    const [status, setStatus] = useState("ALL");
-    const [assignee, setAssignee] = useState("ALL");
+    const filters = useListParams();
+    const query = filters.text("q");
+    const status = isStatusFilter(filters.text("status", "ALL")) ? filters.text("status", "ALL") : "ALL";
+    const assignee = filters.text("assignee", "ALL");
+    const mineOnly = filters.text("mine") === "1";
+    const sortRaw = filters.text("sort", "createdAt");
+    const sortKey = isSortKey(sortRaw) ? sortRaw : "createdAt";
+    const sortDir = filters.text("dir") === "asc" ? "asc" : "desc";
+    const page = filters.page();
     const [technicians, setTechnicians] = useState([]);
-    const [mineOnly, setMineOnly] = useState(false);
-    const [sortKey, setSortKey] = useState("createdAt");
-    const [sortDir, setSortDir] = useState("desc");
-    const [page, setPage] = useState(1);
-    const [applied, setApplied] = useState({ keyword: "", status: "ALL" });
+    const [applied, setApplied] = useState({ keyword: query.trim(), status });
     const showAssignedOnly = isTechnician && mineOnly;
     const technicianId = isTechnician || assignee === "ALL" ? null : Number(assignee);
-    const filterKey = `${applied.keyword}:${applied.status}:${technicianId ?? ""}:${showAssignedOnly}:${sortKey}:${sortDir}`;
-    const [seenFilter, setSeenFilter] = useState(filterKey);
     const [rows, setRows] = useState([]);
     const [modelSorted, setModelSorted] = useState(null);
     const [pageCount, setPageCount] = useState(1);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    if (seenFilter !== filterKey) {
-        setSeenFilter(filterKey);
-        setPage(1);
-    }
     useEffect(() => {
         const timer = window.setTimeout(() => {
             const next = { keyword: query.trim(), status };
@@ -375,21 +371,21 @@ function ReceptionAsListPage() {
         if (!isSortKey(key)) {
             return;
         }
-        if (sortKey === key) {
-            setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
-            return;
-        }
-        setSortKey(key);
-        setSortDir("asc");
+        const nextDir = sortKey === key ? (sortDir === "asc" ? "desc" : "asc") : "asc";
+        filters.replace({
+            sort: key === "createdAt" ? null : key,
+            dir: nextDir === "desc" ? null : nextDir,
+            page: null,
+        });
     }
-    return (_jsxs("div", { children: [notice !== null && _jsx(Notice, { children: notice }), error !== "" && _jsx(Notice, { tone: "error", children: error }), _jsxs("div", { className: "mb-4 flex flex-wrap items-center gap-2", children: [_jsx(TextField, { value: query, onChange: setQuery, placeholder: "\uC811\uC218\uBC88\uD638, \uACE0\uAC1D\uBA85, \uC99D\uC0C1 \uAC80\uC0C9", className: "w-64" }), _jsx(SelectBox, { value: status, onChange: (value) => {
+    return (_jsxs("div", { children: [notice !== null && _jsx(Notice, { children: notice }), error !== "" && _jsx(Notice, { tone: "error", children: error }), _jsxs("div", { className: "mb-4 flex flex-wrap items-center gap-2", children: [_jsx(TextField, { value: query, onChange: (value) => filters.replace({ q: value, page: null }), placeholder: "\uC811\uC218\uBC88\uD638, \uACE0\uAC1D\uBA85, \uC99D\uC0C1 \uAC80\uC0C9", className: "w-64" }), _jsx(SelectBox, { value: status, onChange: (value) => {
                             if (isStatusFilter(value)) {
-                                setStatus(value);
+                                filters.replace({ status: value === "ALL" ? null : value, page: null });
                             }
-                        }, options: statusOptions }), !isTechnician && (_jsx(SelectBox, { value: assignee, onChange: setAssignee, options: [
+                        }, options: statusOptions }), !isTechnician && (_jsx(SelectBox, { value: assignee, onChange: (value) => filters.replace({ assignee: value === "ALL" ? null : value, page: null }), options: [
                             { value: "ALL", label: "담당 전체" },
                             ...technicians.map((item) => ({ value: String(item.id), label: item.name })),
-                        ] })), isTechnician && (_jsxs("label", { className: "ml-2 flex items-center gap-2 text-sm", children: [_jsx("input", { type: "checkbox", checked: mineOnly, onChange: (event) => setMineOnly(event.target.checked) }), "\uB0B4 \uB2F4\uB2F9 A/S \uBAA9\uB85D\uB9CC \uBCF4\uAE30"] })), canCreate && (_jsx(Button, { className: "ml-auto", onClick: () => navigate("/as/new"), children: "\uC0C8 \uC811\uC218" }))] }), _jsx(DataTable, { columns: deskColumns, rows: visibleRows(rows, modelSorted, page), rowKey: (row) => String(row.id), sortKey: sortKey, sortDir: sortDir, onSort: onSort, emptyText: tableMessage(loading, error), onRowClick: (row) => navigate(`/as/details/${row.id}`) }), _jsx(Pagination, { page: page, pageCount: pageCount, onPageChange: setPage })] }));
+                        ] })), isTechnician && (_jsxs("label", { className: "ml-2 flex items-center gap-2 text-sm", children: [_jsx("input", { type: "checkbox", checked: mineOnly, onChange: (event) => filters.replace({ mine: event.target.checked ? "1" : null, page: null }) }), "\uB0B4 \uB2F4\uB2F9 A/S \uBAA9\uB85D\uB9CC \uBCF4\uAE30"] })), canCreate && (_jsx(Button, { className: "ml-auto", onClick: () => navigate("/as/new"), children: "\uC0C8 \uC811\uC218" }))] }), _jsx(DataTable, { columns: deskColumns, rows: visibleRows(rows, modelSorted, page), rowKey: (row) => String(row.id), sortKey: sortKey, sortDir: sortDir, onSort: onSort, emptyText: tableMessage(loading, error), onRowClick: (row) => navigate(`/as/details/${row.id}`) }), _jsx(Pagination, { page: page, pageCount: pageCount, onPageChange: filters.setPage })] }));
 }
 function sortField(key) {
     if (key === "customerName") {
@@ -439,9 +435,6 @@ function isSortKey(value) {
         value === "modelName");
 }
 function statusText(row) {
-    if (row.repairStatus === "REJECTED" && !isReturnWaiting(row.receptionStatus)) {
-        return "수리 거부";
-    }
     return receptionStatusLabel(row.receptionStatus);
 }
 function isReturnWaiting(status) {

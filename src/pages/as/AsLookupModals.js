@@ -10,7 +10,7 @@ import { isAbortError } from "@/lib/apiClient";
 import { categoryLabel, fetchAssignableTechnicians, searchProductsBySerialPage } from "@/lib/asReceptionApi";
 import { searchCustomersPage } from "@/lib/customerApi";
 import { formatDurationMinutes } from "@/lib/format";
-import { loadDaumPostcode, selectedAddress } from "@/lib/daumPostcode";
+import { embedDaumPostcode, selectedAddress } from "@/lib/daumPostcode";
 export function AsLookupModals({ kind, onClose, onApply }) {
     if (kind === null) {
         return null;
@@ -285,23 +285,16 @@ function PostLookup({ onClose, onApply }) {
             return;
         }
         let cancelled = false;
-        loadDaumPostcode()
-            .then((Postcode) => {
-            if (cancelled) {
-                return;
-            }
-            frame.replaceChildren();
-            new Postcode({
-                width: "100%",
-                height: "100%",
-                oncomplete: (data) => {
-                    onApplyRef.current({
-                        postalCode: data.zonecode,
-                        address: selectedAddress(data),
-                    });
-                    onCloseRef.current();
-                },
-            }).embed(frame);
+        embedDaumPostcode(frame, {
+            width: "100%",
+            height: "100%",
+            oncomplete: (data) => {
+                onApplyRef.current({
+                    postalCode: data.zonecode,
+                    address: selectedAddress(data),
+                });
+                onCloseRef.current();
+            },
         })
             .catch((cause) => {
             if (!cancelled) {

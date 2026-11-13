@@ -1,5 +1,5 @@
 import { apiFetch, isRecord, readErrorMessage } from "@/lib/apiClient";
-const notificationTypes = ["RECEIVED", "ESTIMATE", "REPAIR", "PAYMENT", "SHIPPING"];
+const notificationTypes = ["RECEIVED", "ESTIMATE", "REPAIR", "PAYMENT", "SHIPPING", "CANCEL"];
 const notificationStatuses = ["PENDING", "SENDING", "SENT", "FAILED"];
 export async function sendNotificationEmail(request) {
     const response = await apiFetch("/api/v1/notifications/emails", {

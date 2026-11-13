@@ -77,7 +77,10 @@ export function CustomerPortalPage() {
 function PortalBody({ token, portal, onRefresh, }) {
     const { reception, quote, payment } = portal;
     const current = stageIndex(reception.status);
+    const aborted = inspectionAborted(reception.status, reception.histories, quote);
     const repairSkipped = quote?.status === "REJECTED" && current > 3;
+    const stepLabels = aborted ? ["접수", "점검", "견적 승인", "수리", "반환"] : STEPS;
+    const lineEnd = aborted ? 1 : current;
     const [selected, setSelected] = useState(current);
     const [seenStatus, setSeenStatus] = useState(reception.status);
     const [receiptOpen, setReceiptOpen] = useState(false);
@@ -88,8 +91,8 @@ function PortalBody({ token, portal, onRefresh, }) {
     const timeline = [...reception.histories].reverse();
     const stageHistories = reception.histories.filter((item) => stageIndex(item.status) === selected).reverse();
     const showPayment = selected === 4 && payment !== null && payment.status !== "NOT_ISSUED";
-    return (_jsxs("div", { children: [_jsxs("div", { className: "flex items-start justify-between gap-3", children: [_jsxs("div", { children: [_jsx("p", { className: "text-base font-semibold text-neutral-900", children: "A/S \uC9C4\uD589" }), reception.receptionNumber !== null && reception.receptionNumber.trim() !== "" && (_jsx("p", { className: "mt-0.5 text-sm text-neutral-500", children: reception.receptionNumber }))] }), _jsx("span", { className: "shrink-0 rounded-md border border-blue-600 px-2 py-1 text-xs font-medium text-blue-600", children: receptionStatusLabel(reception.status) })] }), _jsxs("div", { className: "mt-4 rounded-lg border border-neutral-200 px-3 py-2.5", children: [_jsx("p", { className: "text-xs text-neutral-500", children: "\uC11C\uBC84\uC5D0\uC11C \uBC1C\uAE09\uD55C \uB9C1\uD06C" }), _jsxs("p", { className: "mt-1 break-all text-sm font-medium text-neutral-900", children: ["fixgo/", token] })] }), _jsxs("div", { className: "mt-3 grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border border-neutral-200 px-3 py-3", children: [_jsx(SummaryItem, { label: "\uACE0\uAC1D", value: reception.customerName }), _jsx(SummaryItem, { label: "\uC5F0\uB77D\uCC98", value: reception.customerPhone }), _jsx(SummaryItem, { label: "\uC81C\uD488", value: reception.modelName }), _jsx(SummaryItem, { label: "\uC99D\uC0C1", value: reception.symptom })] }), _jsxs("section", { className: "mt-5", children: [_jsx("p", { className: "text-sm font-semibold text-neutral-900", children: "\uC9C4\uD589" }), _jsxs("ol", { className: "relative mt-3 grid grid-cols-5", children: [_jsx("div", { className: "absolute top-[7px] right-[10%] left-[10%] h-px bg-neutral-300" }), current > 0 && (_jsx("div", { className: "absolute top-[7px] left-[10%] h-px bg-blue-600", style: { width: `${(current / (STEPS.length - 1)) * 80}%` } })), STEPS.map((label, index) => {
-                                const skipped = repairSkipped && index === 3;
+    return (_jsxs("div", { children: [_jsxs("div", { className: "flex items-start justify-between gap-3", children: [_jsxs("div", { children: [_jsx("p", { className: "text-base font-semibold text-neutral-900", children: "A/S \uC9C4\uD589" }), reception.receptionNumber !== null && reception.receptionNumber.trim() !== "" && (_jsx("p", { className: "mt-0.5 text-sm text-neutral-500", children: reception.receptionNumber }))] }), _jsx("span", { className: "shrink-0 rounded-md border border-blue-600 px-2 py-1 text-xs font-medium text-blue-600", children: receptionStatusLabel(reception.status) })] }), _jsxs("div", { className: "mt-4 rounded-lg border border-neutral-200 px-3 py-2.5", children: [_jsx("p", { className: "text-xs text-neutral-500", children: "\uC11C\uBC84\uC5D0\uC11C \uBC1C\uAE09\uD55C \uB9C1\uD06C" }), _jsxs("p", { className: "mt-1 break-all text-sm font-medium text-neutral-900", children: ["fixgo/", token] })] }), _jsxs("div", { className: "mt-3 grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border border-neutral-200 px-3 py-3", children: [_jsx(SummaryItem, { label: "\uACE0\uAC1D", value: reception.customerName }), _jsx(SummaryItem, { label: "\uC5F0\uB77D\uCC98", value: reception.customerPhone }), _jsx(SummaryItem, { label: "\uC81C\uD488", value: reception.modelName }), _jsx(SummaryItem, { label: "\uC99D\uC0C1", value: reception.symptom })] }), _jsxs("section", { className: "mt-5", children: [_jsx("p", { className: "text-sm font-semibold text-neutral-900", children: "\uC9C4\uD589" }), _jsxs("ol", { className: "relative mt-3 grid grid-cols-5", children: [_jsx("div", { className: "absolute top-[7px] right-[10%] left-[10%] h-px bg-neutral-300" }), lineEnd > 0 && (_jsx("div", { className: "absolute top-[7px] left-[10%] h-px bg-blue-600", style: { width: `${(lineEnd / (STEPS.length - 1)) * 80}%` } })), stepLabels.map((label, index) => {
+                                const skipped = (repairSkipped && index === 3) || (aborted && (index === 2 || index === 3));
                                 const reached = !skipped && index <= current;
                                 const active = index === selected;
                                 return (_jsx("li", { className: "relative", children: _jsxs("button", { type: "button", disabled: !reached && !skipped, "aria-current": !skipped && index === current ? "step" : undefined, onClick: () => setSelected(index), className: "flex w-full flex-col items-center gap-2 disabled:cursor-default", children: [skipped ? (_jsx("span", { className: "relative z-10 flex h-3.5 w-3.5 items-center justify-center text-sm font-bold leading-none text-red-600", "aria-label": "\uAC74\uB108\uB700", children: "\u00D7" })) : (_jsx("span", { className: reached
@@ -99,7 +102,7 @@ function PortalBody({ token, portal, onRefresh, }) {
                                                     : reached
                                                         ? `text-center text-[11px] leading-tight ${active ? "font-semibold text-blue-600" : "text-blue-600"}`
                                                         : "text-center text-[11px] leading-tight text-neutral-500", children: label })] }) }, label));
-                            })] })] }), _jsxs("section", { className: "mt-5", children: [_jsx("p", { className: "text-sm font-semibold text-neutral-900", children: selected === current ? "현재 단계" : "이전 단계" }), _jsxs("div", { className: "mt-2 rounded-lg border border-neutral-300 px-3 py-3", children: [_jsx("p", { className: "text-sm font-semibold text-neutral-900", children: STEPS[selected] }), stageLines(selected, reception.status, quote, payment).map((line) => (_jsx("p", { className: "text-sm text-neutral-700", children: line }, line))), selected === 0 && (_jsx(ReceiptDetails, { open: receiptOpen, reception: reception, onToggle: () => setReceiptOpen((open) => !open) })), selected === 2 && quote !== null && (_jsx(QuoteDetails, { token: token, quote: quote, onRefresh: onRefresh })), selected > 0 && selected < 4 && stageHistories.length > 0 && (_jsx(StageRecords, { histories: stageHistories })), showPayment && payment !== null && (_jsx("div", { className: "mt-3", children: _jsx(PaymentBody, { token: token, payment: payment, onRefresh: onRefresh }) }))] })] }), timeline.length > 0 && (_jsxs("section", { className: "mt-5", children: [_jsx("p", { className: "text-sm font-semibold text-neutral-900", children: "\uC9C4\uD589 \uC774\uB825" }), _jsx("ol", { className: "mt-2", children: timeline.map((item, index) => {
+                            })] })] }), _jsxs("section", { className: "mt-5", children: [_jsx("p", { className: "text-sm font-semibold text-neutral-900", children: selected === current ? "현재 단계" : "이전 단계" }), _jsxs("div", { className: "mt-2 rounded-lg border border-neutral-300 px-3 py-3", children: [_jsx("p", { className: "text-sm font-semibold text-neutral-900", children: stepLabels[selected] }), stageLines(selected, reception.status, quote, payment, aborted).map((line) => (_jsx("p", { className: "text-sm text-neutral-700", children: line }, line))), selected === 0 && (_jsx(ReceiptDetails, { open: receiptOpen, reception: reception, onToggle: () => setReceiptOpen((open) => !open) })), selected === 2 && quote !== null && (_jsx(QuoteDetails, { token: token, quote: quote, onRefresh: onRefresh })), selected > 0 && selected < 4 && stageHistories.length > 0 && (_jsx(StageRecords, { histories: stageHistories })), showPayment && payment !== null && (_jsx("div", { className: "mt-3", children: _jsx(PaymentBody, { token: token, payment: payment, onRefresh: onRefresh }) }))] })] }), timeline.length > 0 && (_jsxs("section", { className: "mt-5", children: [_jsx("p", { className: "text-sm font-semibold text-neutral-900", children: "\uC9C4\uD589 \uC774\uB825" }), _jsx("ol", { className: "mt-2", children: timeline.map((item, index) => {
                             const changedAt = formatDateTime(item.changedAt);
                             return (_jsx("li", { className: "py-1.5 text-sm text-neutral-700", children: changedAt !== null ? `${changedAt} ${receptionStatusLabel(item.status)}` : receptionStatusLabel(item.status) }, `${item.status}-${item.changedAt ?? "none"}-${index}`));
                         }) })] }))] }));
@@ -146,11 +149,25 @@ function StageRecords({ histories }) {
             return (_jsx("li", { className: "py-1.5 text-sm text-neutral-700", children: changedAt !== null ? `${changedAt} ${receptionStatusLabel(item.status)}` : receptionStatusLabel(item.status) }, `${item.status}-${item.changedAt ?? "none"}-${index}`));
         }) }));
 }
-function stageLines(stage, status, quote, payment) {
+function inspectionAborted(status, histories, quote) {
+    const returned = status === "AWAITING_SHIPMENT" || status === "AWAITING_PICKUP" || status === "COMPLETED";
+    if (!returned || quote?.status === "APPROVED" || quote?.status === "REJECTED") {
+        return false;
+    }
+    // 견적·수리·결제 이력이 없으면 점검 중 중단으로 반환 단계에 온 것이다.
+    return !histories.some((item) => item.status === "AWAITING_QUOTE_APPROVAL"
+        || item.status === "AWAITING_REPAIR"
+        || item.status === "REPAIR_IN_PROGRESS"
+        || item.status === "AWAITING_PAYMENT");
+}
+function stageLines(stage, status, quote, payment, aborted) {
     if (stage === 0) {
         return status === "RECEIVED" ? ["접수가 완료되었습니다.", "점검 전입니다."] : ["접수가 완료되었습니다."];
     }
     if (stage === 1) {
+        if (aborted) {
+            return ["점검 중 A/S를 중단했습니다."];
+        }
         if (status === "INSPECTION") {
             return ["점검이 진행 중입니다.", "견적 전입니다."];
         }
@@ -160,6 +177,9 @@ function stageLines(stage, status, quote, payment) {
         return ["점검이 완료되었습니다."];
     }
     if (stage === 2) {
+        if (aborted) {
+            return ["견적을 받지 않고 A/S를 중단했습니다."];
+        }
         if (quote?.status === "APPROVED") {
             return ["견적을 승인했습니다."];
         }
@@ -172,6 +192,9 @@ function stageLines(stage, status, quote, payment) {
         return ["견적 단계가 완료되었습니다."];
     }
     if (stage === 3) {
+        if (aborted) {
+            return ["수리를 진행하지 않았습니다."];
+        }
         if (quote?.status === "REJECTED") {
             return ["견적 거부로 수리를 진행하지 않습니다."];
         }
@@ -182,6 +205,9 @@ function stageLines(stage, status, quote, payment) {
             return ["수리가 진행 중입니다.", "결제 전입니다."];
         }
         return ["수리가 완료되었습니다."];
+    }
+    if (aborted && status === "COMPLETED") {
+        return ["A/S가 중단되어 제품 반환까지 마쳤습니다."];
     }
     if (status === "AWAITING_SHIPMENT" || status === "AWAITING_PICKUP") {
         if (quote?.status !== "APPROVED" && quote?.status !== "REJECTED") {

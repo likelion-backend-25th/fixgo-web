@@ -271,11 +271,6 @@ function RepairView({
             <Notice>현재 상태에서는 수리 작업을 진행할 수 없습니다. 수리 시작 처리가 필요합니다.</Notice>
           )}
 
-          {canComplete && (
-            <Button disabled={pending} onClick={() => void runRepairAction(finishRepair)}>
-              {pending ? "처리 중…" : needsReturnRecovery ? "배송·수령 대기로 전환" : "수리 완료"}
-            </Button>
-          )}
           {completed && <Notice>{completedReceptionMessage(reception.status)}</Notice>}
 
           {agreed && (
@@ -335,6 +330,13 @@ function RepairView({
                 </dl>
               </div>
             </section>
+          )}
+          {canComplete && (
+            <div className="flex justify-end">
+              <Button disabled={pending} onClick={() => void runRepairAction(finishRepair)}>
+                {pending ? "처리 중…" : needsReturnRecovery ? "배송·수령 대기로 전환" : "수리 완료"}
+              </Button>
+            </div>
           )}
         </>
       )}

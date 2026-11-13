@@ -8,7 +8,7 @@ import { Notice } from "@/components/ui/Panel";
 import { Pagination } from "@/components/ui/Pagination";
 import { isAbortError } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
-import { fetchParts, isPartStatus, partStatusLabel, updatePartMinutes, updatePartPrice, updatePartStock, } from "@/lib/partApi";
+import { fetchParts, isPartStatus, partStatusLabel, updatePartMinutes, updatePartPrice, updatePartStatus, updatePartStock, } from "@/lib/partApi";
 const PAGE_SIZE = 20;
 export function PartListPage() {
     const [query, setQuery] = useState("");
@@ -85,9 +85,9 @@ export function PartListPage() {
                     setNotice("입고 수량을 반영했습니다.");
                     setError("");
                     setReloadKey((current) => current + 1);
-                } })), editing !== null && (_jsx(PartEditModal, { initial: editing, onClose: () => setEditing(null), onSaved: () => {
+                } })), editing !== null && (_jsx(PartEditModal, { initial: editing, onClose: () => setEditing(null), onSaved: (message) => {
                     setEditing(null);
-                    setNotice("부품 정보를 수정했습니다.");
+                    setNotice(message);
                     setError("");
                     setReloadKey((current) => current + 1);
                 } }))] }));
@@ -172,15 +172,30 @@ function PartEditModal({ initial, onClose, onSaved, }) {
         try {
             await updatePartPrice(initial.id, parsed);
             await updatePartMinutes(initial.id, parsedMinutes);
-            onSaved();
+            onSaved("부품 정보를 수정했습니다.");
         }
         catch (cause) {
             setError(cause instanceof Error ? cause.message : "부품 정보를 수정하지 못했습니다.");
             setSaving(false);
         }
     }
+    const previousStatus = initial.stockQuantity > 0 ? "ACTIVE" : "LOW_QUANTITY";
+    async function changeStatus(status) {
+        setSaving(true);
+        setError("");
+        try {
+            await updatePartStatus(initial.id, status);
+            onSaved(status === "DISCONTINUED" ? "부품을 단종 처리했습니다." : "부품 상태를 이전으로 되돌렸습니다.");
+        }
+        catch (cause) {
+            setError(cause instanceof Error ? cause.message : "부품 상태를 수정하지 못했습니다.");
+            setSaving(false);
+        }
+    }
     return (_jsx(Modal, { title: "\uBD80\uD488 \uC218\uC815", onClose: onClose, children: _jsxs("form", { className: "space-y-3", onSubmit: (event) => {
                 event.preventDefault();
                 void submit();
-            }, children: [_jsx(TextField, { label: "\uBD80\uD488\uBA85", value: initial.name, onChange: () => undefined, readOnly: true }), _jsx(TextField, { label: "\uB2E8\uAC00", value: price, onChange: setPrice }), _jsx(TextField, { label: "\uD45C\uC900 \uC791\uC5C5\uC2DC\uAC04(\uBD84)", value: minutes, onChange: setMinutes }), _jsx(TextField, { label: "\uC0C1\uD0DC", value: partStatusLabel(initial.status), onChange: () => undefined, readOnly: true }), error !== "" && _jsx(Notice, { tone: "error", children: error }), _jsxs("div", { className: "flex justify-end gap-2", children: [_jsx(Button, { variant: "ghost", onClick: onClose, children: "\uCDE8\uC18C" }), _jsx(Button, { type: "submit", disabled: saving, children: "\uC218\uC815" })] })] }) }));
+            }, children: [_jsx(TextField, { label: "\uBD80\uD488\uBA85", value: initial.name, onChange: () => undefined, readOnly: true }), _jsx(TextField, { label: "\uB2E8\uAC00", value: price, onChange: setPrice }), _jsx(TextField, { label: "\uD45C\uC900 \uC791\uC5C5\uC2DC\uAC04(\uBD84)", value: minutes, onChange: setMinutes }), _jsx(TextField, { label: "\uC0C1\uD0DC", value: partStatusLabel(initial.status), onChange: () => undefined, readOnly: true }), initial.status === "DISCONTINUED"
+                ? _jsx(Button, { type: "button", variant: "outline", disabled: saving, onClick: () => void changeStatus(previousStatus), children: `${partStatusLabel(previousStatus)}으로 되돌리기` })
+                : _jsx(Button, { type: "button", variant: "outline", disabled: saving, onClick: () => void changeStatus("DISCONTINUED"), children: "\uB2E8\uC885 \uCC98\uB9AC" }), error !== "" && _jsx(Notice, { tone: "error", children: error }), _jsxs("div", { className: "flex justify-end gap-2", children: [_jsx(Button, { variant: "ghost", onClick: onClose, children: "\uCDE8\uC18C" }), _jsx(Button, { type: "submit", disabled: saving, children: "\uC218\uC815" })] })] }) }));
 }

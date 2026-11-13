@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
+import { useListParams } from "@/hooks/useListParams";
 import { Button } from "@/components/ui/Button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { SelectBox, TextField } from "@/components/ui/Field";
@@ -82,13 +83,14 @@ function ShipmentHistorySection({
   history: { data: ShipmentHistoryItem[] | null; loading: boolean; error: string };
 }) {
   const navigate = useNavigate();
+  const filters = useListParams();
   const { startDate, endDate } = useStatisticsPeriod();
-  const [status, setStatus] = useState<ShipmentFilter>("ALL");
-  const [method, setMethod] = useState<MethodFilter>("ALL");
-  const [keyword, setKeyword] = useState("");
-  const [appliedKeyword, setAppliedKeyword] = useState("");
-  const [sortKey, setSortKey] = useState<ShipmentSortKey | null>(null);
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const status = readShipmentFilter(filters.text("status", "ALL"));
+  const method = readMethodFilter(filters.text("method", "ALL"));
+  const appliedKeyword = filters.text("q");
+  const [keyword, setKeyword] = useState(appliedKeyword);
+  const sortKey = readShipmentSort(filters.text("sort"));
+  const sortDir = filters.text("dir") === "desc" ? "desc" : "asc";
   const rows = useMemo(
     () => sortShipments(filterShipments(history.data ?? [], status, method, appliedKeyword), sortKey, sortDir),
     [appliedKeyword, history.data, method, sortDir, sortKey, status],
@@ -99,12 +101,8 @@ function ShipmentHistorySection({
   );
 
   function toggleSort(key: ShipmentSortKey) {
-    if (sortKey === key) {
-      setSortDir((current) => (current === "asc" ? "desc" : "asc"));
-      return;
-    }
-    setSortKey(key);
-    setSortDir("asc");
+    const nextDir = sortKey === key ? (sortDir === "asc" ? "desc" : "asc") : "asc";
+    filters.replace({ sort: key, dir: nextDir, page: null });
   }
   return (
     <section className="mt-4">
@@ -114,13 +112,19 @@ function ShipmentHistorySection({
           className="flex flex-wrap items-center gap-2"
           onSubmit={(event) => {
             event.preventDefault();
-            setAppliedKeyword(keyword);
+            filters.replace({ q: keyword.trim(), page: null });
           }}
         >
           <TextField value={keyword} onChange={setKeyword} placeholder="접수번호, 고객명" className="w-48" />
           <Button type="submit">검색</Button>
-          <SelectBox value={method} onChange={(value) => setMethod(readMethodFilter(value))} options={methodFilters} />
-          <SelectBox value={status} onChange={(value) => setStatus(readShipmentFilter(value))} options={shipmentFilters} />
+          <SelectBox value={method} onChange={(value) => {
+            const next = readMethodFilter(value);
+            filters.replace({ method: next === "ALL" ? null : next, page: null });
+          }} options={methodFilters} />
+          <SelectBox value={status} onChange={(value) => {
+            const next = readShipmentFilter(value);
+            filters.replace({ status: next === "ALL" ? null : next, page: null });
+          }} options={shipmentFilters} />
         </form>
       </div>
       <DataTable
@@ -225,6 +229,13 @@ function filterShipments(
     const keywordMatched = includesText(row.receptionNumber, keyword) || includesText(row.customerName, keyword);
     return statusMatched && methodMatched && keywordMatched;
   });
+}
+
+function readShipmentSort(value: string): ShipmentSortKey | null {
+  if (value === "number" || value === "customer" || value === "method" || value === "status" || value === "date") {
+    return value;
+  }
+  return null;
 }
 
 function readMethodFilter(value: string): MethodFilter {

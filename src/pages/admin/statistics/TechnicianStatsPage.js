@@ -1,5 +1,6 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useMemo, useState } from "react";
+import { useListParams } from "@/hooks/useListParams";
 import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
 import { TextField } from "@/components/ui/Field";
@@ -17,26 +18,24 @@ import { useStatisticsResource } from "@/pages/admin/statistics/useStatisticsRes
 export function TechnicianStatsPage() {
     const { startDate, endDate, invalid } = useStatisticsPeriod();
     const { data, loading, error } = useStatisticsResource(fetchTechnicianStatistics, startDate, endDate, invalid);
-    const [keyword, setKeyword] = useState("");
-    const [appliedKeyword, setAppliedKeyword] = useState("");
-    const [sortKey, setSortKey] = useState(null);
-    const [sortDir, setSortDir] = useState("desc");
+    const filters = useListParams();
+    const appliedKeyword = filters.text("q");
+    const [keyword, setKeyword] = useState(appliedKeyword);
+    const sortRaw = filters.text("sort");
+    const sortKey = sortRaw === "name" || sortRaw === "assigned" || sortRaw === "done" || sortRaw === "doing" || sortRaw === "avg" || sortRaw === "sales" ? sortRaw : null;
+    const sortDir = filters.text("dir") === "desc" ? "desc" : "asc";
     const rows = useMemo(() => {
         const matched = (data ?? []).filter((row) => includesText(row.technicianName, appliedKeyword));
         return sortTechnicians(matched, sortKey, sortDir);
     }, [appliedKeyword, data, sortDir, sortKey]);
     const list = useStatisticsPage(rows, `${appliedKeyword}|${sortKey ?? ""}|${sortDir}|${startDate}|${endDate}`);
     function toggleSort(key) {
-        if (sortKey === key) {
-            setSortDir((current) => (current === "asc" ? "desc" : "asc"));
-            return;
-        }
-        setSortKey(key);
-        setSortDir("asc");
+        const nextDir = sortKey === key ? (sortDir === "asc" ? "desc" : "asc") : "asc";
+        filters.replace({ sort: key, dir: nextDir, page: null });
     }
     return (_jsxs("div", { children: [_jsx(StatisticsBackLink, {}), _jsx(PeriodFilter, {}), _jsxs("form", { className: "mb-4 flex flex-wrap items-center gap-2", onSubmit: (event) => {
                     event.preventDefault();
-                    setAppliedKeyword(keyword);
+                    filters.replace({ q: keyword.trim(), page: null });
                 }, children: [_jsx(TextField, { value: keyword, onChange: setKeyword, placeholder: "\uAE30\uC0AC\uBA85", className: "w-40" }), _jsx(Button, { type: "submit", children: "\uAC80\uC0C9" })] }), error !== "" && _jsx(Notice, { tone: "error", children: error }), _jsx(DataTable, { columns: [
                     {
                         key: "name",

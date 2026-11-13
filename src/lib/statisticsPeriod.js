@@ -10,8 +10,10 @@ export function isIsoDate(value) {
     const date = new Date(year, month - 1, day);
     return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
 }
-export const STATISTICS_PRESETS = ["today", "week", "month", "quarter", "half", "year"];
+export const STATISTICS_ALL_START = "2025-01-01";
+export const STATISTICS_PRESETS = ["all", "today", "week", "month", "quarter", "half", "year"];
 export const STATISTICS_PRESET_LABEL = {
+    all: "전체",
     today: "오늘",
     week: "1주일",
     month: "1개월",
@@ -19,9 +21,12 @@ export const STATISTICS_PRESET_LABEL = {
     half: "6개월",
     year: "1년",
 };
-// 종료일은 오늘이다. 1주일은 오늘을 포함한 7일이고, 개월 단위는 같은 날짜까지 거슬러 올라간다.
+// 종료일은 오늘이다. 전체는 저장된 접수보다 앞선 고정일이고, 1주일은 오늘을 포함한 7일, 개월 단위는 같은 날짜까지 거슬러 올라간다.
 export function periodForPreset(preset, today = new Date()) {
     const end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    if (preset === "all") {
+        return { startDate: STATISTICS_ALL_START, endDate: toIsoDate(end) };
+    }
     const start = new Date(end);
     if (preset === "week") {
         start.setDate(start.getDate() - 6);

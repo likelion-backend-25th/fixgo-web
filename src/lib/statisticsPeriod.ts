@@ -14,7 +14,7 @@ export function isIsoDate(value: string): boolean {
   return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
 }
 
-export const STATISTICS_ALL_START = "2000-01-01";
+export const STATISTICS_ALL_START = "2025-01-01";
 
 export const STATISTICS_PRESETS = ["all", "today", "week", "month", "quarter", "half", "year"] as const;
 

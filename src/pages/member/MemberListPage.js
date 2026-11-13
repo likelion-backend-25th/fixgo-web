@@ -9,16 +9,18 @@ import { Notice } from "@/components/ui/Panel";
 import { Pagination } from "@/components/ui/Pagination";
 import { compareText } from "@/lib/guards";
 import { includesText } from "@/lib/format";
-import { usePageSlice } from "@/lib/usePageSlice";
+import { useListParams } from "@/hooks/useListParams";
 import { fetchMembers, issueMember, memberRoleLabel, memberRoles, memberStatusLabel, parseMemberRole } from "@/lib/memberApi";
 import { useSessionStore } from "@/stores/useSessionStore";
 export function MemberListPage() {
     const navigate = useNavigate();
+    const filters = useListParams();
     const role = useSessionStore((state) => state.user?.role);
-    const [query, setQuery] = useState("");
-    const [roleFilter, setRoleFilter] = useState("");
-    const [sortKey, setSortKey] = useState("name");
-    const [sortDir, setSortDir] = useState("asc");
+    const query = filters.text("q");
+    const roleFilter = parseMemberRole(filters.text("role")) ?? "";
+    const sortKey = filters.text("sort", "name");
+    const sortDir = filters.text("dir") === "desc" ? "desc" : "asc";
+    const page = filters.page();
     const [open, setOpen] = useState(false);
     const [notice, setNotice] = useState("");
     const [members, setMembers] = useState([]);
@@ -49,27 +51,23 @@ export function MemberListPage() {
             return sortDir === "asc" ? result : -result;
         });
     }, [members, query, roleFilter, sortDir, sortKey]);
-    const table = usePageSlice(filtered);
+    const pageCount = Math.max(1, Math.ceil(filtered.length / 20));
+    const safePage = Math.min(page, pageCount);
+    const slice = filtered.slice((safePage - 1) * 20, safePage * 20);
     const columns = [
         { key: "name", header: "이름", sortable: true, render: (row) => row.name },
         { key: "email", header: "이메일", sortable: true, render: (row) => row.email },
         { key: "role", header: "역할", sortable: true, render: (row) => memberRoleLabel(row.role) },
         { key: "status", header: "상태", sortable: true, render: (row) => memberStatusLabel(row.status) },
     ];
-    return (_jsxs("div", { children: [notice !== "" && _jsx(Notice, { children: notice }), error !== "" && _jsx(Notice, { tone: "error", children: error }), _jsxs("div", { className: "mb-4 flex flex-wrap items-center gap-2", children: [_jsx(TextField, { value: query, onChange: (value) => {
-                            setQuery(value);
-                            table.setPage(1);
-                        }, placeholder: "\uC774\uB984, \uC774\uBA54\uC77C \uAC80\uC0C9", className: "w-64" }), _jsx(SelectBox, { value: roleFilter, onChange: (value) => {
-                            setRoleFilter(parseMemberRole(value) ?? "");
-                            table.setPage(1);
-                        }, options: [{ value: "", label: "역할 전체" }, ...memberRoles] }), role === "ADMIN" && (_jsx(Button, { className: "ml-auto", disabled: loading, onClick: () => setOpen(true), children: "\uACC4\uC815 \uBC1C\uAE09" }))] }), _jsx(DataTable, { columns: columns, rows: table.slice, rowKey: (row) => String(row.id), emptyText: loading ? "직원 목록을 불러오는 중입니다." : error !== "" ? "직원 목록을 불러오지 못했습니다." : "조회 결과가 없습니다.", sortKey: sortKey, sortDir: sortDir, onSort: (key) => {
-                    if (sortKey === key) {
-                        setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
-                        return;
-                    }
-                    setSortKey(key);
-                    setSortDir("asc");
-                }, onRowClick: (row) => navigate(`/member/${row.id}`) }), _jsx(Pagination, { page: table.page, pageCount: table.pageCount, onPageChange: table.setPage }), open && (_jsx(IssueAccountModal, { onClose: () => setOpen(false), onIssued: (member) => {
+    return (_jsxs("div", { children: [notice !== "" && _jsx(Notice, { children: notice }), error !== "" && _jsx(Notice, { tone: "error", children: error }), _jsxs("div", { className: "mb-4 flex flex-wrap items-center gap-2", children: [_jsx(TextField, { value: query, onChange: (value) => filters.replace({ q: value, page: null }), placeholder: "\uC774\uB984, \uC774\uBA54\uC77C \uAC80\uC0C9", className: "w-64" }), _jsx(SelectBox, { value: roleFilter, onChange: (value) => filters.replace({ role: parseMemberRole(value) ?? null, page: null }), options: [{ value: "", label: "역할 전체" }, ...memberRoles] }), role === "ADMIN" && (_jsx(Button, { className: "ml-auto", disabled: loading, onClick: () => setOpen(true), children: "\uACC4\uC815 \uBC1C\uAE09" }))] }), _jsx(DataTable, { columns: columns, rows: slice, rowKey: (row) => String(row.id), emptyText: loading ? "직원 목록을 불러오는 중입니다." : error !== "" ? "직원 목록을 불러오지 못했습니다." : "조회 결과가 없습니다.", sortKey: sortKey, sortDir: sortDir, onSort: (key) => {
+                    const nextDir = sortKey === key ? (sortDir === "asc" ? "desc" : "asc") : "asc";
+                    filters.replace({
+                        sort: key === "name" ? null : key,
+                        dir: nextDir === "asc" ? null : nextDir,
+                        page: null,
+                    });
+                }, onRowClick: (row) => navigate(`/member/${row.id}`) }), _jsx(Pagination, { page: safePage, pageCount: pageCount, onPageChange: filters.setPage }), open && (_jsx(IssueAccountModal, { onClose: () => setOpen(false), onIssued: (member) => {
                     setMembers((rows) => [...rows.filter((row) => row.id !== member.id), member]);
                     setOpen(false);
                     setNotice("계정이 발급되었습니다.");
@@ -91,7 +89,6 @@ function IssueAccountModal({ onClose, onIssued }) {
     const [phone, setPhone] = useState("");
     const [address, setAddress] = useState("");
     const [role, setRole] = useState("ROLE_RECEPTIONIST");
-    const [profileImgUrl, setProfileImgUrl] = useState("");
     const [error, setError] = useState("");
     const [pending, setPending] = useState(false);
     async function issue() {
@@ -104,7 +101,7 @@ function IssueAccountModal({ onClose, onIssued }) {
         try {
             onIssued(await issueMember({
                 email: email.trim(), password, name: name.trim(), phone: phone.trim(),
-                address: address.trim(), role, profileImgUrl: profileImgUrl.trim(),
+                address: address.trim(), role, profileImgUrl: "",
             }));
         }
         catch (cause) {
@@ -116,5 +113,5 @@ function IssueAccountModal({ onClose, onIssued }) {
     }
     return (_jsx(Modal, { title: "\uACC4\uC815 \uBC1C\uAE09", onClose: () => { if (!pending)
             onClose(); }, children: _jsxs("form", { className: "space-y-3", onSubmit: (event) => { event.preventDefault(); void issue(); }, children: [_jsx(TextField, { label: "\uC774\uBA54\uC77C", type: "email", value: email, onChange: setEmail }), _jsx(TextField, { label: "\uCD08\uAE30 \uBE44\uBC00\uBC88\uD638", type: "password", value: password, onChange: setPassword }), _jsx(TextField, { label: "\uC774\uB984", value: name, onChange: setName }), _jsx(TextField, { label: "\uC5F0\uB77D\uCC98", value: phone, onChange: setPhone }), _jsx(TextField, { label: "\uC8FC\uC18C", value: address, onChange: setAddress }), _jsx(SelectBox, { "aria-label": "\uC5ED\uD560", value: role, options: [...memberRoles], onChange: (value) => { const next = parseMemberRole(value); if (next !== undefined)
-                        setRole(next); } }), _jsx(TextField, { label: "\uD504\uB85C\uD544 \uC0AC\uC9C4 URL", type: "url", value: profileImgUrl, onChange: setProfileImgUrl }), error !== "" && _jsx(Notice, { tone: "error", children: error }), _jsx("div", { className: "flex justify-end", children: _jsx(Button, { type: "submit", disabled: pending, children: pending ? "발급 중…" : "계정 발급" }) })] }) }));
+                        setRole(next); } }), error !== "" && _jsx(Notice, { tone: "error", children: error }), _jsx("div", { className: "flex justify-end", children: _jsx(Button, { type: "submit", disabled: pending, children: pending ? "발급 중…" : "계정 발급" }) })] }) }));
 }

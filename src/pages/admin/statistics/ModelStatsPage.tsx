@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router";
+import { useNavigate } from "react-router";
+import { useListParams } from "@/hooks/useListParams";
 import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
 import { SelectBox, TextField } from "@/components/ui/Field";
@@ -28,13 +29,15 @@ const groupFilters: { value: GroupFilter; label: string }[] = [
 ];
 
 export function ModelStatsPage() {
+  const navigate = useNavigate();
   const { startDate, endDate, invalid } = useStatisticsPeriod();
   const { data, loading, error } = useStatisticsResource(fetchModelStatistics, startDate, endDate, invalid);
-  const [keyword, setKeyword] = useState("");
-  const [appliedKeyword, setAppliedKeyword] = useState("");
-  const [group, setGroup] = useState<GroupFilter>("ALL");
-  const [sortKey, setSortKey] = useState<ModelSortKey | null>(null);
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const filters = useListParams();
+  const appliedKeyword = filters.text("q");
+  const [keyword, setKeyword] = useState(appliedKeyword);
+  const group = readGroupFilter(filters.text("group", "ALL"));
+  const sortKey = readModelSort(filters.text("sort"));
+  const sortDir = filters.text("dir") === "desc" ? "desc" : "asc";
   const query = statisticsSearch(startDate, endDate);
   const rows = useMemo(() => {
     const matched = (data ?? []).filter((row) => includesText(row.modelName, appliedKeyword) && matchesGroup(row, group));
@@ -43,12 +46,8 @@ export function ModelStatsPage() {
   const list = useStatisticsPage(rows, `${appliedKeyword}|${group}|${sortKey ?? ""}|${sortDir}|${startDate}|${endDate}`);
 
   function toggleSort(key: ModelSortKey) {
-    if (sortKey === key) {
-      setSortDir((current) => (current === "asc" ? "desc" : "asc"));
-      return;
-    }
-    setSortKey(key);
-    setSortDir("asc");
+    const nextDir = sortKey === key ? (sortDir === "asc" ? "desc" : "asc") : "asc";
+    filters.replace({ sort: key, dir: nextDir, page: null });
   }
 
   return (
@@ -59,12 +58,12 @@ export function ModelStatsPage() {
         className="mb-4 flex flex-wrap items-center gap-2"
         onSubmit={(event) => {
           event.preventDefault();
-          setAppliedKeyword(keyword);
+          filters.replace({ q: keyword.trim(), page: null });
         }}
       >
         <TextField value={keyword} onChange={setKeyword} placeholder="모델명" className="w-40" />
         <Button type="submit">검색</Button>
-        <SelectBox value={group} onChange={(value) => setGroup(readGroupFilter(value))} options={groupFilters} />
+        <SelectBox value={group} onChange={(value) => filters.replace({ group: readGroupFilter(value) === "ALL" ? null : readGroupFilter(value), page: null })} options={groupFilters} />
       </form>
       {error !== "" && <Notice tone="error">{error}</Notice>}
       <DataTable
@@ -93,18 +92,12 @@ export function ModelStatsPage() {
           {
             key: "symptom",
             header: "주요증상",
-            render: (row) => (
-              <Link
-                className="text-blue-600"
-                to={`/admin/statistics/models/${row.modelId}?${query}&modelName=${encodeURIComponent(row.modelName)}`}
-              >
-                {row.mainSymptom ?? "증상 분포"}
-              </Link>
-            ),
+            render: (row) => row.mainSymptom ?? "증상 분포",
           },
         ]}
         rows={list.visible}
         rowKey={(row) => String(row.modelId)}
+        onRowClick={(row) => navigate(`/admin/statistics/models/${row.modelId}?${query}&modelName=${encodeURIComponent(row.modelName)}`)}
         emptyText={invalid ? "조회 기간을 확인해 주세요." : loading ? "모델 통계를 불러오는 중입니다." : "조회 결과가 없습니다."}
       />
       <Pagination page={list.page} pageCount={list.pageCount} onPageChange={list.setPage} />
@@ -114,6 +107,13 @@ export function ModelStatsPage() {
 
 function matchesGroup(row: ModelStatistics, group: GroupFilter): boolean {
   return group === "ALL" || row.productGroup === group;
+}
+
+function readModelSort(value: string): ModelSortKey | null {
+  if (value === "model" || value === "received" || value === "done" || value === "doing") {
+    return value;
+  }
+  return null;
 }
 
 function readGroupFilter(value: string): GroupFilter {

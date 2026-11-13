@@ -9,7 +9,7 @@ import { isAbortError } from "@/lib/apiClient";
 import { categoryLabel, fetchAssignableTechnicians, searchProductsBySerialPage } from "@/lib/asReceptionApi";
 import { searchCustomersPage } from "@/lib/customerApi";
 import { formatDurationMinutes } from "@/lib/format";
-import { loadDaumPostcode, selectedAddress } from "@/lib/daumPostcode";
+import { embedDaumPostcode, selectedAddress } from "@/lib/daumPostcode";
 import type { AssignableTechnician, CustomerSummary, ProductSummary, TechnicianSort } from "@/types/asReception";
 
 export type LookupKind = "customer" | "serial" | "tech" | "post" | null;
@@ -402,24 +402,17 @@ function PostLookup({ onClose, onApply }: Pick<AsLookupModalsProps, "onClose" | 
       return;
     }
     let cancelled = false;
-    loadDaumPostcode()
-      .then((Postcode) => {
-        if (cancelled) {
-          return;
-        }
-        frame.replaceChildren();
-        new Postcode({
-          width: "100%",
-          height: "100%",
-          oncomplete: (data) => {
-            onApplyRef.current({
-              postalCode: data.zonecode,
-              address: selectedAddress(data),
-            });
-            onCloseRef.current();
-          },
-        }).embed(frame);
-      })
+    embedDaumPostcode(frame, {
+      width: "100%",
+      height: "100%",
+      oncomplete: (data) => {
+        onApplyRef.current({
+          postalCode: data.zonecode,
+          address: selectedAddress(data),
+        });
+        onCloseRef.current();
+      },
+    })
       .catch((cause: unknown) => {
         if (!cancelled) {
           setError(cause instanceof Error ? cause.message : "카카오 우편번호 서비스를 불러오지 못했습니다.");
