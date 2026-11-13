@@ -158,7 +158,7 @@ function RepairView({
       {role === "TECHNICIAN" && !inspectionEnded && (
         <ProgressTabs receptionId={reception.id} current="repair" />
       )}
-      {repair === null && <Notice>아직 A/S 진행 전입니다.</Notice>}
+      {repair === null && <Notice tone="error">아직 A/S 진행 전입니다.</Notice>}
       {repair !== null && loading && <Notice>수리 정보를 불러오는 중입니다.</Notice>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
       {detail !== null && inspectionEnded && (
@@ -256,7 +256,7 @@ function RepairView({
 
           {approved && role === "TECHNICIAN" && (
             <div className="flex items-center justify-between gap-3">
-              <Notice>
+              <Notice follow={false}>
                 {detail.warrantyResult === "FREE"
                   ? "무상 수리로 확정되어 수리 대기입니다. 수리를 시작하면 수리 중으로 바뀝니다."
                   : "고객이 견적을 승인했습니다. 수리를 시작하면 수리 중으로 바뀝니다."}
@@ -268,7 +268,7 @@ function RepairView({
           )}
 
           {!rejected && !agreed && !approved && (
-            <Notice>현재 상태에서는 수리 작업을 진행할 수 없습니다. 수리 시작 처리가 필요합니다.</Notice>
+            <Notice tone="error">현재 상태에서는 수리 작업을 진행할 수 없습니다. 수리 시작 처리가 필요합니다.</Notice>
           )}
 
           {completed && <Notice>{completedReceptionMessage(reception.status)}</Notice>}

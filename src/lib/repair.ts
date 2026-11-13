@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/apiClient";
+import { apiFetch, isId, isRecord } from "@/lib/apiClient";
 
 const API_BASE = "/api/v1/as/repairs";
 const WORK_API_BASE = "/api/v1/as/repair-works";
@@ -137,6 +137,44 @@ export function warrantyResultLabel(result: WarrantyResult): string {
 // Error Handling
 // ==============================
 
+function parseRepairWorkParts(value: unknown): Map<number, RepairPresetPart[]> {
+  if (!isRecord(value) || !Array.isArray(value.repairWorks)) {
+    throw new Error("수리 이력 응답이 올바르지 않습니다.");
+  }
+  const partsByWorkId = new Map<number, RepairPresetPart[]>();
+  for (const work of value.repairWorks) {
+    if (!isRecord(work) || !isId(work.repairWorkId) || !Array.isArray(work.usedParts)) {
+      throw new Error("수리 이력 응답이 올바르지 않습니다.");
+    }
+    partsByWorkId.set(work.repairWorkId, work.usedParts.map(parseHistoryPart));
+  }
+  return partsByWorkId;
+}
+
+function parseHistoryPart(value: unknown): RepairPresetPart {
+  if (
+    !isRecord(value)
+    || !isId(value.partId)
+    || typeof value.partName !== "string"
+    || !isWholeNumber(value.quantity)
+    || !isWholeNumber(value.unitPrice)
+  ) {
+    throw new Error("수리 이력 응답이 올바르지 않습니다.");
+  }
+  return {
+    partId: value.partId,
+    partName: value.partName,
+    quantity: value.quantity,
+    stockQuantity: 0,
+    standardMinutes: 0,
+    unitPrice: value.unitPrice,
+  };
+}
+
+function isWholeNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
 async function handleResponse<T>(
   response: Response,
   fallbackMessage: string,
@@ -210,6 +248,19 @@ export async function fetchRepairWorks(
     response,
     "수리 작업 목록을 불러오지 못했습니다.",
   );
+}
+
+// 작업에 실제로 등록된 부품만 돌려준다. 프리셋에 묶인 전체를 다시 펼치지 않는다.
+export async function fetchRepairWorkParts(
+  receptionId: number,
+  signal?: AbortSignal,
+): Promise<Map<number, RepairPresetPart[]>> {
+  const response = await apiFetch(`/api/v1/as/repair-histories/${receptionId}`, {
+    method: "GET",
+    signal,
+  });
+  const body = await handleResponse<unknown>(response, "수리에 사용한 부품을 불러오지 못했습니다.");
+  return parseRepairWorkParts(body);
 }
 
 // 수리 작업 등록

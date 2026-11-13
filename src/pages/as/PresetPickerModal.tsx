@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { categoryLabel, fetchProduct } from "@/lib/asReceptionApi";
 import { won } from "@/lib/format";
+import { fetchCompatiblePartIds } from "@/lib/partApi";
 import {
   createRepairPreset,
   fetchRepairPresetParts,
@@ -26,11 +27,12 @@ export interface InspectionPresetSelection {
 
 interface Props {
   productId: number;
+  productModelId: number;
   onClose: () => void;
   onApply: (selection: InspectionPresetSelection) => void | Promise<void>;
 }
 
-export function PresetPickerModal({ productId, onClose, onApply }: Props) {
+export function PresetPickerModal({ productId, productModelId, onClose, onApply }: Props) {
   const [symptoms, setSymptoms] = useState<SymptomPreset[]>([]);
   const [symptomsLoading, setSymptomsLoading] = useState(true);
   const [productCategory, setProductCategory] = useState<string | null>(null);
@@ -44,6 +46,9 @@ export function PresetPickerModal({ productId, onClose, onApply }: Props) {
   const [selectedPresetIds, setSelectedPresetIds] = useState<number[]>([]);
   const [partsByPresetId, setPartsByPresetId] = useState<Map<number, RepairPresetPart[]>>(new Map());
   const [partsLoadingIds, setPartsLoadingIds] = useState<number[]>([]);
+  const [compatibleIds, setCompatibleIds] = useState<Set<number> | null>(null);
+  const [compatibleReady, setCompatibleReady] = useState(false);
+  const [deselectedPartKeys, setDeselectedPartKeys] = useState<Set<string>>(() => new Set());
   const [applying, setApplying] = useState(false);
   const [creating, setCreating] = useState(false);
   const [presetReloadKey, setPresetReloadKey] = useState(0);
@@ -65,6 +70,22 @@ export function PresetPickerModal({ productId, onClose, onApply }: Props) {
 
     return () => controller.abort();
   }, [productId]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchCompatiblePartIds(productModelId, controller.signal)
+      .then((ids) => {
+        if (!controller.signal.aborted) setCompatibleIds(ids);
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted) return;
+        setError(cause instanceof Error ? cause.message : "호환 부품을 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setCompatibleReady(true);
+      });
+    return () => controller.abort();
+  }, [productModelId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -97,6 +118,7 @@ export function PresetPickerModal({ productId, onClose, onApply }: Props) {
       setSelectedPresetIds([]);
       setPartsByPresetId(new Map());
       setPartsLoadingIds([]);
+      setDeselectedPartKeys(new Set());
     }
 
     fetchRepairPresetsBySymptom(selectedSymptomId, controller.signal)
@@ -138,8 +160,10 @@ export function PresetPickerModal({ productId, onClose, onApply }: Props) {
     .filter((preset): preset is RepairPreset => preset !== undefined);
   const partsLoading = selectedPresetIds.some((id) => partsLoadingIds.includes(id));
   const partsTotal = selectedPresets.reduce((sum, preset) => {
-    const parts = partsByPresetId.get(preset.id) ?? [];
-    return sum + parts.reduce((partSum, part) => partSum + part.unitPrice * part.quantity, 0);
+    const parts = compatibleParts(partsByPresetId.get(preset.id), compatibleIds);
+    return sum + parts.reduce((partSum, part) => (
+      deselectedPartKeys.has(partKey(preset.id, part.partId)) ? partSum : partSum + part.unitPrice * part.quantity
+    ), 0);
   }, 0);
 
   async function togglePreset(preset: RepairPreset) {
@@ -168,16 +192,27 @@ export function PresetPickerModal({ productId, onClose, onApply }: Props) {
     }
   }
 
+  function togglePart(presetId: number, partId: number) {
+    setDeselectedPartKeys((current) => {
+      const next = new Set(current);
+      const key = partKey(presetId, partId);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
   async function apply() {
     if (selectedSymptom === undefined || selectedPresets.length === 0) {
       setError("고장 증상과 수리 프리셋을 선택해 주세요.");
       return;
     }
-    if (partsLoading) return;
+    if (partsLoading || !compatibleReady || compatibleIds === null) return;
 
     const choices = selectedPresets.map((preset) => ({
       preset,
-      parts: partsByPresetId.get(preset.id) ?? [],
+      parts: compatibleParts(partsByPresetId.get(preset.id), compatibleIds)
+        .filter((part) => !deselectedPartKeys.has(partKey(preset.id, part.partId))),
     }));
 
     setApplying(true);
@@ -195,7 +230,7 @@ export function PresetPickerModal({ productId, onClose, onApply }: Props) {
   return (
     <Modal title="수리 프리셋 불러오기" wide onClose={onClose}>
       <p className="mb-3 text-sm text-neutral-500">
-        {`${productCategory === null ? "고장 증상" : `${productCategory} 고장 증상`}을 고른 뒤, 그 증상의 수리 프리셋을 여러 개 선택할 수 있습니다.`}
+        {`${productCategory === null ? "고장 증상" : `${productCategory} 고장 증상`}을 고른 뒤, 그 증상의 수리 프리셋을 여러 개 선택할 수 있습니다. 부품은 접수 모델과 호환되는 것만 보이며, 필요한 것만 골라 적용합니다.`}
       </p>
       <div className="grid gap-3 lg:grid-cols-3">
         <PickerColumn
@@ -242,29 +277,48 @@ export function PresetPickerModal({ productId, onClose, onApply }: Props) {
             ))
           )}
         </PickerColumn>
-        <PickerColumn title="3. 소모 부품">
+        <PickerColumn title="3. 소모 부품 (선택)">
           {selectedPresets.length === 0 ? (
             <EmptyText>수리 프리셋을 선택하면 부품이 표시됩니다.</EmptyText>
           ) : (
             <>
               {selectedPresets.map((preset) => {
-                const parts = partsByPresetId.get(preset.id);
+                const linked = partsByPresetId.get(preset.id);
+                const parts = compatibleParts(linked, compatibleIds);
                 return (
                   <div key={preset.id} className="space-y-2">
                     <p className="text-sm font-medium">{preset.name}</p>
-                    {parts === undefined ? (
+                    {linked === undefined || !compatibleReady ? (
                       <EmptyText>불러오는 중입니다.</EmptyText>
-                    ) : parts.length === 0 ? (
+                    ) : compatibleIds === null ? (
+                      <EmptyText>호환 부품을 확인하지 못했습니다.</EmptyText>
+                    ) : linked.length === 0 ? (
                       <EmptyText>이 프리셋에 등록된 부품이 없습니다.</EmptyText>
+                    ) : parts.length === 0 ? (
+                      <EmptyText>이 모델과 호환되는 부품이 없습니다.</EmptyText>
                     ) : (
-                      parts.map((part) => (
-                        <div key={part.partId} className="rounded-lg border border-neutral-200 px-3 py-2 text-sm">
-                          <p className="font-medium">{part.partName}</p>
-                          <p className="mt-1 text-neutral-500">
-                            {part.quantity}개 · {won(part.unitPrice)} · {part.standardMinutes}분
-                          </p>
-                        </div>
-                      ))
+                      parts.map((part) => {
+                        const checked = !deselectedPartKeys.has(partKey(preset.id, part.partId));
+                        return (
+                          <label
+                            key={part.partId}
+                            className={`flex cursor-pointer gap-2 rounded-lg border px-3 py-2 text-sm ${checked ? "border-blue-500 bg-blue-50" : "border-neutral-200 bg-white"}`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="mt-1 accent-blue-600"
+                              checked={checked}
+                              onChange={() => togglePart(preset.id, part.partId)}
+                            />
+                            <span>
+                              <span className="block font-medium">{part.partName}</span>
+                              <span className="mt-1 block text-neutral-500">
+                                {part.quantity}개 · {won(part.unitPrice)} · {part.standardMinutes}분
+                              </span>
+                            </span>
+                          </label>
+                        );
+                      })
                     )}
                   </div>
                 );
@@ -281,7 +335,7 @@ export function PresetPickerModal({ productId, onClose, onApply }: Props) {
           <Button variant="ghost" onClick={onClose}>취소</Button>
           <Button
             onClick={() => void apply()}
-            disabled={applying || partsLoading || selectedSymptom === undefined || selectedPresets.length === 0}
+            disabled={applying || partsLoading || !compatibleReady || compatibleIds === null || selectedSymptom === undefined || selectedPresets.length === 0}
           >
             {applying ? "반영 중…" : `점검 항목에 추가${selectedPresets.length > 1 ? ` (${selectedPresets.length})` : ""}`}
           </Button>
@@ -299,6 +353,18 @@ export function PresetPickerModal({ productId, onClose, onApply }: Props) {
       )}
     </Modal>
   );
+}
+
+function partKey(presetId: number, partId: number): string {
+  return `${presetId}:${partId}`;
+}
+
+function compatibleParts(
+  parts: RepairPresetPart[] | undefined,
+  compatibleIds: Set<number> | null,
+): RepairPresetPart[] {
+  if (parts === undefined || compatibleIds === null) return [];
+  return parts.filter((part) => compatibleIds.has(part.partId));
 }
 
 function PickerColumn({

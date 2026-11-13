@@ -177,11 +177,11 @@ export function PaymentDetailPage() {
       )}
 
       {detail.status === "UNPAID" && detail.paymentStatus === "IN_PROGRESS" && (
-        <Notice>결제 결과를 확인하고 있습니다. 확인이 끝날 때까지 다시 결제할 수 없습니다.</Notice>
+        <Notice tone="error">결제 결과를 확인하고 있습니다. 확인이 끝날 때까지 다시 결제할 수 없습니다.</Notice>
       )}
 
       {canManage && detail.status === "UNPAID" && detail.paymentStatus !== "IN_PROGRESS" && !canPayByCash(detail) && (
-        <Notice>발급된 가상계좌가 있어 현금으로 받을 수 없습니다. 가상계좌는 먼저 취소해 주세요.</Notice>
+        <Notice tone="error">발급된 가상계좌가 있어 현금으로 받을 수 없습니다. 가상계좌는 먼저 취소해 주세요.</Notice>
       )}
 
       {canManage && detail.refundable && (

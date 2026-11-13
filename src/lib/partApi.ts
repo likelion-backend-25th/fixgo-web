@@ -61,6 +61,32 @@ export async function fetchParts(
   return { ...page, content: details };
 }
 
+// 접수 모델과 호환 관계가 있는 부품 id만 모은다. 상세는 다시 조회하지 않는다.
+export async function fetchCompatiblePartIds(
+  productModelId: number,
+  signal?: AbortSignal,
+): Promise<Set<number>> {
+  const ids = new Set<number>();
+  let page = 0;
+  let totalPages = 1;
+  while (page < totalPages) {
+    const params = new URLSearchParams({
+      page: String(page),
+      size: "200",
+      productModelId: String(productModelId),
+    });
+    const response = await apiFetch(`/api/v1/part?${params.toString()}`, { signal });
+    const body = await readApiJson(response, "호환 부품을 불러오지 못했습니다.");
+    const result = mapSpringPage(body, parseBrief, "호환 부품 응답이 올바르지 않습니다.");
+    for (const part of result.content) {
+      ids.add(part.id);
+    }
+    totalPages = result.totalPages;
+    page += 1;
+  }
+  return ids;
+}
+
 export async function fetchPart(id: number, signal?: AbortSignal): Promise<PartItem> {
   const response = await apiFetch(`/api/v1/part/${id}`, { signal });
   const body = await readApiJson(response, "부품 정보를 불러오지 못했습니다.");

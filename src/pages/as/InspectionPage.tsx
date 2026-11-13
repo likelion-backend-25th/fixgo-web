@@ -13,6 +13,7 @@ import {
   createRepairWork,
   abortRepair,
   fetchRepairPresetParts,
+  fetchRepairWorkParts,
   fetchRepairPresets,
   fetchRepairPresetsBySymptom,
   fetchRepairWorks,
@@ -35,7 +36,7 @@ import type { RepairLine } from "@/types/screen";
 
 export function InspectionPage() {
   const isTechnician = useSessionStore((state) => state.user?.role === "TECHNICIAN");
-  if (!isTechnician) return <Notice>점검은 담당 기사가 진행할 수 있습니다.</Notice>;
+  if (!isTechnician) return <Notice tone="error">점검은 담당 기사가 진행할 수 있습니다.</Notice>;
 
   return (
     <ReceptionProgress render={({ reception, repair }, reload) => (
@@ -74,7 +75,7 @@ function InspectionStart({ record, onStarted }: { record: AsReceptionDetail; onS
         <Button disabled={starting} onClick={() => void start()}>
           {starting ? "점검 시작 중…" : "점검 시작"}
         </Button>
-      ) : <Notice>조회할 수 있는 점검 기록이 없습니다.</Notice>}
+      ) : <Notice tone="error">조회할 수 있는 점검 기록이 없습니다.</Notice>}
     </div>
   );
 }
@@ -120,10 +121,16 @@ function InspectionForm({
   const [abortOpen, setAbortOpen] = useState(false);
   const [abortNotice, setAbortNotice] = useState("");
   const [presetOpen, setPresetOpen] = useState(false);
-  const [notice, setNotice] = useState("");
+  const [notice, setNoticeText] = useState("");
+  const [noticeTone, setNoticeTone] = useState<"info" | "error">("info");
   const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
   const diagnosing = repair.status === "DIAGNOSING";
+
+  function setNotice(message: string, tone: "info" | "error" = "error") {
+    setNoticeText(message);
+    setNoticeTone(message === "" ? "info" : tone);
+  }
 
   // 1차 보증 판정은 구매일과 모델 보증기간으로 계산한다.
   useEffect(() => {
@@ -185,17 +192,9 @@ function InspectionForm({
           }
         }
 
-        const partsByPresetId = new Map<number, RepairPresetPart[]>();
-        await Promise.all(works.map(async (work) => {
-          const presetName = work.repairPresetName?.trim() ?? "";
-          const preset = presetByName.get(presetName);
-          if (preset === undefined || partsByPresetId.has(preset.id)) return;
-          const parts = await fetchRepairPresetParts(preset.id, controller.signal);
-          partsByPresetId.set(preset.id, parts);
-        }));
-
+        const partsByWorkId = await loadSavedParts(record.id, works, presetByName, controller.signal);
         if (controller.signal.aborted) return;
-        setLines(linesFromSavedWorks(works, presetByName, symptomsByPresetId, partsByPresetId));
+        setLines(linesFromSavedWorks(works, presetByName, symptomsByPresetId, partsByWorkId));
       } catch (cause: unknown) {
         if (controller.signal.aborted || isAbortError(cause)) return;
         setNotice(cause instanceof Error ? cause.message : "저장된 점검 항목을 불러오지 못했습니다.");
@@ -348,13 +347,13 @@ function InspectionForm({
 
   return (
     <div className="space-y-4">
-      {notice !== "" && <Notice>{notice}</Notice>}
+      {notice !== "" && <Notice tone={noticeTone}>{notice}</Notice>}
       <AsSummary record={record} />
       <ProgressTabs receptionId={record.id} current="inspection" />
       {diagnosing ? (
-        <Notice>유상으로 저장하면 견적 승인 대기가 됩니다. 무상은 0원으로 확정되고 고객 승인 없이 수리 대기로 넘어갑니다.</Notice>
+        <Notice follow={false}>유상으로 저장하면 견적 승인 대기가 됩니다. 무상은 0원으로 확정되고 고객 승인 없이 수리 대기로 넘어갑니다.</Notice>
       ) : (
-        <Notice>{inspectionResultMessage(repair, record)}</Notice>
+        <Notice follow={false}>{inspectionResultMessage(repair, record)}</Notice>
       )}
       <section>
         <div className="mb-2 flex items-center justify-between">
@@ -384,7 +383,7 @@ function InspectionForm({
       {diagnosing && abortOpen && (
         <Modal title="A/S 중단" compact onClose={closeAbort}>
           <div className="space-y-3">
-            {abortNotice !== "" && <Notice>{abortNotice}</Notice>}
+            {abortNotice !== "" && <Notice tone="error">{abortNotice}</Notice>}
             <p className="text-sm text-neutral-500">
               부품 단종처럼 수리가 불가능하거나 고객이 취소한 경우입니다. 제출하면 {returnWaitingLabel}로 넘어갑니다.
             </p>
@@ -430,10 +429,11 @@ function InspectionForm({
       {presetOpen && (
         <PresetPickerModal
           productId={record.product.id}
+          productModelId={record.product.productModelId}
           onClose={() => setPresetOpen(false)}
           onApply={async (selection) => {
             setLines((current) => appendSymptomPresets(current, selection));
-            setNotice("같은 고장 증상에 수리 프리셋을 추가했습니다.");
+            setNotice("같은 고장 증상에 수리 프리셋을 추가했습니다.", "info");
           }}
         />
       )}
@@ -605,11 +605,39 @@ interface SavedSymptom {
   name: string;
 }
 
+async function loadSavedParts(
+  receptionId: number,
+  works: RepairWork[],
+  presetByName: Map<string, RepairPreset>,
+  signal: AbortSignal,
+): Promise<Map<number, RepairPresetPart[]>> {
+  try {
+    return await fetchRepairWorkParts(receptionId, signal);
+  } catch (cause: unknown) {
+    if (signal.aborted || isAbortError(cause)) throw cause;
+  }
+
+  const partsByPresetId = new Map<number, RepairPresetPart[]>();
+  await Promise.all(works.map(async (work) => {
+    const presetName = work.repairPresetName?.trim() ?? "";
+    const preset = presetByName.get(presetName);
+    if (preset === undefined || partsByPresetId.has(preset.id)) return;
+    partsByPresetId.set(preset.id, await fetchRepairPresetParts(preset.id, signal));
+  }));
+  const partsByWorkId = new Map<number, RepairPresetPart[]>();
+  for (const work of works) {
+    const presetName = work.repairPresetName?.trim() ?? "";
+    const preset = presetByName.get(presetName);
+    partsByWorkId.set(work.id, preset === undefined ? [] : partsByPresetId.get(preset.id) ?? []);
+  }
+  return partsByWorkId;
+}
+
 function linesFromSavedWorks(
   works: RepairWork[],
   presetByName: Map<string, RepairPreset>,
   symptomsByPresetId: Map<number, SavedSymptom[]>,
-  partsByPresetId: Map<number, RepairPresetPart[]>,
+  partsByWorkId: Map<number, RepairPresetPart[]>,
 ): RepairLine[] {
   const rows: RepairLine[] = [];
 
@@ -622,7 +650,7 @@ function linesFromSavedWorks(
     const symptom = storedSymptom !== "" && storedSymptom !== presetName
       ? linkedSymptoms.find((item) => item.name === storedSymptom) ?? { id: 0, name: storedSymptom }
       : linkedSymptoms.length === 1 ? linkedSymptoms[0] : undefined;
-    const parts = preset === undefined ? [] : partsByPresetId.get(preset.id) ?? [];
+    const parts = partsByWorkId.get(work.id) ?? [];
     const block: RepairLine[] = [{
       id: `${groupId}-preset`,
       groupId,
