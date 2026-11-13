@@ -211,7 +211,7 @@ function ExcelModal({
       </div>
       {fileName !== "" && <p className="mb-2 text-sm">파일명 {fileName}</p>}
       {error !== "" && <div className="mb-3"><Notice tone="error">{error}</Notice></div>}
-      {notice !== "" && <div className="mb-3"><Notice>{notice}</Notice></div>}
+      {notice !== "" && <div className="mb-3"><Notice transient onDismiss={() => setNotice("")}>{notice}</Notice></div>}
       <ul className="divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-200 bg-white text-sm shadow-sm">
         {rows.length === 0 ? (
           <li className="px-3 py-6 text-center text-neutral-500">검증된 행이 없습니다.</li>

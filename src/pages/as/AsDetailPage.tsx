@@ -102,7 +102,7 @@ export function AsDetailPage() {
 
   return (
     <div className="space-y-4">
-      {notice !== "" && <Notice>{notice}</Notice>}
+      {notice !== "" && <Notice transient onDismiss={() => setNotice("")}>{notice}</Notice>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
       <Panel title="고객 정보">
         <div className="grid gap-x-8 gap-y-4 sm:grid-cols-3">
@@ -304,7 +304,7 @@ function CustomerLinkPanel({ receptionId }: { receptionId: number }) {
         <div>
           <a href={url} target="_blank" rel="noreferrer" className="break-all text-sm text-blue-700 underline">{url}</a>
           <p className="mt-2 text-xs text-neutral-500">만료 {formatDateTime(link.expiresAt)}</p>
-          {copied && <p className="mt-2 text-xs text-blue-700">링크를 복사했습니다.</p>}
+          {copied && <Notice transient onDismiss={() => setCopied(false)}>링크를 복사했습니다.</Notice>}
         </div>
       )}
     </Panel>

@@ -273,7 +273,7 @@ export function ShipmentListPage() {
       </div>
       {loadError !== "" && <div className="mb-3"><Notice tone="error">{loadError}</Notice></div>}
       {actionError !== "" && <div className="mb-3"><Notice tone="error">{actionError}</Notice></div>}
-      {actionNotice !== "" && <div className="mb-3"><Notice>{actionNotice}</Notice></div>}
+      {actionNotice !== "" && <div className="mb-3"><Notice transient onDismiss={() => setActionNotice("")}>{actionNotice}</Notice></div>}
       <DataTable
         columns={columns}
         rows={rows}
@@ -516,7 +516,7 @@ function CreateShipmentModal({
         )}
       </div>
       {error !== "" && <div className="mt-3"><Notice tone="error">{error}</Notice></div>}
-      {notice !== "" && <div className="mt-3"><Notice>{notice}</Notice></div>}
+      {notice !== "" && <div className="mt-3"><Notice transient onDismiss={() => setNotice("")}>{notice}</Notice></div>}
       <div className="mt-4 flex justify-end gap-2">
         {pickup ? (
           <Button disabled={submitting || asReceptionId === null} onClick={() => void register(false)}>방문 수령 등록</Button>
@@ -784,7 +784,7 @@ function ShipmentDetailModal({
         </div>
       )}
       {detail !== null && error !== "" && <div className="mt-3"><Notice tone="error">{error}</Notice></div>}
-      {notice !== "" && <div className="mt-3"><Notice>{notice}</Notice></div>}
+      {notice !== "" && <div className="mt-3"><Notice transient onDismiss={() => setNotice("")}>{notice}</Notice></div>}
       {detail !== null && !readOnly && (
         <div className="mt-4 flex justify-end gap-2">
           {!visit && editable && (
@@ -798,7 +798,9 @@ function ShipmentDetailModal({
           )}
           {!visit && !editable && (
             <Button
-              className={detail.status === "SHIPPING" ? "bg-[#005A9C] text-white shadow-none hover:bg-[#004E8A]" : shipmentActionClass("배송 조회")}
+              className={detail.status === "SHIPPING"
+                ? "bg-[#005A9C] text-white shadow-none hover:bg-[#004E8A]"
+                : "border border-[#60C1E5] bg-white text-[#60C1E5] shadow-none hover:bg-[#F3FBFD]"}
               disabled={busy}
               onClick={() => void run(() => refreshShipmentTracking(shipmentId), "배송 이력을 갱신했습니다.")}
             >
@@ -1017,7 +1019,7 @@ function ShipmentRowInfoModal({
           )}
         </div>
       )}
-      {!loading && notice !== "" && <div className="mt-3"><Notice>{notice}</Notice></div>}
+      {!loading && notice !== "" && <div className="mt-3"><Notice transient onDismiss={() => setNotice("")}>{notice}</Notice></div>}
       {!loading && error !== "" && <div className="mt-3"><Notice tone="error">{error}</Notice></div>}
       {canCompletePickup && !loading && (
         <div className="mt-4 flex justify-end">

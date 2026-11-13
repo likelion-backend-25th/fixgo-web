@@ -222,7 +222,17 @@ function TechnicianAsListPage() {
 
   return (
     <div>
-      {notice !== null && <Notice>{notice}</Notice>}
+      {notice !== null && (
+        <Notice
+          transient
+          onDismiss={() => navigate(
+            { pathname: location.pathname, search: location.search },
+            { replace: true, state: null },
+          )}
+        >
+          {notice}
+        </Notice>
+      )}
       {error !== "" && <Notice tone="error">{error}</Notice>}
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -425,7 +435,17 @@ function ReceptionAsListPage() {
 
   return (
     <div>
-      {notice !== null && <Notice>{notice}</Notice>}
+      {notice !== null && (
+        <Notice
+          transient
+          onDismiss={() => navigate(
+            { pathname: location.pathname, search: location.search },
+            { replace: true, state: null },
+          )}
+        >
+          {notice}
+        </Notice>
+      )}
       {error !== "" && <Notice tone="error">{error}</Notice>}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <TextField

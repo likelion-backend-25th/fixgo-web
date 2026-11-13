@@ -138,7 +138,7 @@ export function ProductListPage() {
 
   return (
     <div>
-      {notice !== "" && <div className="mb-3"><Notice>{notice}</Notice></div>}
+      {notice !== "" && <div className="mb-3"><Notice transient onDismiss={() => setNotice("")}>{notice}</Notice></div>}
       {error !== "" && <div className="mb-3"><Notice tone="error">{error}</Notice></div>}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <TextField value={query} onChange={setQuery} placeholder="모델명, 제품명" className="w-64" />

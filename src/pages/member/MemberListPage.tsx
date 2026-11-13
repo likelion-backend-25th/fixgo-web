@@ -82,7 +82,7 @@ export function MemberListPage() {
 
   return (
     <div className="member-list-page">
-      {notice !== "" && <Notice>{notice}</Notice>}
+      {notice !== "" && <Notice transient onDismiss={() => setNotice("")}>{notice}</Notice>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <TextField

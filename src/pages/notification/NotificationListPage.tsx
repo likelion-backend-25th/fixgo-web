@@ -257,7 +257,7 @@ function EmailDetailModal({
   return (
     <Modal title="이메일 발송 상세" wide onClose={onClose}>
       {error !== "" && <Notice tone="error">{error}</Notice>}
-      {notice !== "" && <Notice>{notice}</Notice>}
+      {notice !== "" && <Notice transient onDismiss={() => setNotice("")}>{notice}</Notice>}
       {detail === null && error === "" && <p className="text-sm text-neutral-500">상세를 불러오는 중입니다.</p>}
       {detail !== null && (
         <>

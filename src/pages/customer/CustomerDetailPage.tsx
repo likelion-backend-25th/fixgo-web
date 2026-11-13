@@ -138,7 +138,7 @@ export function CustomerDetailPage() {
 
   return (
     <div className="space-y-4">
-      {notice !== "" && <Notice>{notice}</Notice>}
+      {notice !== "" && <Notice transient onDismiss={() => setNotice("")}>{notice}</Notice>}
       {error !== "" && <Notice tone="error">{error}</Notice>}
       <Panel
         title="고객 정보"
