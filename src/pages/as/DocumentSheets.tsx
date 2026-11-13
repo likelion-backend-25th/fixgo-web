@@ -142,7 +142,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <>
       <dt className="text-neutral-500">{label}</dt>
-      <dd>{value}</dd>
+      <dd className={label === "접수번호" ? "text-[#005A9C]" : undefined}>{value}</dd>
     </>
   );
 }

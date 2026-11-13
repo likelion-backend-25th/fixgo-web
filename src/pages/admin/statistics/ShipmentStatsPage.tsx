@@ -145,7 +145,9 @@ function shipmentColumns(
   toggleSort: (key: ShipmentSortKey) => void,
 ): Column<ShipmentHistoryItem>[] {
   return [
-    shipmentColumn("number", "접수번호", sortKey, sortDir, toggleSort, (row) => row.receptionNumber),
+    shipmentColumn("number", "접수번호", sortKey, sortDir, toggleSort, (row) => (
+      <span className="text-[#005A9C]">{row.receptionNumber}</span>
+    )),
     shipmentColumn("customer", "고객", sortKey, sortDir, toggleSort, (row) => row.customerName),
     shipmentColumn("method", "방식", sortKey, sortDir, toggleSort, (row) => shipmentMethodLabel(row.returnMethod)),
     shipmentColumn("status", "상태", sortKey, sortDir, toggleSort, (row) => {

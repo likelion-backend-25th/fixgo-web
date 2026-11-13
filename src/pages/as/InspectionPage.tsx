@@ -68,14 +68,17 @@ function InspectionStart({ record, onStarted }: { record: AsReceptionDetail; onS
 
   return (
     <div className="space-y-4">
-      <AsSummary record={record} />
+      <AsSummary
+        record={record}
+        action={record.status === "RECEIVED" ? (
+          <Button disabled={starting} onClick={() => void start()}>
+            {starting ? "점검 시작 중…" : "점검 시작"}
+          </Button>
+        ) : undefined}
+      />
       <ProgressTabs receptionId={record.id} current="inspection" />
       {error !== "" && <Notice tone="error">{error}</Notice>}
-      {record.status === "RECEIVED" ? (
-        <Button disabled={starting} onClick={() => void start()}>
-          {starting ? "점검 시작 중…" : "점검 시작"}
-        </Button>
-      ) : <Notice tone="error">조회할 수 있는 점검 기록이 없습니다.</Notice>}
+      {record.status !== "RECEIVED" && <Notice tone="error">조회할 수 있는 점검 기록이 없습니다.</Notice>}
     </div>
   );
 }

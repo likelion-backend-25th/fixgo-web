@@ -22,10 +22,10 @@ function receptionLink(receptionNumber: string) {
   const matched = /^AS-\d{6}-(\d+)$/.exec(receptionNumber);
   const id = matched === null ? Number.NaN : Number(matched[1]);
   if (!Number.isInteger(id) || id <= 0) {
-    return receptionNumber;
+    return <span className="text-[#005A9C]">{receptionNumber}</span>;
   }
   return (
-    <Link className="text-blue-600" to={`/as/details/${id}`}>
+    <Link className="text-[#005A9C]" to={`/as/details/${id}`}>
       {receptionNumber}
     </Link>
   );

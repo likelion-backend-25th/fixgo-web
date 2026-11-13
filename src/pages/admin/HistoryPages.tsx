@@ -65,15 +65,19 @@ export function AllocationHistoryPage() {
   }, [applied, page]);
 
   const columns: Column<TechnicianHistoryListItem>[] = [
-    { key: "at", header: "일시", render: (row) => formatDateTime(row.createdAt) },
-    { key: "as", header: "접수번호", render: (row) => row.receptionNumber },
+    {
+      key: "as",
+      header: "접수번호",
+      render: (row) => <span className="text-[#005A9C]">{row.receptionNumber}</span>,
+    },
     { key: "customer", header: "고객명", render: (row) => row.customerName },
     { key: "model", header: "모델", render: (row) => row.modelName ?? "-" },
     { key: "category", header: "구분", render: (row) => row.previousTechnicianName === null ? "최초 배정" : "변경" },
-    { key: "before", header: "이전 기사", render: (row) => row.previousTechnicianName ?? "-" },
-    { key: "after", header: "변경 기사", render: (row) => row.newTechnicianName ?? "-" },
+    { key: "before", header: "이전기사", render: (row) => row.previousTechnicianName ?? "-" },
+    { key: "after", header: "변경기사", render: (row) => row.newTechnicianName ?? "-" },
     { key: "actor", header: "변경자", render: (row) => row.changedBy ?? "-" },
     { key: "reason", header: "사유", render: (row) => row.reason ?? "-" },
+    { key: "at", header: "일시", render: (row) => formatDateTime(row.createdAt) },
   ];
 
   return (
@@ -137,14 +141,18 @@ export function StatusHistoryPage() {
   }, [applied, page]);
 
   const columns: Column<StatusHistoryListItem>[] = [
-    { key: "at", header: "일시", render: (row) => formatDateTime(row.createdAt) },
-    { key: "as", header: "접수번호", render: (row) => row.receptionNumber },
+    {
+      key: "as",
+      header: "접수번호",
+      render: (row) => <span className="text-[#005A9C]">{row.receptionNumber}</span>,
+    },
     { key: "customer", header: "고객명", render: (row) => row.customerName },
     { key: "model", header: "모델", render: (row) => row.modelName ?? "-" },
     { key: "before", header: "이전 상태", render: (row) => historyStatusLabel(row.fromStatus) },
     { key: "after", header: "변경 상태", render: (row) => historyStatusLabel(row.toStatus) },
     { key: "actor", header: "변경자", render: (row) => row.changedBy ?? "-" },
     { key: "reason", header: "사유", render: (row) => row.reason ?? "-" },
+    { key: "at", header: "일시", render: (row) => formatDateTime(row.createdAt) },
   ];
 
   return (

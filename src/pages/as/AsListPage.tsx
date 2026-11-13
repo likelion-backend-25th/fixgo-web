@@ -7,20 +7,19 @@ import { SelectBox, TextField } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Panel";
 import { Pagination } from "@/components/ui/Pagination";
 import { compareText, readNotice } from "@/lib/guards";
-import { formatDateTime, won } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import { isAbortError } from "@/lib/apiClient";
 import {
   fetchReceptions,
   isReceptionStatus,
+  receptionStatusColor,
   receptionStatusLabel,
   searchTechnicians,
 } from "@/lib/asReceptionApi";
 import {
   fetchMyRepairs,
-  repairStatusLabel,
   warrantyResultLabel,
   type RepairListItem,
-  type RepairStatus,
 } from "@/lib/repair";
 import { useSessionStore } from "@/stores/useSessionStore";
 import {
@@ -56,7 +55,6 @@ export function AsListPage() {
 // 기사용 목록: 내 접수에 수리 기록을 연결한다.
 // ==============================
 
-type RepairStatusFilter = "ALL" | "RECEIVED" | RepairStatus;
 type TechSortKey =
   | "receptionNumber"
   | "customerName"
@@ -71,31 +69,8 @@ type TechnicianRepairRow = AsReceptionListItem & {
   repair: RepairListItem | undefined;
 };
 
-const REPAIR_STATUSES: RepairStatus[] = [
-  "REQUESTED",
-  "APPROVED",
-  "REJECTED",
-  "DIAGNOSING",
-  "REPAIRING",
-  "COMPLETED",
-];
-
-const repairStatusOptions: { value: RepairStatusFilter; label: string }[] = [
-  { value: "ALL", label: "상태 전체" },
-  { value: "RECEIVED", label: "접수" },
-  ...REPAIR_STATUSES.map((value) => ({ value, label: repairStatusLabel(value) })),
-];
-
-function readRepairStatusFilter(value: string): RepairStatusFilter {
-  return isRepairStatusFilter(value) ? value : "ALL";
-}
-
 function readTechSortKey(value: string): TechSortKey {
   return isTechSortKey(value) ? value : "createdAt";
-}
-
-function isRepairStatusFilter(value: string): value is RepairStatusFilter {
-  return value === "ALL" || value === "RECEIVED" || REPAIR_STATUSES.some((item) => item === value);
 }
 
 function isTechSortKey(value: string): value is TechSortKey {
@@ -109,15 +84,6 @@ function isTechSortKey(value: string): value is TechSortKey {
     value === "finalAmount" ||
     value === "createdAt"
   );
-}
-
-function technicianStatusLabel(row: TechnicianRepairRow): string {
-  if (isReturnWaiting(row.receptionStatus)) {
-    return receptionStatusLabel(row.receptionStatus);
-  }
-  return row.repairStatus === null
-    ? receptionStatusLabel(row.receptionStatus)
-    : repairStatusLabel(row.repairStatus);
 }
 
 function technicianWarrantyLabel(row: TechnicianRepairRow): string {
@@ -137,7 +103,7 @@ function compareRepair(a: TechnicianRepairRow, b: TechnicianRepairRow, key: Tech
     case "warrantyResult":
       return technicianWarrantyLabel(a).localeCompare(technicianWarrantyLabel(b), "ko");
     case "status":
-      return (a.repairStatus ?? a.receptionStatus).localeCompare(b.repairStatus ?? b.receptionStatus);
+      return a.receptionStatus.localeCompare(b.receptionStatus);
     case "finalAmount":
       return (a.repair?.finalAmount ?? -1) - (b.repair?.finalAmount ?? -1);
     case "createdAt":
@@ -175,7 +141,8 @@ function TechnicianAsListPage() {
   const notice = readNotice(location.state);
   const filters = useListParams();
   const query = filters.text("q");
-  const status = readRepairStatusFilter(filters.text("status", "ALL"));
+  const status = filters.text("status", "ALL");
+  const receptionStatus = status === "ALL" || isReceptionStatus(status) ? status : "ALL";
   const sortKey = readTechSortKey(filters.text("sort", "createdAt"));
   const sortDir = filters.text("dir") === "asc" ? "asc" : "desc";
   const page = filters.page();
@@ -219,8 +186,7 @@ function TechnicianAsListPage() {
     const keyword = query.trim().toLowerCase();
 
     const filtered = items.filter((item) => {
-      const itemStatus = item.repairStatus ?? item.receptionStatus;
-      if (status !== "ALL" && itemStatus !== status) {
+      if (receptionStatus !== "ALL" && item.receptionStatus !== receptionStatus) {
         return false;
       }
       if (keyword === "") {
@@ -229,15 +195,14 @@ function TechnicianAsListPage() {
       return (
         item.receptionNumber.toLowerCase().includes(keyword) ||
         item.customerName.toLowerCase().includes(keyword) ||
-        (item.modelName ?? "").toLowerCase().includes(keyword) ||
-        (item.repair?.diagnosis ?? "").toLowerCase().includes(keyword) ||
-        (item.repair?.workNote ?? "").toLowerCase().includes(keyword)
+        item.customerPhone.toLowerCase().includes(keyword) ||
+        (item.modelName ?? "").toLowerCase().includes(keyword)
       );
     });
 
     const direction = sortDir === "asc" ? 1 : -1;
     return [...filtered].sort((a, b) => compareRepair(a, b, sortKey) * direction);
-  }, [items, query, status, sortKey, sortDir]);
+  }, [items, query, receptionStatus, sortKey, sortDir]);
 
   const pageCount = Math.max(1, Math.ceil(processed.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
@@ -255,59 +220,6 @@ function TechnicianAsListPage() {
     });
   }
 
-  const columns: Column<TechnicianRepairRow>[] = [
-    {
-      key: "receptionNumber",
-      header: "접수번호",
-      sortable: true,
-      render: (row) => row.receptionNumber,
-    },
-    {
-      key: "customerName",
-      header: "고객",
-      sortable: true,
-      render: (row) => row.customerName,
-    },
-    {
-      key: "modelName",
-      header: "모델명",
-      sortable: true,
-      render: (row) => row.modelName ?? "-",
-    },
-    {
-      key: "diagnosis",
-      header: "진단 내용",
-      sortable: true,
-      render: (row) => (
-        <span className="line-clamp-1 max-w-xs">{row.repair?.diagnosis ?? "-"}</span>
-      ),
-    },
-    {
-      key: "warrantyResult",
-      header: "보증",
-      sortable: true,
-      render: technicianWarrantyLabel,
-    },
-    {
-      key: "status",
-      header: "진행 상태",
-      sortable: true,
-      render: technicianStatusLabel,
-    },
-    {
-      key: "finalAmount",
-      header: "수리비",
-      sortable: true,
-      render: (row) => row.repair === undefined ? "-" : won(row.repair.finalAmount),
-    },
-    {
-      key: "createdAt",
-      header: "접수일",
-      sortable: true,
-      render: (row) => formatDateTime(row.createdAt),
-    },
-  ];
-
   return (
     <div>
       {notice !== null && <Notice>{notice}</Notice>}
@@ -317,28 +229,28 @@ function TechnicianAsListPage() {
         <TextField
           value={query}
           onChange={(value) => filters.replace({ q: value, page: null })}
-          placeholder="접수번호, 고객, 진단 내용 검색"
+          placeholder="접수번호, 고객명, 증상 검색"
           className="w-64"
         />
         <SelectBox
-          value={status}
+          value={receptionStatus}
           onChange={(value) => {
-            if (isRepairStatusFilter(value)) {
+            if (value === "ALL" || isReceptionStatus(value)) {
               filters.replace({ status: value === "ALL" ? null : value, page: null });
             }
           }}
-          options={repairStatusOptions}
+          options={statusOptions}
         />
-        <span className="ml-2 text-sm text-neutral-500">내 담당 A/S만 표시됩니다.</span>
       </div>
 
       <DataTable
-        columns={columns}
+        columns={deskColumns}
         rows={rows}
         rowKey={(row) => String(row.id)}
         sortKey={sortKey}
         sortDir={sortDir}
         onSort={onSort}
+        tableClassName="min-w-[1100px]"
         emptyText={
           loading
             ? "A/S 목록을 불러오는 중입니다."
@@ -696,16 +608,3 @@ const deskColumns: Column<AsReceptionListItem>[] = [
     render: (row) => formatDateTime(row.createdAt),
   },
 ];
-
-function receptionStatusColor(status: AsReceptionStatus): string {
-  if (status === "INSPECTION" || status === "REPAIR_IN_PROGRESS") {
-    return "text-[#005A9C]";
-  }
-  if (status === "AWAITING_QUOTE_APPROVAL" || status === "AWAITING_PAYMENT") {
-    return "text-[#B45309]";
-  }
-  if (status === "COMPLETED") {
-    return "text-[#15803D]";
-  }
-  return "text-[#64748B]";
-}

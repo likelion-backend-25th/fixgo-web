@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { cn } from "@/lib/cn";
 
 export function PortalFrame({ children }: { children: ReactNode }) {
   return (
@@ -14,11 +15,26 @@ export function PortalFrame({ children }: { children: ReactNode }) {
   );
 }
 
-export function InfoRow({ label, value, emphasize = false }: { label: string; value: string; emphasize?: boolean }) {
+export function InfoRow({
+  label,
+  value,
+  emphasize = false,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  emphasize?: boolean;
+  valueClassName?: string;
+}) {
   return (
     <div className="flex items-baseline justify-between gap-4 border-b border-neutral-100 py-3 text-sm last:border-b-0">
       <dt className="shrink-0 text-neutral-500">{label}</dt>
-      <dd className={emphasize ? "text-right text-base font-semibold text-neutral-900" : "text-right font-medium break-all text-neutral-900"}>
+      <dd
+        className={cn(
+          emphasize ? "text-right text-base font-semibold" : "text-right font-medium break-all",
+          valueClassName ?? "text-neutral-900",
+        )}
+      >
         {value}
       </dd>
     </div>

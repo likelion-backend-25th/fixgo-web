@@ -165,7 +165,7 @@ function PortalBody({
         <div>
           <p className="text-base font-semibold text-neutral-900">A/S 진행</p>
           {reception.receptionNumber !== null && reception.receptionNumber.trim() !== "" && (
-            <p className="mt-0.5 text-sm text-neutral-500">{reception.receptionNumber}</p>
+            <p className="mt-0.5 text-sm text-[#005A9C]">{reception.receptionNumber}</p>
           )}
         </div>
         <span className="shrink-0 rounded-md border border-blue-600 px-2 py-1 text-xs font-medium text-blue-600">
@@ -173,12 +173,7 @@ function PortalBody({
         </span>
       </div>
 
-      <div className="mt-4 rounded-lg border border-neutral-200 px-3 py-2.5">
-        <p className="text-xs text-neutral-500">서버에서 발급한 링크</p>
-        <p className="mt-1 break-all text-sm font-medium text-neutral-900">fixgo/{token}</p>
-      </div>
-
-      <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border border-neutral-200 px-3 py-3">
+      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border border-neutral-200 px-3 py-3">
         <SummaryItem label="고객" value={reception.customerName} />
         <SummaryItem label="연락처" value={reception.customerPhone} />
         <SummaryItem label="제품" value={reception.modelName} />
@@ -692,7 +687,14 @@ function Field({ label, value, emphasize = false }: { label: string; value: stri
   if (value === null || value.trim() === "") {
     return null;
   }
-  return <InfoRow label={label} value={value} emphasize={emphasize} />;
+  return (
+    <InfoRow
+      label={label}
+      value={value}
+      emphasize={emphasize}
+      valueClassName={label === "접수번호" ? "text-[#005A9C]" : undefined}
+    />
+  );
 }
 
 function money(amount: number | null): string | null {

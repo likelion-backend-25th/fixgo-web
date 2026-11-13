@@ -269,7 +269,9 @@ function EmailDetailModal({
           <h3 className="mt-5 mb-2 text-sm font-medium">수신자 정보</h3>
           <div className={cn("grid gap-4 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm", receptionNumber === "" ? "sm:grid-cols-2" : "sm:grid-cols-3")}>
             <Field label="고객명" value={detail.customerName ?? "-"} />
-            {receptionNumber !== "" && <Field label="접수번호" value={receptionNumber} />}
+            {receptionNumber !== "" && (
+              <Field label="접수번호" value={<span className="text-[#005A9C]">{receptionNumber}</span>} />
+            )}
             <Field label="이메일" value={detail.recipientEmail} />
           </div>
           <h3 className="mt-5 mb-2 text-sm font-medium">이메일 제목</h3>
