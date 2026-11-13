@@ -35,6 +35,7 @@ export interface EmailHistoryQuery {
   keyword: string;
   startDate: string;
   endDate: string;
+  status: "" | "SENT" | "FAILED";
   page: number;
   size: number;
 }
@@ -130,6 +131,9 @@ export async function fetchEmailHistory(query: EmailHistoryQuery, signal: AbortS
   }
   if (query.endDate !== "") {
     params.set("endDate", query.endDate);
+  }
+  if (query.status !== "") {
+    params.set("status", query.status);
   }
   // Spring Pageable은 0부터 센다.
   params.set("page", String(query.page - 1));
