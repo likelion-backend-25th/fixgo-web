@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { DataTable, type Column } from "@/components/ui/DataTable";
-import { TextField } from "@/components/ui/Field";
+import { SelectBox, TextField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { Pagination } from "@/components/ui/Pagination";
 import { Notice } from "@/components/ui/Panel";
@@ -47,10 +47,11 @@ function statusClass(status: NotificationStatus): string {
 
 export function NotificationListPage() {
   const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<"" | "SENT" | "FAILED">("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [page, setPage] = useState(1);
-  const [applied, setApplied] = useState({ keyword: "", startDate: "", endDate: "" });
+  const [applied, setApplied] = useState({ keyword: "", startDate: "", endDate: "", status: "" as "" | "SENT" | "FAILED" });
   const [rows, setRows] = useState<EmailHistoryItem[]>([]);
   const [total, setTotal] = useState(0);
   const [pageCount, setPageCount] = useState(1);
@@ -66,7 +67,7 @@ export function NotificationListPage() {
         if (current.keyword === next.keyword && current.startDate === next.startDate && current.endDate === next.endDate) {
           return current;
         }
-        return next;
+        return { ...current, ...next };
       });
       setPage(1);
     }, 300);
@@ -88,6 +89,7 @@ export function NotificationListPage() {
         keyword: applied.keyword,
         startDate: applied.startDate,
         endDate: applied.endDate,
+        status: applied.status,
         page,
         size: PAGE_SIZE,
       },
@@ -135,6 +137,22 @@ export function NotificationListPage() {
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <p className="text-sm text-neutral-500">전체 {total}건</p>
         <TextField value={query} onChange={setQuery} placeholder="고객명, 이메일 검색" className="w-56" />
+        <SelectBox
+          value={status}
+          onChange={(value) => {
+            if (value !== "" && value !== "SENT" && value !== "FAILED") {
+              return;
+            }
+            setStatus(value);
+            setApplied((current) => ({ ...current, status: value }));
+            setPage(1);
+          }}
+          options={[
+            { value: "", label: "발송 상태 전체" },
+            { value: "SENT", label: "성공" },
+            { value: "FAILED", label: "실패" },
+          ]}
+        />
         <div className="ml-auto flex items-center gap-2">
           <TextField type="date" value={from} onChange={setFrom} className="w-40" />
           <span className="text-sm text-neutral-500">~</span>
