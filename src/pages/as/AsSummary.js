@@ -1,9 +1,0 @@
-import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { InfoField, Panel } from "@/components/ui/Panel";
-import { returnMethodLabel } from "@/lib/asReceptionApi";
-import { formatDateTime } from "@/lib/format";
-import { useHeadingMeta } from "@/layouts/RootLayout";
-export function AsSummary({ record }) {
-    useHeadingMeta(record.receptionNumber);
-    return (_jsxs(Panel, { children: [_jsxs("div", { className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-4", children: [_jsx(InfoField, { label: "\uACE0\uAC1D\uBA85", value: record.customer.name }), _jsx(InfoField, { label: "\uC5F0\uB77D\uCC98", value: record.customer.phone }), _jsx(InfoField, { label: "\uC81C\uD488", value: record.modelName ?? "-" }), _jsx(InfoField, { label: "\uC2DC\uB9AC\uC5BC\uBC88\uD638", value: record.product.serialNumber }), _jsx(InfoField, { label: "\uACE0\uC7A5 \uC99D\uC0C1", value: record.symptom }), _jsx(InfoField, { label: "\uC218\uB839 \uBC29\uC2DD", value: returnMethodLabel(record.returnMethod) }), _jsx(InfoField, { label: "\uC811\uC218\uC77C", value: formatDateTime(record.createdAt) }), _jsx(InfoField, { label: "\uB2F4\uB2F9 \uAE30\uC0AC", value: record.technician?.name ?? "-" })] }), _jsxs("div", { className: "mt-4 grid gap-3 md:grid-cols-2", children: [_jsxs("div", { children: [_jsx("p", { className: "mb-1 text-xs text-neutral-500", children: "\uACE0\uC7A5 \uC99D\uC0C1 \uC0C1\uC138" }), _jsx("div", { className: "min-h-24 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm", children: record.symptomDetail })] }), _jsxs("div", { children: [_jsx("p", { className: "mb-1 text-xs text-neutral-500", children: "\uACE0\uAC1D \uC694\uCCAD\uC0AC\uD56D" }), _jsx("div", { className: "min-h-24 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm", children: record.memo })] })] })] }));
-}
